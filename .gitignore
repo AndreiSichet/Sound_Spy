@@ -1,0 +1,22 @@
+# Python environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Editor
+.vscode/
+
+# Data, models and outputs: ignore contents, keep the folder skeleton (.gitkeep)
+data/**
+!data/**/
+!data/**/.gitkeep
+models/*
+!models/.gitkeep
+outputs/*
+!outputs/.gitkeep

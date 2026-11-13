@@ -1,0 +1,9 @@
+# Classifier-guided spectral-masking enhancement (baseline). All values are placeholders.
+
+stft:                   # TODO(step-07): tune
+  n_fft: 1024
+  hop_length: 256
+  window: hann
+
+mask_type: wiener       # TODO(step-07): one of binary | ratio | wiener
+attenuation_floor_db: -20.0  # TODO(step-07): minimum gain applied to suppressed bins
