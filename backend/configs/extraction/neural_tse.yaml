@@ -1,0 +1,10 @@
+# Label-conditioned neural target sound extraction (Waveformer-style). All values are placeholders.
+
+sample_rate: 16000        # TODO(step-07): set by the model / training data
+chunk_ms: 8               # TODO(step-07): streaming chunk length
+lookahead_ms: 0           # TODO(step-07)
+checkpoint: null          # TODO(step-07): experiments/<name>/checkpoints/<file>
+
+model:                    # TODO(step-07): architecture hyperparameters
+  encoder_channels: 256
+  decoder_layers: 1

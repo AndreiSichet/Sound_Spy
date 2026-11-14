@@ -1,0 +1,27 @@
+# Global Sound Spy configuration.
+# Relative paths are resolved against the project root (the folder containing backend/ and frontend/).
+
+paths:
+  raw: data/raw              # recordings: native rate, all channels, never modified
+  custom: data/custom        # own labelled recordings
+  external: data/external    # downloaded public datasets
+  processed: data/processed  # derived / cached data
+  mixtures: data/mixtures    # synthetic foreground/background mixtures
+  models: models             # pretrained weights
+  outputs: outputs           # processed audio, plots
+  experiments: experiments   # one folder per training run
+
+# Device profile from configs/devices/<name>.yaml
+active_device_profile: laptop
+
+engine:
+  chunk_size: 1024           # frames per processing chunk. TODO(step-03): tune for latency
+
+api:
+  host: 127.0.0.1
+  port: 8765                 # 8000 is taken by Docker/WSL on the dev machine
+  cors_origins: ["http://localhost:5173"]   # Vite dev server
+  ws_heartbeat_s: 2.0        # status heartbeat on /ws/session
+
+database:
+  url: sqlite:///data/soundspy.db   # relative sqlite path -> project root

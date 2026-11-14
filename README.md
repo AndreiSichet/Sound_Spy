@@ -1,77 +1,92 @@
-# SoundFocus
+# Sound Spy
 
-University project (Telecommunications, UTCN). SoundFocus listens to the environment through a
-microphone, identifies the sound sources (speech, music, dishes, footsteps, ...), estimates where
-they are, lets the user select one source and enhances that source while suppressing everything
-else.
+University project (Telecommunications, UTCN). Sound Spy is a desktop-local web app that
+listens to the environment through a microphone and lets you **choose what to hear**: the chosen
+sound is enhanced, everything else is treated as noise and attenuated. The enhanced audio plays
+through the laptop's headphones/speakers.
 
-Target scenario: a crowded cafeteria — select the person on your left, enhance their voice and
-suppress chatter, music, dishes and chairs.
+Target scenario: a crowded cafeteria — "let me hear speech, suppress dishes and music", or
+"let me hear the person on my left".
 
-## Module status
+| Tab | You select... | The app... | Hardware | Status |
+|---|---|---|---|---|
+| **Semantic** | one or more sound types | detects the sound types present, extracts the selected ones | any mic | shell |
+| **Spatial** | sound types + a direction | steers toward the direction, then extracts | USB mic array | planned (module 3-4) |
+| **Sources** | one detected source on a map | tracks sources, extracts the selected one | USB mic array | planned (module 5) |
 
-| Module | Content | Status |
-|---|---|---|
-| 1 | Audio acquisition (mic capture, recording, dataset recording tools) | scaffold |
-| 2 | Sound classification (fine-tuned pretrained model) + class-based enhancement | scaffold |
-| 3 | Sound source localization (ReSpeaker XVF3800 USB mic array) | planned |
-| 4 | Spatial UI for selecting a source | planned |
-| 5 | Target extraction toward the selected source (beamforming + separation) | planned |
+## Architecture in short
 
-Iteration 1 is record-then-process; real-time streaming comes later.
+- **Backend** (`backend/`, Python 3.11, package `soundspy`): owns all audio I/O. A streaming
+  engine runs chunk-based `Processor`s (spatial filter, extractor) and `SideProcessor`s
+  (detector, analyzer, localizer) on a worker thread. FastAPI exposes REST (`/api/*`) and a
+  WebSocket (`/ws/session`) for live events; SQLite stores recordings and processing runs.
+- **Frontend** (`frontend/`, React + TypeScript + Vite + Tailwind + Zustand): tabs, controls and
+  visualizations. It never captures the microphone or plays live audio.
+- Extraction: detector-guided spectral-masking baseline, then a label-conditioned neural target
+  sound extraction model (ideas from SemanticHearing, Veluri et al., UIST 2023).
 
-## Setup (Windows 11, PowerShell)
+Details: [docs/architecture.md](docs/architecture.md) · decisions: [docs/decisions.md](docs/decisions.md)
 
-Requires Python **3.11** (the machine's default `python` may be newer, e.g. 3.14, which is not
-supported). Create the environment explicitly with the `py` launcher:
+## Requirements
+
+- Windows 11, Python **3.11** (the default `python` may be newer, e.g. 3.14, which is not
+  supported — use the `py -3.11` launcher), Node.js 22+ LTS.
+- Ports 8765 (backend, bound to 127.0.0.1) and 5173 (frontend dev server) free.
+
+## Run
 
 ```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+# backend
+cd backend
+py -3.11 -m venv .venv; .venv\Scripts\activate
+pip install -e ".[api,dev]"
+soundspy serve            # http://127.0.0.1:8765/docs
+
+# frontend (second terminal)
+cd frontend
+npm install
+npm run dev               # http://localhost:5173
 ```
 
-Core + development tools:
+The Vite dev server proxies `/api` and `/ws` to the backend, so open http://localhost:5173.
 
-```powershell
-pip install -e ".[dev]"
-```
+### Machine-learning extras (from step 05)
 
-For the machine-learning parts (modules 2+) install **PyTorch first** from the official CUDA
-wheel index — pick the command for your CUDA version at <https://pytorch.org/get-started/locally/>,
-for example:
+Install PyTorch **first** from the official CUDA wheel index — pick the command for your CUDA
+version at <https://pytorch.org/get-started/locally/>, for example:
 
 ```powershell
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
-pip install -e ".[ml,dev]"
+pip install -e ".[api,ml,dev]"
 ```
 
 Installing `.[ml]` without this first step pulls the CPU-only torch wheel from PyPI.
-
-## Usage
-
-```powershell
-soundfocus --help
-soundfocus devices          # each subcommand is a placeholder until its step is implemented
-```
+Spatial extras (module 3): `pip install -e ".[spatial]"` (pyroomacoustics).
 
 ## Development
 
 ```powershell
-pytest                 # smoke tests; no microphone needed
-pytest --run-gpu       # also run tests marked @pytest.mark.gpu
-pytest --run-data      # also run tests marked @pytest.mark.data
+# backend (in backend/, venv active)
+pytest                 # no microphone, GPU or datasets needed
+pytest --run-gpu       # include @pytest.mark.gpu tests
+pytest --run-data      # include @pytest.mark.data tests
 ruff check .
+soundspy --help        # dev/data/training CLI
+
+# frontend (in frontend/)
+npm run test
+npm run lint
+npm run typecheck
+npm run build
 ```
 
 ## Layout
 
-- `src/soundfocus/` — the package (`io`, `dsp`, `data`, `classification`, `enhancement`,
-  `localization`, `pipeline`, `cli`)
-- `configs/` — global config, device profiles, classifier and enhancement configs
-- `tests/` — pytest suite (hardware is faked)
-- `docs/` — architecture, decision log, literature notes
-- `specs/` / `reports/` — per-step specs and build reports
-- `data/`, `models/`, `outputs/` — git-ignored working data
-
-Project rules: [CLAUDE.md](CLAUDE.md). Architecture: [docs/architecture.md](docs/architecture.md).
+- `backend/` — `pyproject.toml`, `configs/` (global, classes, device profiles, detection,
+  extraction), `src/soundspy/`, `tests/`
+- `frontend/` — Vite app (`src/`, `tests/`)
+- `docs/` — architecture, decision log, literature
+- `experiments/` — one folder per training run (config tracked, checkpoints ignored)
+- `data/`, `models/`, `outputs/` — git-ignored working data (`data/soundspy.db` is the app database)
+- `notebooks/` — exploration only
+- `THIRD_PARTY_NOTICES.md` — adapted third-party code

@@ -1,0 +1,18 @@
+# Sound detection (multi-label) configuration. All values are placeholders.
+
+backbone: null            # TODO(step-05): pretrained audio model to fine-tune
+pretrained_weights: null  # TODO(step-05): checkpoint name/path under models/
+sample_rate: 16000        # TODO(step-05): set by the chosen pretrained model
+
+window:
+  seconds: 1.0            # TODO(step-05): analysis window for chunked inference
+  hop_seconds: 0.5        # TODO(step-05): hop between windows
+
+threshold: 0.5            # TODO(step-05): per-class decision threshold
+
+training:                 # TODO(step-05): tune
+  batch_size: 32
+  epochs: 30
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-2
+  seed: 42

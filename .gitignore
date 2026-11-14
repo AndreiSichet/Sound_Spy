@@ -1,4 +1,4 @@
-# Python environment and caches
+# Python environments and caches (any depth)
 .venv/
 __pycache__/
 *.py[cod]
@@ -9,8 +9,20 @@ dist/
 .ruff_cache/
 .ipynb_checkpoints/
 
+# Node / frontend
+node_modules/
+frontend/dist/
+
 # Editor
 .vscode/
+
+# Databases
+*.db
+*.db-journal
+
+# Experiments: config.json and notes are tracked, checkpoints and logs are not
+experiments/*/checkpoints/
+experiments/*/logs/
 
 # Data, models and outputs: ignore contents, keep the folder skeleton (.gitkeep)
 data/**

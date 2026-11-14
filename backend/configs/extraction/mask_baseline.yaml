@@ -1,0 +1,11 @@
+# Detector-guided spectral-masking extraction (baseline). All values are placeholders.
+
+sample_rate: 16000        # TODO(step-06): processing rate (follows the detector)
+
+stft:                     # TODO(step-06): tune
+  n_fft: 1024
+  hop_length: 256
+  window: hann
+
+mask_type: wiener         # TODO(step-06): one of binary | ratio | wiener
+# The attenuation of non-target sound comes from TargetSpec.attenuation_db.

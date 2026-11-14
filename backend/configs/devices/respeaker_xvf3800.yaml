@@ -1,0 +1,11 @@
+# Device profile: ReSpeaker XVF3800 4-mic USB array (module 3 onward).
+# Placeholder until the hardware arrives.
+
+# Input device: name substring as listed by `soundspy devices`.
+device: "reSpeaker"
+
+# 6-channel firmware: ch0-1 = processed (beamformed/AEC) outputs, ch2-5 = raw mics.
+raw_channels: [2, 3, 4, 5]
+
+# TODO(module-3): mic coordinates in metres from the datasheet
+geometry: null

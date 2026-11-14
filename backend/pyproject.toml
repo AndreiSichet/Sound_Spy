@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soundspy"
+version = "0.1.0"
+description = "Sound Spy: listen to the environment and choose what to hear (UTCN Telecommunications project)."
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "pydantic>=2.7",
+]
+# On Windows install torch/torchaudio FIRST from the official CUDA wheel index (see README).
+ml = [
+    "torch>=2.2",
+    "torchaudio>=2.2",
+    "scikit-learn>=1.4",
+    "pandas>=2.1",
+    "matplotlib>=3.8",
+]
+spatial = [
+    "pyroomacoustics>=0.7",
+]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+soundspy = "soundspy.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# importlib mode: tests/io, tests/data, ... cannot shadow stdlib modules of the same name.
+addopts = "--import-mode=importlib"
+markers = [
+    "gpu: needs an NVIDIA GPU (skipped by default; run with --run-gpu)",
+    "data: needs downloaded datasets (skipped by default; run with --run-data)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B"]

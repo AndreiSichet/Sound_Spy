@@ -1,0 +1,45 @@
+# Foreground classes the user can select. Everything else is background ("noise").
+#
+#   <key>         internal ID used by code, models and the database. Never rename it.
+#   display_name  what the UI shows (toggle buttons). Safe to change at any time.
+#   description   tooltip text (also usable in the project report).
+#   audioset      AudioSet ontology names; used only to build datasets, never shown to users.
+#
+# The order of the keys defines the index in multi-hot label vectors: append new classes at the
+# end, never reorder, or trained models will no longer match.
+# AudioSet names must be verified against the ontology in step-04.
+
+speech:
+  display_name: "Speech"
+  description: "People talking: conversations, voices, announcements"
+  audioset: ["Speech"]
+
+music:
+  display_name: "Music"
+  description: "Songs and instrumental music, live or from speakers"
+  audioset: ["Music"]
+
+footsteps:
+  display_name: "Footsteps"
+  description: "People walking: steps on hard floors"
+  audioset: ["Walk, footsteps"]
+
+dishes:
+  display_name: "Dishes & cutlery"
+  description: "Plates, cups, pots and cutlery clinking"
+  audioset: ["Dishes, pots, and pans", "Cutlery, silverware"]
+
+chair_scrape:
+  display_name: "Chair scraping"
+  description: "Chairs and furniture dragged or squeaking on the floor"
+  audioset: ["Scrape", "Squeak"]           # TODO(step-04): verify best AudioSet match
+
+alarm:
+  display_name: "Alarms"
+  description: "Alarms, beeps and ringing signals"
+  audioset: ["Alarm"]
+
+traffic:
+  display_name: "Traffic"
+  description: "Road traffic and passing vehicles"
+  audioset: ["Traffic noise, roadway noise", "Vehicle"]  # TODO(step-04): verify

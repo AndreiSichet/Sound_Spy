@@ -1,0 +1,11 @@
+# Device profile: laptop built-in microphone (Semantic tab). No geometry -> spatial modes unavailable.
+
+# Input device: name substring or index as listed by `soundspy devices`.
+# null = system default input device.
+device: null
+
+# Raw device channel indices to keep (0-based). null = all channels the device exposes.
+raw_channels: null
+
+# Mic coordinates in metres, one [x, y, z] per kept channel. null = unknown / not needed.
+geometry: null
