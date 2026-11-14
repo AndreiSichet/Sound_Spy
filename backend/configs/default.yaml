@@ -14,14 +14,41 @@ paths:
 # Device profile from configs/devices/<name>.yaml
 active_device_profile: laptop
 
+capture:
+  stall_timeout_s: 2.0          # no audio for this long -> MicStallError
+  queue_chunks: 32              # input queue size (drop-oldest policy)
+  startup_silence_max_s: 1.0    # leading exact-zero frames discarded at most
+
 engine:
-  chunk_size: 1024           # frames per processing chunk. TODO(step-03): tune for latency
+  chunk_ms: 20                  # processing chunk; frames = round(chunk_ms * sr / 1000)
+  rtf_warning: 0.8              # warn when the p95 real-time factor exceeds this ...
+  rtf_window_s: 2.0             # ... over this window (also the warning cool-down)
+  status_interval_s: 1.0        # status message rate while a session runs
+
+output:
+  device: null                  # null = default output (WASAPI twin preferred) | index | name substring
+  prebuffer_chunks: 2           # chunks queued before playback starts (jitter buffer)
+  max_queue_chunks: 8           # above this, drop oldest (keeps latency bounded)
+  limiter_ceiling_dbfs: -1.0    # safety limiter on everything sent to the speakers
+  limiter_release_ms: 50        # how fast the limiter lets go after a peak
+  default_gain_db: 0.0
+
+analysis:
+  levels_hz: 20                 # LevelFrame rate
+  spectrogram_hz: 25            # SpectrogramFrame rate
+  spectrogram_fft: 2048
+  spectrogram_bands: 128        # mel bands sent to the UI
+  spectrogram_fmin_hz: 50
+  spectrogram_db_floor: -100
+  waveform_hz: 25               # WaveformFrame rate
+  waveform_points: 64           # min/max pairs per WaveformFrame
 
 api:
   host: 127.0.0.1
   port: 8765                 # 8000 is taken by Docker/WSL on the dev machine
   cors_origins: ["http://localhost:5173"]   # Vite dev server
-  ws_heartbeat_s: 2.0        # status heartbeat on /ws/session
+  ws_heartbeat_s: 2.0        # status heartbeat on /ws/session while idle
+  ws_client_queue: 64        # per-connection send queue; visual messages dropped oldest-first
 
 database:
   url: sqlite:///data/soundspy.db   # relative sqlite path -> project root

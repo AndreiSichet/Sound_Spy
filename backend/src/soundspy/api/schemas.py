@@ -2,14 +2,14 @@
 
 WebSocket message envelope (both directions)::
 
-    {"type": "status" | "levels" | "spectrogram" | "detections" | "sources" | "error"
-             | "set_target",
+    {"type": "status" | "levels" | "waveform" | "spectrogram" | "detections" | "sources"
+             | "warning" | "error" | "set_target",
      "t": float,          # seconds since session start (0.0 when idle)
      "payload": {...}}
 
 Server -> client payloads are the event models below without their ``t`` (it is in the
 envelope). ``detections`` and ``sources`` carry ``{"items": [...]}``. Client -> server:
-``set_target`` with a ``TargetSpecModel`` payload (handled from step 03).
+``set_target`` with a ``TargetSpecModel`` payload.
 """
 
 from __future__ import annotations
@@ -24,10 +24,20 @@ from soundspy.core.target import Direction, TargetSpec
 from soundspy.engine.modes import Mode
 
 MessageType = Literal[
-    "status", "levels", "spectrogram", "detections", "sources", "error", "set_target"
+    "status",
+    "levels",
+    "waveform",
+    "spectrogram",
+    "detections",
+    "sources",
+    "warning",
+    "error",
+    "set_target",
 ]
 MESSAGE_TYPES: tuple[str, ...] = MessageType.__args__  # type: ignore[attr-defined]
 CLIENT_MESSAGE_TYPES: tuple[str, ...] = ("set_target",)
+# High-rate visual messages a slow client may lose (oldest first); everything else is kept.
+DROPPABLE_TYPES: frozenset[str] = frozenset({"levels", "waveform", "spectrogram"})
 
 
 class _FromCore(BaseModel):
@@ -81,9 +91,20 @@ class LevelFrameModel(_FromCore):
     clipping: list[bool]
 
 
+class WaveformFrameModel(_FromCore):
+    mins: list[float]
+    maxs: list[float]
+
+
 class SpectrogramFrameModel(_FromCore):
     magnitudes_db: list[float]
     freq_max_hz: float
+    freq_min_hz: float = 0.0
+
+
+class WarningModel(_FromCore):
+    code: str
+    message: str
 
 
 class EngineStatusModel(_FromCore):
@@ -93,6 +114,23 @@ class EngineStatusModel(_FromCore):
     sample_rate: int | None = None
     channels: int | None = None
     message: str = ""
+    source: str | None = None
+    output_device: str | None = None
+    monitoring: bool = False
+    muted: bool = False
+    gain_db: float = 0.0
+    recording: bool = False
+    recording_seconds: float = 0.0
+    latency_ms: float | None = None
+    chunk_ms: float | None = None
+    chunks_processed: int = 0
+    proc_ms_mean: float | None = None
+    proc_ms_p95: float | None = None
+    rtf_p95: float | None = None
+    input_overflows: int = 0
+    output_underruns: int = 0
+    dropped_chunks: int = 0
+    output_dropped: int = 0
 
 
 class ErrorPayload(BaseModel):
@@ -115,6 +153,53 @@ def status_message(status: core_events.EngineStatus) -> WsMessage:
 
 def error_message(message: str, t: float = 0.0) -> WsMessage:
     return WsMessage(type="error", t=t, payload=ErrorPayload(message=message).model_dump())
+
+
+_EVENT_MESSAGES: dict[type, tuple[str, type[BaseModel]]] = {
+    core_events.LevelFrame: ("levels", LevelFrameModel),
+    core_events.WaveformFrame: ("waveform", WaveformFrameModel),
+    core_events.SpectrogramFrame: ("spectrogram", SpectrogramFrameModel),
+    core_events.WarningEvent: ("warning", WarningModel),
+    core_events.EngineStatus: ("status", EngineStatusModel),
+}
+
+
+def event_message(event: core_events.Event) -> WsMessage:
+    """Wrap a core event in the WebSocket envelope."""
+    if isinstance(event, core_events.Detection):
+        payload = {"items": [DetectionModel.model_validate(event).model_dump()]}
+        return WsMessage(type="detections", t=event.t, payload=payload)
+    try:
+        msg_type, model = _EVENT_MESSAGES[type(event)]
+    except KeyError:
+        raise TypeError(f"no WebSocket message for {type(event).__name__}") from None
+    return WsMessage(type=msg_type, t=event.t, payload=model.model_validate(event).model_dump())
+
+
+# --- session requests --------------------------------------------------------------------------
+
+
+class SourceRequest(BaseModel):
+    type: Literal["mic", "file"] = "mic"
+    path: str | None = None  # file: relative to the project root
+    loop: bool = True
+
+
+class SessionStartRequest(BaseModel):
+    mode: str = "semantic"
+    source: SourceRequest = Field(default_factory=SourceRequest)
+    monitor: bool = False
+
+
+class MonitorRequest(BaseModel):
+    enabled: bool
+    gain_db: float = Field(default=0.0, ge=-40.0, le=12.0)
+    muted: bool = False
+
+
+class RecordStartRequest(BaseModel):
+    label: str | None = Field(default=None, max_length=60)
+    notes: str = Field(default="", max_length=2000)
 
 
 # --- REST --------------------------------------------------------------------------------------

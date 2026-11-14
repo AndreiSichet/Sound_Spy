@@ -33,5 +33,21 @@ def run(args: argparse.Namespace) -> int:
         host=args.host or api.host,
         port=args.port or api.port,
         reload=args.reload,
+        log_config=log_config(),
     )
     return 0
+
+
+def log_config() -> dict:
+    """uvicorn's logging setup plus Sound Spy's own loggers (``soundspy.*``) on the console.
+
+    Without this, warnings such as "output unavailable: ..." or a failing session worker would
+    never appear in the ``soundspy serve`` window.
+    """
+    import copy
+
+    from uvicorn.config import LOGGING_CONFIG
+
+    config = copy.deepcopy(LOGGING_CONFIG)
+    config["loggers"]["soundspy"] = {"handlers": ["default"], "level": "INFO", "propagate": False}
+    return config

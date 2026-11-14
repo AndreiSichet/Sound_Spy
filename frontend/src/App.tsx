@@ -2,6 +2,7 @@ import { useEffect, type ComponentType } from 'react'
 import { api } from './api/client.ts'
 import type { Mode } from './api/types.ts'
 import { ConnectionIndicator } from './components/ConnectionIndicator.tsx'
+import { Toasts } from './components/Toasts.tsx'
 import { useSessionSocket } from './hooks/useSessionSocket.ts'
 import { useAppStore } from './store/appStore.ts'
 import { SemanticTab } from './tabs/SemanticTab.tsx'
@@ -79,6 +80,7 @@ export default function App() {
       >
         <active.Component />
       </main>
+      <Toasts />
     </div>
   )
 }

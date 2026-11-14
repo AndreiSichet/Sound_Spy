@@ -42,10 +42,6 @@ def test_config(client: TestClient) -> None:
 @pytest.mark.parametrize(
     ("method", "path", "step"),
     [
-        ("post", "/api/session/start", "step-03"),
-        ("post", "/api/session/stop", "step-03"),
-        ("get", "/api/recordings/1", "step-03"),
-        ("get", "/api/recordings/1/audio", "step-03"),
         ("post", "/api/recordings/1/process", "step-06"),
     ],
 )
@@ -55,20 +51,19 @@ def test_stub_routes_return_501(client: TestClient, method: str, path: str, step
     assert response.json() == {"detail": f"not implemented ({step})"}
 
 
-def test_put_target_returns_501(client: TestClient) -> None:
-    response = client.put("/api/session/target", json={"labels": ["speech"]})
-    assert response.status_code == 501
-
-
 def test_openapi_lists_all_routes(client: TestClient) -> None:
     paths = set(client.get("/openapi.json").json()["paths"])
     assert {
         "/api/health",
         "/api/config",
         "/api/devices",
+        "/api/session",
         "/api/session/start",
         "/api/session/stop",
         "/api/session/target",
+        "/api/session/monitor",
+        "/api/session/record/start",
+        "/api/session/record/stop",
         "/api/recordings",
         "/api/recordings/{recording_id}",
         "/api/recordings/{recording_id}/audio",
@@ -111,7 +106,8 @@ def test_ws_heartbeat(app_config) -> None:
         ('{"type": "bogus", "payload": {}}', "unknown message type"),
         ("not json", "invalid JSON"),
         ('{"type": "status", "payload": {}}', "unknown message type"),
-        ('{"type": "set_target", "payload": {}}', "not implemented (step-03)"),
+        ('{"type": "set_target", "payload": {"labels": ["laughter"]}}', "unknown labels"),
+        ('{"type": "set_target", "payload": {"attenuation_db": -3}}', "invalid set_target"),
     ],
 )
 def test_ws_answers_client_messages_with_error(
@@ -123,3 +119,13 @@ def test_ws_answers_client_messages_with_error(
         reply = ws.receive_json()
     assert reply["type"] == "error"
     assert fragment in reply["payload"]["message"]
+
+
+def test_ws_set_target_is_stored(client: TestClient) -> None:
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_text('{"type": "set_target", "payload": {"labels": ["speech"]}}')
+        reply = ws.receive_json()
+    assert reply["type"] == "status"
+    sessions = client.app.state.session_manager
+    assert sessions.target is not None and sessions.target.labels == {"speech"}

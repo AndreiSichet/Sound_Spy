@@ -1,11 +1,19 @@
-"""``/ws/session``: live session channel.
+"""``/ws/session``: the live channel.
 
-On connect the server sends the current ``status``; afterwards a ``status`` heartbeat every
-``api.ws_heartbeat_s`` seconds. Client messages use the same envelope (see ``schemas``);
-unknown or malformed messages are answered with an ``error`` message.
+- On connect the server queues the current ``status``. While no session runs, a ``status``
+  heartbeat follows every ``api.ws_heartbeat_s``; while a session runs, the session itself emits
+  ``status`` every ``engine.status_interval_s`` plus ``levels`` / ``waveform`` / ``spectrogram``
+  at their analysis rates, and ``warning`` when something needs attention.
+- Client -> server: ``set_target`` (validated against the class list, then stored and forwarded
+  to the session). Malformed or unknown messages are answered with ``error``.
 
-From step 03 the engine worker thread pushes events into the event loop with
-``loop.call_soon_threadsafe`` and they are broadcast through ``ConnectionManager``.
+**Slow clients.** Every connection has its own bounded queue and a sender task. When the queue
+is full, the oldest *droppable* message (``levels``, ``waveform``, ``spectrogram``) is discarded;
+``status``, ``warning`` and ``error`` are never dropped. A browser tab in the background therefore
+cannot make the server hoard memory or delay other clients.
+
+Events reach this module from the session's worker thread through
+``SessionManager`` (``loop.call_soon_threadsafe``), so ``publish`` always runs on the event loop.
 """
 
 from __future__ import annotations
@@ -13,61 +21,109 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+from collections import deque
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
 from soundspy.api.schemas import (
     CLIENT_MESSAGE_TYPES,
+    DROPPABLE_TYPES,
+    TargetSpecModel,
     WsMessage,
     error_message,
     status_message,
 )
-from soundspy.core.events import EngineStatus
+
+if TYPE_CHECKING:
+    from soundspy.api.services.session_manager import SessionManager
 
 router = APIRouter()
 
 
-class ConnectionManager:
-    """Tracks connected WebSocket clients; serializes sends per connection."""
+class ClientQueue:
+    """Bounded queue with the drop policy described in the module docstring."""
 
-    def __init__(self) -> None:
-        self._locks: dict[WebSocket, asyncio.Lock] = {}
+    def __init__(self, maxsize: int) -> None:
+        if maxsize < 1:
+            raise ValueError("maxsize must be >= 1")
+        self.maxsize = maxsize
+        self.items: deque[WsMessage] = deque()
+        self.dropped = 0
+        self._ready = asyncio.Event()
+
+    def put(self, message: WsMessage) -> None:
+        self.items.append(message)
+        while len(self.items) > self.maxsize:
+            for i, queued in enumerate(self.items):
+                if queued.type in DROPPABLE_TYPES:
+                    del self.items[i]
+                    self.dropped += 1
+                    break
+            else:  # only messages that must not be dropped: keep them all
+                break
+        self._ready.set()
+
+    async def get(self) -> WsMessage:
+        while not self.items:
+            self._ready.clear()
+            await self._ready.wait()
+        return self.items.popleft()
+
+
+@dataclass
+class _Client:
+    websocket: WebSocket
+    queue: ClientQueue
+    task: asyncio.Task[None] | None = field(default=None)
+
+
+class ConnectionManager:
+    """Connected clients, each with its own queue and sender task."""
+
+    def __init__(self, queue_size: int = 64) -> None:
+        self.queue_size = queue_size
+        self._clients: dict[WebSocket, _Client] = {}
 
     @property
     def count(self) -> int:
-        return len(self._locks)
+        return len(self._clients)
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
-        self._locks[websocket] = asyncio.Lock()
+        client = _Client(websocket, ClientQueue(self.queue_size))
+        client.task = asyncio.create_task(self._sender(client))
+        self._clients[websocket] = client
 
     def disconnect(self, websocket: WebSocket) -> None:
-        self._locks.pop(websocket, None)
+        client = self._clients.pop(websocket, None)
+        if client is not None and client.task is not None:
+            client.task.cancel()
 
-    async def send(self, websocket: WebSocket, message: WsMessage) -> None:
-        lock = self._locks.get(websocket)
-        if lock is None:
-            return
-        async with lock:
-            await websocket.send_text(message.model_dump_json())
+    def send(self, websocket: WebSocket, message: WsMessage) -> None:
+        client = self._clients.get(websocket)
+        if client is not None:
+            client.queue.put(message)
 
-    async def broadcast(self, message: WsMessage) -> None:
-        for websocket in list(self._locks):
-            try:
-                await self.send(websocket, message)
-            except Exception:  # noqa: BLE001 - a dead client must not break the broadcast
-                self.disconnect(websocket)
+    def publish(self, message: WsMessage) -> None:
+        for client in list(self._clients.values()):
+            client.queue.put(message)
+
+    async def _sender(self, client: _Client) -> None:
+        try:
+            while True:
+                message = await client.queue.get()
+                await client.websocket.send_text(message.model_dump_json())
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - the client went away; the receive loop cleans up
+            self._clients.pop(client.websocket, None)
 
 
-def current_status() -> EngineStatus:
-    """Engine status. No session exists before step 03, so the engine is always idle."""
-    # TODO(step-03): read the status of the active Session.
-    return EngineStatus(t=0.0, state="idle", message="no active session")
-
-
-def handle_client_message(raw: str) -> WsMessage:
-    """Validate a client message and return the reply."""
+def handle_client_message(raw: str, sessions: SessionManager) -> WsMessage:
+    """Validate a client message, act on it and return the reply."""
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
@@ -76,36 +132,42 @@ def handle_client_message(raw: str) -> WsMessage:
     if msg_type not in CLIENT_MESSAGE_TYPES:
         return error_message(f"unknown message type {msg_type!r}")
     try:
-        WsMessage.model_validate(data)
+        message = WsMessage.model_validate(data)
+        target = TargetSpecModel.model_validate(message.payload).to_core()
+        target.validate(sessions.labels)
     except ValidationError as exc:
         return error_message(f"invalid {msg_type} message: {exc.errors()[0]['msg']}")
-    # TODO(step-03): apply set_target to the active session.
-    return error_message(f"{msg_type} not implemented (step-03)")
+    except ValueError as exc:
+        return error_message(f"invalid {msg_type} message: {exc}")
+    sessions.set_target(target)
+    return status_message(sessions.status())
 
 
-async def _heartbeat(manager: ConnectionManager, websocket: WebSocket, interval_s: float) -> None:
+async def _heartbeat(
+    manager: ConnectionManager, websocket: WebSocket, sessions: SessionManager, interval_s: float
+) -> None:
     while True:
         await asyncio.sleep(interval_s)
-        await manager.send(websocket, status_message(current_status()))
+        if not sessions.running:  # a running session sends its own status
+            manager.send(websocket, status_message(sessions.status()))
 
 
 @router.websocket("/ws/session")
 async def session_socket(websocket: WebSocket) -> None:
     manager: ConnectionManager = websocket.app.state.ws_manager
+    sessions: SessionManager = websocket.app.state.session_manager
     interval_s: float = websocket.app.state.config.api.ws_heartbeat_s
     await manager.connect(websocket)
-    heartbeat: asyncio.Task[None] | None = None
+    manager.send(websocket, status_message(sessions.status()))
+    heartbeat = asyncio.create_task(_heartbeat(manager, websocket, sessions, interval_s))
     try:
-        await manager.send(websocket, status_message(current_status()))
-        heartbeat = asyncio.create_task(_heartbeat(manager, websocket, interval_s))
         while True:
             raw = await websocket.receive_text()
-            await manager.send(websocket, handle_client_message(raw))
+            manager.send(websocket, handle_client_message(raw, sessions))
     except WebSocketDisconnect:
         pass
     finally:
-        if heartbeat is not None:
-            heartbeat.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await heartbeat
+        heartbeat.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await heartbeat
         manager.disconnect(websocket)

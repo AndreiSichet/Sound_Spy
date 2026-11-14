@@ -45,7 +45,7 @@ def run(args: argparse.Namespace) -> int:
         config, profile = load_profile(args)
         resolved = resolve_input(profile)
         print_device_line(resolved)
-        with MicSource(resolved) as mic:
+        with MicSource(resolved, config.capture) as mic:
             countdown(args.countdown, f"Recording {args.seconds:g} s")
             buf = mic.read(args.seconds)
         print("done.")

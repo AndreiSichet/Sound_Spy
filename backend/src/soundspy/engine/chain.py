@@ -8,7 +8,7 @@ emitted events. Target changes are applied by the session at chunk boundaries vi
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from soundspy.core.audio import AudioBuffer
 from soundspy.core.events import Event
@@ -21,12 +21,37 @@ class ProcessorChain:
         self,
         main: Sequence[Processor] = (),
         side: Sequence[SideProcessor] = (),
+        *,
+        names: Mapping[str, Processor | SideProcessor] | None = None,
     ) -> None:
         self.main: list[Processor] = list(main)
         self.side: list[SideProcessor] = list(side)
         self.target: TargetSpec | None = None
         self._input_format: tuple[int, int] | None = None
         self._output_channels: int | None = None
+        self._names: dict[str, Processor | SideProcessor] = {}
+        for name, stage in (names or {}).items():
+            if not any(stage is s for s in [*self.main, *self.side]):
+                raise ValueError(f"named stage {name!r} is not part of the chain")
+            self._names[name] = stage
+
+    def stage(self, name: str) -> Processor | SideProcessor:
+        """A stage by name (e.g. ``"extractor"``, which later steps replace)."""
+        try:
+            return self._names[name]
+        except KeyError:
+            names = sorted(self._names)
+            raise KeyError(f"no stage named {name!r}; named stages: {names}") from None
+
+    def replace(self, name: str, stage: Processor | SideProcessor) -> None:
+        """Swap a named stage for another of the same kind (call ``configure`` again after)."""
+        old = self.stage(name)
+        group: list = self.main if isinstance(old, Processor) else self.side
+        if isinstance(old, Processor) != isinstance(stage, Processor):
+            raise TypeError("a Processor can only be replaced by a Processor (same for side)")
+        group[next(i for i, s in enumerate(group) if s is old)] = stage
+        self._names[name] = stage
+        self._input_format = None  # must be configured again
 
     def configure(self, sample_rate: int, num_channels: int) -> int:
         """Configure every stage; channel counts propagate through the main chain.

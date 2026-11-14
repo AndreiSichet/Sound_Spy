@@ -40,6 +40,99 @@ def recording_stem(label: str | None, when: datetime) -> str:
     return f"{_safe_label(label)}_{when.strftime('%Y%m%d-%H%M%S')}-{when.microsecond // 1000:03d}"
 
 
+class RecordingWriter:
+    """Writes one recording incrementally: WAV now, sidecar on ``close()``.
+
+    Used by ``save_recording`` (one buffer) and by live sessions (chunk after chunk). The WAV is
+    created exclusively when the writer is constructed, so an existing recording can never be
+    overwritten. ``device`` / ``hostapi`` / ``channel_indices`` / ``profile`` are taken from
+    ``metadata`` (normally the first chunk's metadata); ``overflows`` can be updated until close.
+    """
+
+    def __init__(
+        self,
+        directory: str | Path,
+        sample_rate: int,
+        channels: int,
+        *,
+        label: str | None = None,
+        notes: str = "",
+        profile: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        self.created = datetime.now().astimezone()
+        self.wav_path = directory / f"{recording_stem(label, self.created)}.wav"
+        self.sidecar_path = self.wav_path.with_suffix(SIDECAR_SUFFIX)
+        if self.sidecar_path.exists():
+            raise FileExistsError(
+                f"{self.sidecar_path} already exists; raw recordings are never overwritten"
+            )
+        meta = metadata or {}
+        self.sample_rate, self.channels = sample_rate, channels
+        self.label, self.notes = label, notes
+        self.profile = profile if profile is not None else meta.get("profile")
+        self.device, self.hostapi = meta.get("device"), meta.get("hostapi")
+        self.channel_indices = meta.get("channel_indices", list(range(channels)))
+        self.overflows = int(meta.get("overflows", 0))
+        self.frames = 0
+        try:
+            # Exclusive creation ("x"): fails instead of clobbering an existing file.
+            self._fh = self.wav_path.open("xb")
+        except FileExistsError as exc:
+            raise FileExistsError(
+                f"{self.wav_path} already exists; raw recordings are never overwritten"
+            ) from exc
+        self._file = sf.SoundFile(
+            self._fh, mode="w", samplerate=sample_rate, channels=channels,
+            format="WAV", subtype="FLOAT",
+        )
+        self._closed = False
+
+    @property
+    def duration_s(self) -> float:
+        return self.frames / self.sample_rate
+
+    def write(self, chunk: AudioBuffer) -> None:
+        if self._closed:
+            raise RuntimeError("recording already closed")
+        if (chunk.sample_rate, chunk.num_channels) != (self.sample_rate, self.channels):
+            raise ValueError("chunk format does not match the recording")
+        n = int(chunk.metadata.get("valid_frames", chunk.num_frames))
+        n = max(0, min(n, chunk.num_frames))
+        if n:
+            self._file.write(chunk.samples[:n])
+            self.frames += n
+
+    def close(self) -> Path:
+        """Finish the WAV, write the sidecar, return the WAV path (idempotent)."""
+        if self._closed:
+            return self.wav_path
+        self._closed = True
+        self._file.close()
+        self._fh.close()
+        sidecar: dict[str, Any] = {
+            "file": self.wav_path.name,
+            "sample_rate": self.sample_rate,
+            "channels": self.channels,
+            "duration_s": round(self.duration_s, 6),
+            "created": self.created.isoformat(timespec="milliseconds"),
+            "device": self.device,
+            "hostapi": self.hostapi,
+            "profile": self.profile,
+            "channel_indices": self.channel_indices,
+            "label": self.label,
+            "notes": self.notes,
+            "overflows": self.overflows,
+            "app_version": __version__,
+        }
+        with self.sidecar_path.open("x", encoding="utf-8") as fh:
+            json.dump(sidecar, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        return self.wav_path
+
+
 def save_recording(
     buffer: AudioBuffer,
     directory: str | Path,
@@ -49,40 +142,17 @@ def save_recording(
     profile: str | None = None,
 ) -> Path:
     """Write ``buffer`` as WAV + JSON sidecar; return the WAV path. Never overwrites."""
-    directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-    now = datetime.now().astimezone()
-    stem = recording_stem(label, now)
-    wav_path = directory / f"{stem}.wav"
-    sidecar_path = wav_path.with_suffix(SIDECAR_SUFFIX)
-    for path in (wav_path, sidecar_path):
-        if path.exists():
-            raise FileExistsError(f"{path} already exists; raw recordings are never overwritten")
-
-    meta = buffer.metadata
-    sidecar: dict[str, Any] = {
-        "file": wav_path.name,
-        "sample_rate": buffer.sample_rate,
-        "channels": buffer.num_channels,
-        "duration_s": round(buffer.duration_s, 6),
-        "created": now.isoformat(timespec="milliseconds"),
-        "device": meta.get("device"),
-        "hostapi": meta.get("hostapi"),
-        "profile": profile if profile is not None else meta.get("profile"),
-        "channel_indices": meta.get("channel_indices", list(range(buffer.num_channels))),
-        "label": label,
-        "notes": notes,
-        "overflows": int(meta.get("overflows", 0)),
-        "app_version": __version__,
-    }
-
-    # Exclusive creation ("x"): a concurrent writer can never clobber an existing recording.
-    with wav_path.open("xb") as fh:
-        sf.write(fh, buffer.samples, buffer.sample_rate, format="WAV", subtype="FLOAT")
-    with sidecar_path.open("x", encoding="utf-8") as fh:
-        json.dump(sidecar, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
-    return wav_path
+    writer = RecordingWriter(
+        directory,
+        buffer.sample_rate,
+        buffer.num_channels,
+        label=label,
+        notes=notes,
+        profile=profile,
+        metadata=buffer.metadata,
+    )
+    writer.write(buffer)
+    return writer.close()
 
 
 def read_sidecar(wav_path: str | Path) -> dict[str, Any]:

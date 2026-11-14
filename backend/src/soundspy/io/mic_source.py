@@ -9,14 +9,17 @@ than a downmix), then either
   When the queue is full the **oldest** chunk is dropped and counted: for live audio, fresh sound
   is worth more than stale sound.
 
-If no audio arrives for ``stall_timeout_s`` (default 2 s) the waiting call raises
-``MicStallError`` instead of hanging. ``close()`` and leaving ``chunks()`` always stop the stream.
+If no audio arrives for ``capture.stall_timeout_s`` the waiting call raises ``MicStallError``
+instead of hanging. ``close()`` and leaving ``chunks()`` always stop the stream.
 
-**Start-up silence.** A freshly opened WASAPI stream on the development laptop delivers exactly
-500 ms of digital zeros before real audio. A real microphone never produces exact zeros (there is
-always some hiss), so after ``open()`` leading all-zero frames are discarded, up to
-``warmup_max_s`` (default 1 s) so that a genuinely muted microphone still delivers its silence
-and gets reported as muted. The count is in ``stats.warmup_frames_discarded``.
+**Start-up silence.** With Windows audio enhancements on, a freshly opened WASAPI stream on the
+development laptop delivered exactly 500 ms of digital zeros before real audio. A real
+microphone never produces exact zeros for that long, so after ``open()`` leading all-zero frames
+are discarded, up to ``capture.startup_silence_max_s``, so that a genuinely muted microphone still
+delivers its silence and gets reported as muted. The count is in
+``stats.warmup_frames_discarded``.
+
+All timings come from the ``capture`` section of ``configs/default.yaml`` (``CaptureConfig``).
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ from typing import Any
 
 import numpy as np
 
+from soundspy.config import CaptureConfig
 from soundspy.core.audio import AudioBuffer
 from soundspy.io.base import AudioSource, frames_for
 from soundspy.io.devices import ResolvedInput, _sd
@@ -42,22 +46,20 @@ class MicSource(AudioSource):
     def __init__(
         self,
         resolved: ResolvedInput,
+        capture: CaptureConfig,
         *,
-        max_queued_chunks: int = 32,
-        stall_timeout_s: float = 2.0,
         blocksize: int = 0,
-        warmup_max_s: float = 1.0,
     ) -> None:
         super().__init__()
-        if max_queued_chunks < 1:
-            raise ValueError("max_queued_chunks must be >= 1")
+        if capture.queue_chunks < 1:
+            raise ValueError("capture.queue_chunks must be >= 1")
         self.resolved = resolved
         self.sample_rate = resolved.sample_rate
         self.num_channels = resolved.num_channels
-        self.max_queued_chunks = max_queued_chunks
-        self.stall_timeout_s = stall_timeout_s
+        self.max_queued_chunks = capture.queue_chunks
+        self.stall_timeout_s = capture.stall_timeout_s
         self.blocksize = blocksize
-        self.warmup_max_s = warmup_max_s
+        self.warmup_max_s = capture.startup_silence_max_s
         self._warmup_left = 0
 
         self._keep = np.asarray(resolved.channel_indices, dtype=np.intp)
@@ -112,6 +114,25 @@ class MicSource(AudioSource):
     @property
     def is_open(self) -> bool:
         return self._stream is not None
+
+    @property
+    def input_latency_s(self) -> float:
+        """PortAudio's estimate of the input stream latency (0 when closed/unknown)."""
+        stream = self._stream
+        latency = getattr(stream, "latency", 0.0) if stream is not None else 0.0
+        try:
+            return float(latency)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "source": "mic",
+            "device": self.resolved.device.name,
+            "hostapi": self.resolved.device.hostapi,
+            "profile": self.resolved.profile_name,
+            "channel_indices": list(self.resolved.channel_indices),
+        }
 
     # --- PortAudio callback (runs on the audio thread) -------------------------------------------
 

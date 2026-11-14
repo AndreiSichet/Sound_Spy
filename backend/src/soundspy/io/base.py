@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 
 from soundspy.core.audio import AudioBuffer
 
@@ -39,6 +39,15 @@ class AudioSource(ABC):
 
     def __init__(self) -> None:
         self.stats = SourceStats()
+
+    @property
+    def input_latency_s(self) -> float:
+        """Delay between sound happening and the source handing it over (0 for files)."""
+        return 0.0
+
+    def describe(self) -> dict[str, Any]:
+        """Short description for status displays (``source``, ``device``, ...)."""
+        return {"source": type(self).__name__}
 
     @abstractmethod
     def open(self) -> None: ...

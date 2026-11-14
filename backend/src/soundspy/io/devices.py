@@ -87,6 +87,29 @@ def _sd() -> Any:
     return sounddevice
 
 
+def refresh_devices() -> bool:
+    """Make PortAudio enumerate the devices again; returns False if that is not supported.
+
+    PortAudio reads the device list once, when it is initialised, and keeps using those device
+    handles. Plugging headphones into a Realtek jack (or a USB microphone) reconfigures Windows'
+    audio endpoints, after which opening a stream through the old handles can fail with an
+    "Unanticipated host error". Re-initialising picks up the current devices.
+
+    Must only be called while **no stream is open** (it would kill running streams).
+    """
+    sd = _sd()
+    terminate = getattr(sd, "_terminate", None)
+    initialize = getattr(sd, "_initialize", None)
+    if terminate is None or initialize is None:
+        return False
+    try:
+        terminate()
+        initialize()
+    except Exception as exc:  # noqa: BLE001 - PortAudioError and friends
+        raise AudioBackendUnavailable(f"could not re-initialise PortAudio: {exc}") from exc
+    return True
+
+
 def _query() -> tuple[list[dict[str, Any]], list[dict[str, Any]], tuple[int, int]]:
     sd = _sd()
     try:

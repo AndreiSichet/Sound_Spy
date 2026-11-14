@@ -1,24 +1,27 @@
 """Recording routes: list, details, audio file, offline processing.
 
 ``GET /api/recordings`` re-indexes ``data/raw`` (sidecars are the source of truth) and lists the
-recordings, newest first.
+recordings, newest first. ``GET /api/recordings/{id}/audio`` streams the WAV for in-browser
+playback (the browser plays *saved* files only; live audio goes to the speakers from the backend).
 
-TODO(step-03): get / audio.
 TODO(step-06): process (offline extraction run -> ProcessingRun).
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 
 from soundspy.api.db.models import Recording
 from soundspy.api.deps import ConfigDep, DbDep
 from soundspy.api.routes import NOT_IMPLEMENTED, not_implemented
 from soundspy.api.schemas import RecordingModel
-from soundspy.api.services.recordings import sync_recordings
+from soundspy.api.services.recordings import absolute_path, sync_recordings
 
 router = APIRouter(prefix="/api/recordings", tags=["recordings"])
+
+NOT_FOUND = {404: {"description": "No such recording, or its file is gone"}}
 
 
 @router.get("", response_model=list[RecordingModel])
@@ -28,14 +31,29 @@ def list_recordings(config: ConfigDep, db: DbDep) -> list[Recording]:
     return list(db.scalars(query))
 
 
-@router.get("/{recording_id}", responses=NOT_IMPLEMENTED)
-def get_recording(recording_id: int) -> None:
-    raise not_implemented("step-03")
+def _recording(db: DbDep, recording_id: int) -> Recording:
+    row = db.get(Recording, recording_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no recording with id {recording_id}")
+    return row
 
 
-@router.get("/{recording_id}/audio", responses=NOT_IMPLEMENTED)
-def get_recording_audio(recording_id: int) -> None:
-    raise not_implemented("step-03")
+@router.get("/{recording_id}", response_model=RecordingModel, responses=NOT_FOUND)
+def get_recording(recording_id: int, db: DbDep) -> Recording:
+    return _recording(db, recording_id)
+
+
+@router.get(
+    "/{recording_id}/audio",
+    response_class=FileResponse,
+    responses={**NOT_FOUND, 200: {"content": {"audio/wav": {}}}},
+)
+def get_recording_audio(recording_id: int, config: ConfigDep, db: DbDep) -> FileResponse:
+    row = _recording(db, recording_id)
+    path = absolute_path(row.path, config.project_root)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"the file of recording {recording_id} is gone")
+    return FileResponse(path, media_type="audio/wav", filename=path.name)
 
 
 @router.post("/{recording_id}/process", responses=NOT_IMPLEMENTED)

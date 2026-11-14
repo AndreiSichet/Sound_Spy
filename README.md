@@ -10,7 +10,7 @@ Target scenario: a crowded cafeteria — "let me hear speech, suppress dishes an
 
 | Tab | You select... | The app... | Hardware | Status |
 |---|---|---|---|---|
-| **Semantic** | one or more sound types | detects the sound types present, extracts the selected ones | any mic | shell |
+| **Semantic** | one or more sound types | detects the sound types present, extracts the selected ones | any mic | live session (listen, record, visuals); detection/extraction from step 05 |
 | **Spatial** | sound types + a direction | steers toward the direction, then extracts | USB mic array | planned (module 3-4) |
 | **Sources** | one detected source on a map | tracks sources, extracts the selected one | USB mic array | planned (module 5) |
 
@@ -51,6 +51,9 @@ npm run dev               # http://localhost:5173
 ```
 
 The Vite dev server proxies `/api` and `/ws` to the backend, so open http://localhost:5173.
+On the **Semantic** tab, press **Start** for a live session (level meters, spectrogram,
+waveform), tick **Listen** to hear it — **headphones only**, laptop speakers howl — and
+**Record** to save what it hears.
 
 ### Microphone
 

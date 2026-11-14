@@ -5,13 +5,14 @@ microphone, works out which kinds of sound are present (speech, music, dishes,
 footsteps…), and makes the sounds you picked clearer while turning everything
 else down.
 
-Written: 14 November 2026, after step 01 · Last updated: 14 November 2026, after step 02
-(audio capture).
+Written: 14 November 2026, after step 01 · Last updated: 14 November 2026, after step 03
+(live session).
 
 > **Read this with its date in mind.** Sound Spy is built one step at a time.
-> At the moment the *skeleton* of the app is finished and running, and it can
-> record from a real microphone, but it does not yet process sound live or
-> remove anything. Every section below says whether it describes
+> At the moment the *skeleton* of the app is finished and running: it records
+> from a real microphone and runs a live session (headphones, live pictures,
+> recording from the page), but it does not yet recognise or remove any sound.
+> Every section below says whether it describes
 > something that **exists today** or something that is **planned**, and in
 > which step. When a later step changes something written here, the old
 > sentence should be corrected where it stands rather than quietly deleted.
@@ -52,19 +53,20 @@ more technical documents go deeper: [docs/architecture.md](docs/architecture.md)
 6. [The processing engine](#6-the-processing-engine)
 7. [Configuration — settings live in files, not in code](#7-configuration--settings-live-in-files-not-in-code)
 8. [Audio capture — getting sound in from a microphone](#8-audio-capture--getting-sound-in-from-a-microphone)
-9. [The backend's web interface — REST and WebSocket](#9-the-backends-web-interface--rest-and-websocket)
-10. [The database](#10-the-database)
-11. [The website](#11-the-website)
-12. [The command line tool](#12-the-command-line-tool)
-13. [Following a request from start to finish](#13-following-a-request-from-start-to-finish)
-14. [What comes next — the plan, step by step](#14-what-comes-next--the-plan-step-by-step)
-15. [Running everything](#15-running-everything)
-16. [Testing everything](#16-testing-everything)
-17. [Problems found and fixed](#17-problems-found-and-fixed)
-18. [Design decisions and why](#18-design-decisions-and-why)
-19. [Known limitations](#19-known-limitations)
-20. [Third-party code](#20-third-party-code)
-21. [Quick reference](#21-quick-reference)
+9. [Live session — from microphone to headphones and screen](#9-live-session--from-microphone-to-headphones-and-screen)
+10. [The backend's web interface — REST and WebSocket](#10-the-backends-web-interface--rest-and-websocket)
+11. [The database](#11-the-database)
+12. [The website](#12-the-website)
+13. [The command line tool](#13-the-command-line-tool)
+14. [Following a request from start to finish](#14-following-a-request-from-start-to-finish)
+15. [What comes next — the plan, step by step](#15-what-comes-next--the-plan-step-by-step)
+16. [Running everything](#16-running-everything)
+17. [Testing everything](#17-testing-everything)
+18. [Problems found and fixed](#18-problems-found-and-fixed)
+19. [Design decisions and why](#19-design-decisions-and-why)
+20. [Known limitations](#20-known-limitations)
+21. [Third-party code](#21-third-party-code)
+22. [Quick reference](#22-quick-reference)
 
 ---
 
@@ -118,11 +120,11 @@ behind the scenes (back). Keeping both in one repository is called a
 | The folder structure, rules and tools | **done** |
 | The data types every part of the code shares | **done** (Chapter 5) |
 | The skeleton of the processing engine | **done** (Chapter 6) |
-| The backend's web interface: health, configuration, live channel | **done** (Chapter 9) |
-| The database tables | **done** (Chapter 10) |
-| The website: three tabs, connection indicator | **done** (Chapter 11) |
+| The backend's web interface: health, configuration, live channel | **done** (Chapter 10) |
+| The database tables | **done** (Chapter 11) |
+| The website: three tabs, connection indicator | **done** (Chapter 12) |
 | Choosing a microphone, recording it, checking its levels | **done**, step 02 (Chapter 8) |
-| Live monitoring and playback | planned, step 03 |
+| Live session: listening in headphones, live pictures, recording from the page | **done**, step 03 (Chapter 9) |
 | Recognising sound types | planned, step 05 |
 | Keeping the chosen sounds, removing the rest | planned, steps 06–07 |
 | Direction and source tracking (tabs 2–3) | planned, modules 3–5 |
@@ -138,12 +140,18 @@ about building a frame solid enough that every later step only fills it in.
 `GET /api/recordings`. The website doesn't show them yet; that comes with the
 live session in step 03.
 
+*Since step 03:* the Semantic tab runs a **live session**. Press Start and the
+level meters, spectrogram and waveform follow the microphone. Tick Listen (with
+headphones) to hear it, and press Record to save what it hears. Saved recordings
+are listed on the page and play in the browser. Nothing is removed from the sound
+yet (Chapter 9).
+
 ### Why it exists
 
 It is a university project (Telecommunications, Technical University of
 Cluj-Napoca). The ideas behind the sound-separation part come from published
 research, mainly a project called **SemanticHearing** (Veluri et al., 2023;
-see Chapter 14). Sound Spy borrows its ideas but, so far, none of its code.
+see Chapter 15). Sound Spy borrows its ideas but, so far, none of its code.
 
 ---
 
@@ -322,7 +330,7 @@ server and the website is the client.
 **localhost / 127.0.0.1.** The computer's own address for talking to itself.
 `127.0.0.1` is the numeric version (IPv4). `localhost` is a name that may
 point to `127.0.0.1` or to `::1`, the newer IPv6 version of the same idea.
-This difference caused a real problem (Chapter 17).
+This difference caused a real problem (Chapter 18).
 
 **Port.** A number that tells programs on one computer apart, like the room
 number within a building's address. The backend uses port **8765**, and the
@@ -487,6 +495,34 @@ lag shows which one heard a sound first.
 **Duplicated mono.** One signal copied into several channels, so they are identical. It looks
 like stereo but contains no spatial information.
 
+### Live session (added in step 03)
+
+**Session.** Sound Spy switched on: continuously reading the microphone, processing, showing and
+optionally playing and recording the sound (Chapter 9).
+
+**Worker thread.** The one background thread that processes the chunks of a session.
+
+**Underrun.** The headphones needed sound but none was ready, so a short silence (a click) was
+played instead.
+
+**Prebuffer / jitter buffer.** A small amount of sound collected before playback starts, so small
+timing irregularities don't cause underruns. It costs a little delay.
+
+**Real-time factor (RTF).** Processing time divided by the length of the sound processed. Below 1
+the computer keeps up; above 1 it falls behind.
+
+**p95 (95th percentile).** The value that 95 % of measurements stay below: a "nearly worst case"
+that ignores the rare extreme.
+
+**Limiter.** An automatic volume control that only acts on peaks, turning the sound down just
+enough to keep it below a ceiling.
+
+**Acoustic feedback.** Sound from a speaker going back into the microphone, being amplified and
+played again, until it howls. The reason Listen needs headphones.
+
+**Canvas / requestAnimationFrame.** A `<canvas>` is a drawing surface on a web page. The browser
+calls `requestAnimationFrame` once per screen refresh, which is the right moment to redraw it.
+
 ### Testing and tooling
 
 **Test.** A small program that checks a piece of the real program behaves as
@@ -621,6 +657,11 @@ microphone and file **AudioSources** work, as does a file **AudioSink**
 (Chapter 8). What doesn't exist yet is the engine running live between them
 (step 03) and the stages that change the sound (steps 05–07).
 
+*Update after step 03:* the engine now runs live. Microphone or file → chunks →
+chain → speaker output, with the analyzer's live pictures and recording
+(Chapter 9). The extractor in the chain is still a stand-in that changes
+nothing; the detector and localizer don't exist yet.
+
 ### Why two programs instead of one
 
 **The backend owns all the sound.** The browser never records from the
@@ -648,7 +689,7 @@ Inside the backend there is a further split:
 
 The API may use the library, but the library must never use the API or its
 web libraries (FastAPI, Starlette, SQLAlchemy). A test enforces this
-(Chapter 16). The benefit is that the sound-processing code can be used,
+(Chapter 17). The benefit is that the sound-processing code can be used,
 tested and studied on its own: from the command line, in a notebook, or in a
 university report, with no server running.
 
@@ -833,7 +874,7 @@ The chain then knows the final output format before any sound flows.
 The chain is careful by design. It refuses to run if it hasn't been
 configured, and it refuses any chunk whose sample rate or channel count
 doesn't match the configuration. This guard has already caught a real mistake
-(Chapter 17).
+(Chapter 18).
 
 ### 6.3 Modes — which stages each tab uses
 
@@ -844,7 +885,7 @@ doesn't match the configuration. This guard has already caught a real mistake
 | **Sources** | spatial filter → extractor | detector, analyser, localiser, tracker | **yes** |
 
 Today only this table exists. Building real chains from it comes later. The
-website already uses it to decide whether a tab is available (Chapter 11).
+website already uses it to decide whether a tab is available (Chapter 12).
 
 ### 6.4 How live processing will run (planned, step 03)
 
@@ -869,6 +910,10 @@ across threads:
   the new `TargetSpec` takes effect at the start of the next chunk, never
   halfway through one.
 
+*Implemented in step 03, exactly as planned here; Chapter 9 describes how it
+works. The chain can now also name its stages (`reducer`, `extractor`,
+`analyzer`), so a later step can swap the stand-in `extractor` for the real one.*
+
 ---
 
 ## 7. Configuration — settings live in files, not in code
@@ -889,7 +934,7 @@ only placeholders for now.
 
 | File | What it holds |
 |---|---|
-| `default.yaml` | folder paths, which microphone profile is active, engine chunk size (1,024 frames), backend address and port, allowed website address, heartbeat interval (2 s), database location |
+| `default.yaml` | folder paths, which microphone profile is active, engine chunk size (1,024 frames), backend address and port, allowed website address, heartbeat interval (2 s), database location. *Since step 03:* the chunk is `engine.chunk_ms` = 20 ms, and four new sections hold every live-session setting: `capture` (stall timeout, input queue, start-up silence), `engine` (chunk, RTF warning, status rate), `output` (device, prebuffer, queue, limiter, gain) and `analysis` (rates and sizes of the live pictures). These have **no fallback values in code**: a missing or invalid key stops the app at start-up with a message naming it |
 | `classes.yaml` | the seven classes (Chapter 5.5) |
 | `devices/laptop.yaml` | the laptop's own microphone: system default device, preferred host API, native sample rate, all channels, no geometry |
 | `devices/respeaker_xvf3800.yaml` | the future 4-mic array: a device name to look for, channels 2–5 (the raw microphones; channels 0–1 are the board's own processed output), geometry to be filled in |
@@ -1156,7 +1201,7 @@ like a library catalogue. The catalogue can always be rebuilt by walking the she
 | **peak dBFS** | the loudest single sample; 0 dBFS is the maximum |
 | **noise floor** | the background level: the quietest 10 % of 50 ms windows (room tone, fan, mic hiss) |
 | **clipping** | the share of samples at or above 0.999, which are too loud and distorted |
-| **digital silence** | the share of the recording made of *stretches* (≥ 5 ms) of exact 0.0, which only a gate, suppression or a muted input produces. Isolated zeros are normal (Chapter 17.12) |
+| **digital silence** | the share of the recording made of *stretches* (≥ 5 ms) of exact 0.0, which only a gate, suppression or a muted input produces. Isolated zeros are normal (Chapter 18.12) |
 
 Total silence is reported as −120 dBFS rather than "minus infinity".
 
@@ -1264,7 +1309,7 @@ No level warnings.
     claps flattened at exactly +7.4 dBFS on both channels: that is true clipping, so clap a bit
     softer or further away;
   - quiet sound regularly lands on the converter's "0" step, which produces isolated exact
-    zeros. That is normal (Chapter 17.12).
+    zeros. That is normal (Chapter 18.12).
 
 ### 8.9 The clap test
 
@@ -1303,23 +1348,222 @@ a noise floor in the −70 to −50 dBFS range and no "noise suppression" warnin
 
 ---
 
-## 9. The backend's web interface — REST and WebSocket
+## 9. Live session — from microphone to headphones and screen
+
+**Exists today** (step 03). Location: `backend/src/soundspy/engine/session.py`,
+`engine/factory.py`, `engine/buffers.py`, `io/speaker_sink.py`, `analysis/analyzer.py`,
+`api/services/session_manager.py`, and the Semantic tab of the website.
+
+A **session** is Sound Spy "switched on": it listens continuously, passes the sound through the
+processing chain, can play the result into your headphones, draws it live on the page, and can
+record it. Nothing is removed from the sound yet: the stage that will keep only the chosen sounds
+(the *extractor*) is still a stand-in that changes nothing. Step 05 onwards replaces it.
+
+### 9.1 What you see and do
+
+On the Semantic tab:
+
+1. Choose a **source**: the *Microphone*, or a *File* (any saved recording, played on a loop at
+   normal speed, which is handy for demos and testing without talking).
+2. Press **Start**. The bar shows the input device, sample rate and channel count, the
+   **latency**, the **RTF** (how hard the computer is working) and three problem counters
+   (overflow / underrun / dropped).
+3. The **level meters**, **spectrogram** and **waveform** start moving.
+4. Optionally tick **Listen** to hear the sound in your headphones, with a volume slider and a
+   mute button.
+5. Optionally press **Record**, with a label and notes. The recording appears in the list below,
+   with a **Play** button that plays it in the browser.
+6. Press **Stop**.
+
+### 9.2 How the sound flows
+
+```
+ microphone ──► MicSource ──► 20 ms chunks ──► ProcessorChain ──────────────► SpeakerSink ──► headphones
+ (or a file)   (queue, drop-oldest)              │  main: ChannelReducer(mean)   (queue, limiter)
+                                                 │        → extractor (stand-in)
+                                                 │  side: Analyzer (sees all input channels)
+                                                 │           └─► levels / waveform / spectrogram
+                                                 │
+                                                 └─► RecordingWriter ◄── the RAW input chunk, all channels
+```
+
+- **Chunks of 20 ms.** The engine works on pieces of `engine.chunk_ms` = 20 ms: 960 frames at
+  48 kHz. Small chunks mean low delay. Each chunk goes through the **chain** described in
+  Chapter 6.
+- **The chain for the Semantic tab** (`build_chain`): first a `ChannelReducer` mixes the
+  microphones to one channel (that's what goes to your headphones, and what extraction models
+  will take), then the **extractor**, a stand-in that passes sound through unchanged for now. On
+  the side, the **analyzer** looks at the *original* chunk with all its channels and produces the
+  live pictures.
+- **What gets recorded is the raw input**, every microphone channel, untouched: exactly what
+  `soundspy record` saves. A recording of the processed sound would be worthless once the
+  processing improves; the raw sound can always be processed again.
+
+### 9.3 Threads: who does what
+
+Several things must happen at once, so the work is split:
+
+| Thread | Job | Must never |
+|---|---|---|
+| **Sound card input** (PortAudio's) | hands over fresh samples every few ms; `MicSource` cuts them into chunks and puts them in a queue | wait for anything |
+| **Session worker** (`soundspy-session`) | takes each chunk, runs the chain, feeds the speaker queue and the recording, reports events | block the sound card |
+| **Sound card output** (PortAudio's) | takes audio from the speaker queue whenever the headphones need more | wait for anything |
+| **Web server event loop** | sends events to every open browser over the WebSocket | slow down the audio |
+
+The worker reports events by calling `on_event`. The `SessionManager` only **schedules** them onto
+the web server's event loop (`loop.call_soon_threadsafe`) and returns at once, so a slow network
+connection can never make the audio stutter.
+
+**Changes happen between chunks.** When you move the volume slider, start recording or (from step
+05) choose a different sound, the request is stored and the worker applies it just before the
+next chunk. A chunk is never processed half with the old setting and half with the new one.
+
+### 9.4 Listening: the speaker output
+
+The microphone and the headphones are two separate devices, each with its own clock. They never
+run at *exactly* the same speed. Between them sits a small queue (`SpeakerSink`):
+
+- **Prebuffer.** Playback starts only once 2 chunks (40 ms) are waiting. This small cushion
+  absorbs timing jitter.
+- **Underrun.** If the queue runs dry, the missing moment is played as silence (a click) and
+  counted. Playback then waits for the cushion again rather than clicking repeatedly.
+- **Overflow.** If more than 8 chunks pile up (the input clock running fast), the **oldest** is
+  thrown away and counted. That keeps the delay from creeping up over a long session.
+- **Mono to stereo.** The single mixed channel is copied to both ears.
+- **Volume and mute.** −40 to +12 dB. Mute plays silence but keeps everything running.
+- **Safety limiter — always on.** The laptop's microphone can deliver sound *above* full scale
+  (Windows adds +7.44 dB, Chapter 8.8), and the volume can add another +12 dB. Before anything
+  reaches your ears, a limiter reacts instantly to any peak above −1 dBFS and turns the sound down
+  just enough, then lets go over about 50 ms. A final hard clip catches rounding errors. Nothing
+  louder than −1 dBFS can ever be sent to the headphones.
+
+**Why headphones are required.** With the laptop's own speakers, the sound comes out, goes back
+into the microphone, comes out again a little louder, and within a second it howls (*acoustic
+feedback*). So **Listen is off by default**, and the first time it is switched on the page asks
+you to confirm you are using headphones. The browser remembers your answer.
+
+### 9.5 Latency: how long until you hear it
+
+**Latency** is the delay between a sound happening and you hearing it in the headphones. Sound
+Spy estimates it by adding up the stages:
+
+| Part | On the development laptop |
+|---|---|
+| input stream (PortAudio / WASAPI) | 22 ms |
+| one chunk (the engine waits for a full chunk) | 20 ms |
+| speaker queue (prebuffer of 2 chunks, varying) | about 20–40 ms |
+| output stream | 22 ms |
+| **total shown** | **about 84–104 ms, typically 94 ms** |
+
+For comparison, a delay under about 30 ms feels instant. Around 100 ms you notice a slight echo of
+your own voice, but other people's voices sound natural. The cushion is the part that can be
+tuned: with `prebuffer_chunks: 1` the typical delay drops to about 84 ms, but in a 30-second
+test that caused **1 underrun** (a click), while 2 caused none. So 2 is the default.
+
+The estimate leaves out the converters inside the sound hardware and the Bluetooth link if the
+headphones are wireless (often 100–200 ms more). Wired headphones are best.
+
+### 9.6 Is the computer keeping up? The real-time factor
+
+For every chunk the worker measures how long processing took. The **real-time factor (RTF)** is
+that time divided by the chunk's length:
+
+- RTF 0.06 means 20 ms of sound took 1.2 ms to process, so there's plenty of room;
+- RTF 1.0 means it only *just* keeps up;
+- above 1.0, sound arrives faster than it's processed and chunks start being dropped.
+
+The status shows the 95th percentile over the last 2 seconds, so occasional slow moments count.
+If it goes above **0.8**, a warning appears on the page. It's not a problem today; it's there
+because the neural models of steps 05–07 will be heavy, and it is better to see that coming.
+
+**Measured on the development laptop** (60 s live microphone session, listening on, muted):
+
+| | |
+|---|---|
+| chunks processed | 3,031 (50 per second, as expected) |
+| processing time per chunk | 0.56 ms mean, 1.21 ms p95 |
+| RTF p95 | **0.06** |
+| input overflows / output underruns / dropped chunks | **0 / 0 / 0** |
+| backend CPU | about 12 % of one core |
+
+### 9.7 The live pictures
+
+All three come from the **analyzer**, which runs on the backend at fixed rates that don't depend
+on the chunk size, and arrive over the WebSocket:
+
+| Picture | Rate | What it shows | How to read it |
+|---|---|---|---|
+| **Level meters** | 20 per second | one bar per microphone: average loudness (RMS), the peak as a white line, the highest peak of the last second as a held marker, and a red **clip light** | normal speech close up: around −30 to −20 dBFS. The scale goes to +6 because this microphone can exceed full scale. The red light means some samples hit the ceiling |
+| **Waveform** | 25 per second | the last 5 s of the mixed sound, as the highest and lowest point of each tiny time slice | tall = loud. Speech looks like bursts with gaps; steady noise like a uniform band |
+| **Spectrogram** | 25 per second | the last 10 s: time left→right, pitch bottom→top, brightness = loudness (dark = quiet, yellow = loud) | see below |
+
+**How to read a spectrogram.** Each vertical slice is one moment, split into 128 pitch bands.
+Low sounds (a hum, a fridge) are near the bottom; high ones (cutlery, hissing, the "s" in speech)
+near the top. The bands follow the **mel scale**, like hearing, so the lower part gets more room:
+100 Hz to 1 kHz takes about as much height as 1 to 5 kHz. What different sounds look like:
+
+- **speech**: stacked horizontal stripes (the harmonics of the voice) that wobble with
+  intonation, in syllable-sized bursts, mostly below 4 kHz;
+- **music**: steady, long horizontal lines (held notes);
+- **a clap or a dropped plate**: a bright *vertical* line across almost all heights (a short
+  burst with energy everywhere);
+- **footsteps**: a regular series of short low-to-mid bursts;
+- **steady noise** (fan, traffic): a smooth, even haze.
+
+Learning to see these patterns is exactly what the detection model of step 05 will learn to do.
+
+**Why the page stays smooth.** About 70 messages a second arrive. If each updated the page the
+normal way, the browser would rebuild the page 70 times a second. Instead they go into a small
+memory buffer (`liveFrames`), and the pictures are drawn on `<canvas>` elements in step with the
+screen's refresh (`requestAnimationFrame`), only when something changed. If the browser tab falls
+behind, the server throws away old *picture* messages for that tab (never status or warnings), so
+a slow tab can't build up a backlog.
+
+### 9.8 Starting from a file
+
+A session can also play a saved WAV file, looped, at normal speed, through exactly the same chain.
+It lets the app be shown without talking into the microphone, and lets tests run without any
+hardware. File paths must be inside the project folder.
+
+### 9.9 When something goes wrong
+
+If the worker hits a problem (the microphone is unplugged or stalls, or a stage crashes), the
+session switches to **error** with a message, sends that state to the page (which shows it as a
+notice), finishes any recording and frees the devices. The web server keeps running, and you can
+press Start again. Stopping the backend while a session runs also stops the session cleanly; a
+test checks that no audio thread is left behind.
+
+**When devices change (headphones plugged in or out).** The sound library reads the list of
+devices once and keeps using what it found. Plugging headphones into the laptop's jack makes
+Windows reconfigure its audio devices, and afterwards opening the microphone or speakers through
+the old list can fail. Since the owner's first test of step 03 found this (Chapter 18.18), every
+**Start** first re-reads the device list. If opening still fails, it re-reads once more and
+retries, and only then reports an error that says what probably happened. If a session starts but
+the output can't be opened, a notice gives the reason and the **Listen** box is disabled with an
+explanation, instead of failing when clicked.
+
+---
+
+## 10. The backend's web interface — REST and WebSocket
 
 **Exists today**, partly. Location: `backend/src/soundspy/api/`.
 
-### 9.1 The addresses
+### 10.1 The addresses
 
 | Address | What it does | Status |
 |---|---|---|
 | `GET /api/health` | "Are you alive?" Answers `{"status": "ok", "version": "0.1.0"}` | **works** |
 | `GET /api/config` | the class list (ID, display name, description), which tabs are available and why not, the active device profile | **works** |
 | `GET /api/devices` | list microphones and speakers, and which one the active profile resolves to | **works** (since step 02) |
-| `POST /api/session/start` / `stop` | start or stop live listening | 501, step 03 |
-| `PUT /api/session/target` | change what to listen to (a `TargetSpec`) | 501, step 03 |
+| `GET /api/session` | the current session status (idle if none) | **works** (step 03) |
+| `POST /api/session/start` / `stop` | start or stop the live session; body: mode, source (`mic`, or a `file` path inside the project, looped), optional `monitor` | **works** (step 03): 409 if already running, 400 for a bad mode or source, 503 if the sound library is unavailable; stop can be repeated safely |
+| `PUT /api/session/target` | change what to listen to (a `TargetSpec`); checked against the class list, stored, passed to the session | **works** (step 03), no audible effect until step 05; unknown class → 422 |
+| `PUT /api/session/monitor` | Listen on/off, volume (−40…+12 dB), mute | **works** (step 03) |
+| `POST /api/session/record/start` / `stop` | record what the session hears; stop returns the new recording | **works** (step 03); 409 without a session, or when (not) recording |
 | `GET /api/recordings` | list recordings, newest first (re-reads `data/raw` first, Chapter 8.6) | **works** (since step 02) |
-| `GET /api/recordings/{id}`, `/{id}/audio` | view one recording, download its sound | 501, step 03 |
+| `GET /api/recordings/{id}`, `/{id}/audio` | view one recording; download its sound as `audio/wav` (the page's Play button) | **works** (step 03); 404 if missing |
 | `POST /api/recordings/{id}/process` | clean up a saved recording | 501, step 06 |
-| `WS /ws/session` | the live channel (below) | **works**: status and error messages |
+| `WS /ws/session` | the live channel (below) | **works**: status, live pictures, warnings, errors; accepts `set_target` |
 
 **Why have addresses that only say "not implemented"?** Because the complete
 shape of the interface is then visible from day one. The automatic
@@ -1336,7 +1580,7 @@ still **200**, with `resolved_input: null` and an `error` sentence saying why, s
 the reason instead of a generic failure. Only when the sound library itself can't be loaded does
 it answer **503**.
 
-### 9.2 The live channel: `/ws/session`
+### 10.2 The live channel: `/ws/session`
 
 When the website connects:
 
@@ -1350,7 +1594,25 @@ When the website connects:
    `set_target` request (which is recognised but not implemented until
    step 03).
 
-### 9.3 One envelope for every message
+*Since step 03, while a session runs:*
+
+| Message | How often | Contents |
+|---|---|---|
+| `status` | once a second, and on every change (start, stop, error, listen, record) | state, device, format, latency, RTF, counters, listening and recording state |
+| `levels` | 20 per second | per microphone: RMS, peak, clip flag |
+| `waveform` | 25 per second | 64 min/max pairs of the mixed sound |
+| `spectrogram` | 25 per second | 128 mel bands in dB, with the frequency range |
+| `warning` | when needed | e.g. `rtf_high`: processing is getting too slow |
+| `error` | when needed | the reply to a bad client message |
+
+The 2-second heartbeat only runs while no session is active. `set_target` from the page is now
+accepted: it is checked against the class list, stored and answered with a `status`.
+
+Each browser connection has its **own queue** of at most 64 messages. If a tab can't keep up, the
+oldest `levels` / `waveform` / `spectrogram` messages for that tab are thrown away; `status`,
+`warning` and `error` are never thrown away.
+
+### 10.3 One envelope for every message
 
 Every message, in both directions, has the same three parts:
 
@@ -1364,7 +1626,7 @@ Every message, in both directions, has the same three parts:
 
 - **`type`** says what kind of message it is: `status`, `levels`,
   `spectrogram`, `detections`, `sources` or `error` from the backend, and
-  `set_target` from the website.
+  `set_target` from the website. *(Step 03 added `waveform` and `warning`.)*
 - **`t`** is the number of seconds since the session started (0 when idle).
 - **`payload`** holds the actual contents. Its shape depends on the type.
 
@@ -1373,17 +1635,17 @@ With a single envelope, the website can sort every incoming message by its
 simply ignores types it doesn't know yet, with a warning in the browser's
 console.
 
-### 9.4 Who may talk to it
+### 10.4 Who may talk to it
 
 - The backend listens on **127.0.0.1**, so only programs on this same laptop
   can reach it. It is a desktop app, not a public website.
 - **CORS** allows exactly one other web address, the development website at
   `http://localhost:5173`. Tests check that a different address is refused.
-- There are no passwords and no rate limiting yet (see Chapter 19).
+- There are no passwords and no rate limiting yet (see Chapter 20).
 
 ---
 
-## 10. The database
+## 11. The database
 
 **Exists today** (the tables are created, nothing writes to them yet).
 Location: `backend/src/soundspy/api/db/`. File: `data/soundspy.db`.
@@ -1393,7 +1655,7 @@ Location: `backend/src/soundspy/api/db/`. File: `data/soundspy.db`.
 every `GET /api/recordings` (Chapter 8.6). `processing_runs` stays empty until
 step 06.
 
-### 10.1 What it stores, and what it doesn't
+### 11.1 What it stores, and what it doesn't
 
 The database stores **information about** audio, not the audio itself. Sound
 files stay on disk as WAV files. Each one gets a matching **JSON "sidecar"**
@@ -1401,7 +1663,7 @@ file with its details, plus a database row pointing to its path. Databases are
 good at searching and linking records, while sound files are large and are
 better left as plain files.
 
-### 10.2 The two tables
+### 11.2 The two tables
 
 **`recordings`**: one row per raw recording.
 
@@ -1437,7 +1699,7 @@ When a WAV file disappears from disk, its `recordings` row is **deleted** at the
 next sync (decided in step 02; the decision log explains why, and when to revisit
 it). Paths are stored relative to the project root, and times in UTC.
 
-### 10.3 Raw recordings are never changed
+### 11.3 Raw recordings are never changed
 
 A recording is saved at its original sample rate with **all** its channels,
 and it is never edited afterwards. Converted copies (resampled, or reduced to
@@ -1445,7 +1707,7 @@ fewer channels) are made fresh when needed, or stored separately in
 `data/processed/`. That way any recording can always be processed again later
 with a better method.
 
-### 10.4 How the database starts up
+### 11.4 How the database starts up
 
 When the backend starts, it creates any missing tables. There is no
 "migration" tool yet, meaning a tool that records step by step how a
@@ -1454,11 +1716,11 @@ database's structure changes over time. The decision log notes that one
 
 ---
 
-## 11. The website
+## 12. The website
 
 **Exists today** as a shell. Location: `frontend/`.
 
-### 11.1 What you see
+### 12.1 What you see
 
 - A header with the app name and a **connection light**.
 - Three tabs: **Semantic**, **Spatial**, **Sources**.
@@ -1469,7 +1731,13 @@ database's structure changes over time. The decision log notes that one
   the backend reports them unavailable with the laptop profile.
 - A dark colour theme. The final visual design comes later.
 
-### 11.2 The connection light
+*Since step 03* the Semantic tab is the live session (Chapter 9.1): a session bar (Start/Stop,
+source, live figures), Listen with volume and mute (behind a headphone confirmation), Record with
+label and notes, the level meters, spectrogram and waveform, the class buttons (now marked
+*"Sound selection arrives with detection (step 05)"*) and the recordings list with Play buttons.
+Warnings and errors appear as small notices in the bottom-right corner that can be dismissed.
+
+### 12.2 The connection light
 
 It combines two separate checks:
 
@@ -1490,7 +1758,7 @@ retries as soon as a connection succeeds. This is called **exponential
 backoff**. It recovers quickly from a short blip without bombarding a backend
 that is down for longer.
 
-### 11.3 How the code is organised
+### 12.3 How the code is organised
 
 | Folder / file | Job |
 |---|---|
@@ -1500,7 +1768,9 @@ that is down for longer.
 | `src/store/appStore.ts` | the shared state: backend up or down, WebSocket state, open tab, configuration, last status |
 | `src/hooks/useSessionSocket.ts` | opens the WebSocket when the app starts and puts what arrives into the store |
 | `src/components/ConnectionIndicator.tsx` | the connection light |
-| `src/components/viz/` | empty for now; live waveform, spectrogram and source-map components go here |
+| `src/components/viz/` | empty for now; live waveform, spectrogram and source-map components go here. *Since step 03:* `LevelMeters`, `Waveform`, `Spectrogram` (canvas drawing), `liveFrames.ts` (the buffer the live messages go into, outside React), `useCanvasLoop.ts` (the shared animation loop) and `scales.ts` (dB, mel and colour scales) |
+| `src/components/session/` | *(step 03)* `SessionBar`, `MonitorControls` (+ `headphones.ts`), `RecordControls`, `RecordingsList` |
+| `src/components/Toasts.tsx` | *(step 03)* dismissible warnings and errors |
 | `src/tabs/` | one component per tab |
 | `src/App.tsx` | puts the header, tabs and panels together |
 
@@ -1509,18 +1779,18 @@ two hand-written copies that must agree. The plan is to generate the
 website's copy automatically from the backend's published description
 (`npm run gen:api` is a placeholder for that).
 
-### 11.4 The development proxy
+### 12.4 The development proxy
 
 During development, the website is served at `localhost:5173` and the backend
 runs at `127.0.0.1:8765`. The website's server **forwards** every `/api/...`
 and `/ws/...` request to the backend. To the browser everything then comes
 from one address, which keeps things simple and avoids CORS problems. The
 forwarding goes to `127.0.0.1` rather than `localhost`, on purpose
-(Chapter 17).
+(Chapter 18).
 
 ---
 
-## 12. The command line tool
+## 13. The command line tool
 
 **Exists today.** The backend also installs a command called `soundspy`, used
 for developer jobs that don't need the website: running the server, recording
@@ -1547,7 +1817,7 @@ Python error.
 
 ---
 
-## 13. Following a request from start to finish
+## 14. Following a request from start to finish
 
 Here is what actually happens today when you open the website with both
 programs running.
@@ -1588,7 +1858,7 @@ succeeds and the light turns green on its own, with no page reload needed.
 
 ---
 
-## 14. What comes next — the plan, step by step
+## 15. What comes next — the plan, step by step
 
 Everything in this chapter is **planned**, not built. Concepts are explained
 here so the later chapters will make sense when they arrive.
@@ -1596,7 +1866,7 @@ here so the later chapters will make sense when they arrive.
 | Step | What gets built | Tab |
 |---|---|---|
 | 02 | microphone capture, device listing, recording to disk, level measurement, `ChannelReducer` — **done** (Chapter 8) | – |
-| 03 | the live engine (threads, queues, playback), live level meters and spectrogram on the website, a record button | 1 |
+| 03 | the live engine (threads, queues, playback), live level meters and spectrogram on the website, a record button — **done** (Chapter 9) | 1 |
 | 04 | datasets: AudioSet mapping, downloading ESC-50 and FSD50K, own recordings, splits, synthetic mixtures | – |
 | 05 | sound detection: fine-tuning a pretrained model, live detections on the website | 1 |
 | 06 | first extractor (classical masking) + quality scores; clean up saved recordings and compare before/after | 1 |
@@ -1605,7 +1875,7 @@ here so the later chapters will make sense when they arrive.
 | modules 3–4 | simulated array, direction finding, beamforming, Spatial tab | 2 |
 | module 5 | source tracking, Sources tab | 3 |
 
-### 14.1 Recognising sounds (step 05)
+### 15.1 Recognising sounds (step 05)
 
 A **pretrained** audio model already knows a lot about sound in general. It
 will be **fine-tuned** to answer seven yes/no questions at once, one per
@@ -1614,7 +1884,7 @@ output is seven probabilities. Run continuously on the live stream, it
 produces `Detection` events: *"speech, 92%, from 12.0 s to 13.0 s"*. Which
 pretrained model to use has not been decided yet.
 
-### 14.2 Keeping the chosen sounds — two ways (steps 06 and 07)
+### 15.2 Keeping the chosen sounds — two ways (steps 06 and 07)
 
 Both methods sit behind the same `Extractor` interface, so either can be
 plugged into the engine.
@@ -1634,7 +1904,7 @@ follows **SemanticHearing**'s *Waveformer* model, which is built to work in
 small chunks with a memory of what came before, so it can run live with low
 latency.
 
-### 14.3 Training data from mixtures (step 04)
+### 15.3 Training data from mixtures (step 04)
 
 There is no recording of "cafeteria speech, with the exact speech-only
 version alongside". So training examples are **made**: take a clean clip of
@@ -1645,7 +1915,7 @@ because every clip's label is translated through the AudioSet ontology into
 the project's seven classes. The data is split carefully, so that no original
 recording ends up in both training and test, which would be leakage.
 
-### 14.4 Measuring quality
+### 15.4 Measuring quality
 
 - **Detection:** how well the probabilities rank "present" above "absent" for
   each class (mean average precision), and how often the yes/no decisions are
@@ -1654,7 +1924,7 @@ recording ends up in both training and test, which would be leakage.
   the clean answer is known. A positive improvement means the output is
   closer to the clean target than the raw mixture was.
 
-### 14.5 Space (modules 3–5)
+### 15.5 Space (modules 3–5)
 
 With the 4-microphone array, the delays between microphones reveal where each
 sound comes from (direction of arrival). **Beamforming** then focuses
@@ -1664,22 +1934,22 @@ persistent sources the user can tap on a map. Until the hardware arrives,
 **simulated** array recordings (made with a room-acoustics library called
 pyroomacoustics) will let this work start without it.
 
-### 14.6 A note on reused code
+### 15.6 A note on reused code
 
 If any code from SemanticHearing (MIT licence) is adapted in future, the
 adapted file keeps its original copyright notice and the reuse gets recorded
 in a third-party notices file. So far none has been adapted.
 
 *Updated in step 02:* there is no separate notices file any more. Adapted code is
-recorded in Chapter 20, "Third-party code".
+recorded in Chapter 21, "Third-party code".
 
 ---
 
-## 15. Running everything
+## 16. Running everything
 
 All commands are for **PowerShell** on Windows 11.
 
-### 15.1 What you need
+### 16.1 What you need
 
 - **Python 3.11.** On this machine, plain `python` is version 3.14, which is
   too new for the project, so the backend is always created with the `py
@@ -1687,7 +1957,7 @@ All commands are for **PowerShell** on Windows 11.
 - **Node.js** (version 22 or newer; this machine has 24) for the website.
 - Ports **8765** and **5173** free.
 
-### 15.2 First-time setup
+### 16.2 First-time setup
 
 ```powershell
 # backend
@@ -1709,7 +1979,7 @@ download site with the matching graphics-card (CUDA) version. Otherwise pip
 installs a version that ignores the graphics card. The README has the exact
 command.
 
-### 15.3 Starting it
+### 16.3 Starting it
 
 ```powershell
 # terminal 1 — the backend
@@ -1724,7 +1994,7 @@ npm run dev               # open http://localhost:5173
 
 Stop either one with **Ctrl+C**.
 
-### 15.4 What you should see
+### 16.4 What you should see
 
 - At http://127.0.0.1:8765/docs, an automatically generated page listing
   every backend address. You can try them out from there.
@@ -1732,8 +2002,11 @@ Stop either one with **Ctrl+C**.
   showing the version, and the seven sound types on the Semantic tab.
 - Stop the backend and the light turns red within about 5 seconds. Start it
   again and it turns green by itself.
+- *(Step 03)* Press **Start** on the Semantic tab: the meters, spectrogram and waveform move
+  with the room sound, and the bar shows the latency (about 94 ms here) and RTF (about 0.06).
+  Tick **Listen** only with headphones on.
 
-### 15.5 Using the microphone
+### 16.5 Using the microphone
 
 ```powershell
 # in backend/, with the venv active
@@ -1749,23 +2022,23 @@ longer warns about noise suppression.
 
 ---
 
-## 16. Testing everything
+## 17. Testing everything
 
-### 16.1 Running the checks
+### 17.1 Running the checks
 
 ```powershell
 # backend (in backend/, with the venv active)
-pytest              # 185 tests (after step 02), about 10 seconds
+pytest              # 264 tests (after step 03), about 15 seconds
 ruff check .        # code-quality check
 
 # website (in frontend/)
-npm run test        # 5 tests
+npm run test        # 18 tests (after step 03)
 npm run lint        # code-quality check
 npm run typecheck   # TypeScript type check
 npm run build       # proves the production build works
 ```
 
-### 16.2 Tests never need hardware
+### 17.2 Tests never need hardware
 
 No test opens a real microphone. Before any test runs, a **fake
 `sounddevice`** replaces the real sound library. It pretends there is one
@@ -1783,7 +2056,17 @@ one delayed by 3 samples. Tests can switch it to other signals, make it stall,
 report overflows, or start with a burst of digital silence the way the laptop's
 WASAPI stream does.
 
-### 16.3 What the backend tests cover
+*Since step 03* it also has **speakers that listen**: a fake output stream pulls sound through the
+callback like a real sound card and keeps everything it "played", so tests can check what would
+have reached the headphones. For exact tests it can also be advanced one callback at a time
+instead of running on its own. A test fixture fails any test that leaves a session or audio
+thread running.
+
+Run one area with, for example, `pytest tests/io`. *(Step 03 removed the empty `__init__.py`
+files from the test folders: with them, starting pytest inside `tests/io` made that folder pose
+as Python's own `io` module, Chapter 18.13.)*
+
+### 17.3 What the backend tests cover
 
 | Area | Examples of what is checked |
 |---|---|
@@ -1800,12 +2083,25 @@ WASAPI stream does.
 | device profiles (step 02) | every invalid field is rejected with a message naming the profile and file |
 | microphone source (step 02) | `read()` returns exactly the requested length as float32; chunks arrive in order; leaving early or closing from another thread stops the stream; a slow reader gets the newest chunks and the drops are counted; a stall is reported within the timeout; start-up silence is discarded but a muted mic still shows as silent |
 | files (step 02) | exact chunks with a padded last chunk; looping; real-time pacing; `raw_channels` from a profile; writing and reading back gives identical samples; nothing is overwritten |
+| chunker, chain builder (step 03) | blocks of any size become exact chunks with nothing lost; the Semantic chain is reducer → extractor stand-in, analyzer on the side; Spatial/Sources refused; a named stage can be swapped |
+| analyzer (step 03) | 20 / 25 / 25 events per second whatever the chunk size (37 frames to 1 s); a 1 kHz tone peaks in the right mel band; silence is the floor; levels equal `dsp/levels.py`; waveform min/max exact; values rounded to 0.1 dB |
+| speaker output (step 03) | prebuffer before playing; an underrun plays silence and is counted once; oldest chunks dropped when full; mono copied to both ears; gain and mute; **a +7 dBFS input with +12 dB gain never exceeds the −1 dBFS ceiling**; the limiter recovers; more channels than the output is refused |
+| session (step 03) | starts and stops cleanly with no thread left; emits every event type; a target change is applied by the worker between chunks; the recording is exactly the raw input, a contiguous stretch of the source; stopping finishes a recording; a crashing stage gives `state="error"`; slow processing raises a warning; monitoring plays the chain's output |
+| session API and WebSocket (step 03) | start / 409 / stop twice / restart; microphone session; bad mode, missing file and paths outside the project → 400; no sound library → 503; unknown class → 422; gain limits; record through the API, then the audio route serves the WAV; the WebSocket delivers status, levels, waveform and spectrogram during a session; a slow client loses only picture messages; shutting the app down stops the session |
+| settings (step 03) | every new section loads; each kind of invalid value, a missing key, an unknown key and a missing section give a clear error |
 | recordings (step 02) | file name and every sidecar field; no overwrite; the API indexes new files, lists newest first and forgets deleted ones |
 | levels (step 02) | a full-scale sine reads −3.01 dBFS RMS and 0 dBFS peak; clipping, digital silence and noise floor on known signals; a 7-sample delay is found with the right sign; identical channels are recognised |
 | channel rule (step 02) | a scan of the source code fails if channels are indexed (`[:, …]`) or averaged anywhere except the four allowed files; proven by planting a violation and watching it fail |
 | audio commands (step 02) | `devices --json` and the table markers; `check-mic` report, meter and warnings; `record` writes WAV + sidecar |
 
-### 16.4 What the website tests cover
+### 17.4 What the website tests cover
+
+*Step 03 added:* live messages go to the store (status) or to `liveFrames` (pictures), warnings
+and errors become notices without duplicates; history is trimmed to 5 s / 10 s and cleared when
+a new session starts; peak hold lasts about a second; **Listen asks for headphones the first time,
+can't continue until the box is ticked, and remembers the answer**; the session bar shows the live
+figures and starts a microphone or a looped-file session; a failed start shows a notice; the
+recordings list builds the right audio address; the three canvases mount and draw.
 
 - The three tabs and the connection light appear.
 - Class buttons show display names, not internal IDs, and are disabled with
@@ -1820,7 +2116,7 @@ Tests run against a *simulated* browser, which can check what the page says
 but not how it looks. Layout is checked by opening the page in a real
 browser.
 
-### 16.5 A manual check worth repeating
+### 17.5 A manual check worth repeating
 
 With both programs running, stop the backend, wait for the red light, then
 start it again and watch it turn green without reloading the page. This was
@@ -1832,17 +2128,17 @@ website's proxy, with the backend up, stopped, and restarted.
 and a short `soundspy record` on the real laptop. Then start `soundspy serve` and
 confirm the recording appears at `GET /api/recordings`. Tests can only prove the
 code behaves correctly with the *fake* sound card. The two biggest surprises of
-step 02, start-up silence and noise suppression (Chapter 17.8–17.9), only showed
+step 02, start-up silence and noise suppression (Chapter 18.8–17.9), only showed
 up on real hardware.
 
 ---
 
-## 17. Problems found and fixed
+## 18. Problems found and fixed
 
 Each of these was real. Most were silent: nothing crashed, and something was
 simply wrong. They are the most instructive part of this document.
 
-### 17.1 Port 8000 was secretly taken
+### 18.1 Port 8000 was secretly taken
 
 **Symptom:** with our backend stopped, the website should have shown
 "connection refused". Instead, something on port 8000 answered *"Not
@@ -1861,7 +2157,7 @@ the website's proxy points at `127.0.0.1` explicitly rather than at
 
 **Lesson:** "the port is free" is an assumption to check, not a fact.
 
-### 17.2 Windows paths came out scrambled
+### 18.2 Windows paths came out scrambled
 
 **Symptom:** a test checking where the database file goes failed: the path
 came back as `C%3A%5CUsers%5C...`.
@@ -1874,26 +2170,26 @@ Windows path. Those are the codes web addresses use for special characters.
 text. The database file now lands exactly where intended:
 `data/soundspy.db` at the project root.
 
-### 17.3 The newest TypeScript was too new
+### 18.3 The newest TypeScript was too new
 
 TypeScript 7 (a rewrite of the TypeScript compiler) was the latest release,
 but the code-checking tool `typescript-eslint` only supports versions below
 6.1. The project therefore uses **TypeScript 6.0**, a deliberate choice
 recorded in the decision log. Upgrade when the checker catches up.
 
-### 17.4 The installer refused a file outside its folder
+### 18.4 The installer refused a file outside its folder
 
 The backend's package description pointed at `../README.md`, one folder up.
 The Python packaging tool refuses to include files from outside the package's
 own folder, so the first install failed. The reference was removed.
 
-### 17.5 The engine's own guard caught a mistake in a test
+### 18.5 The engine's own guard caught a mistake in a test
 
 A test set up a chain for 48,000 Hz audio, then fed it a 16,000 Hz chunk by
 accident. The chain refused the chunk, as designed (Chapter 6.2). The test
 was wrong, not the code, and the guard proved its worth on day one.
 
-### 17.6 Dataset names were about to reach the user
+### 18.6 Dataset names were about to reach the user
 
 The first version of the website showed AudioSet category names such as
 "Dishes, pots, and pans" as class descriptions. Those are dataset labels, not
@@ -1901,7 +2197,7 @@ friendly text. Each class now has a separate display name and description,
 and the backend **no longer sends** the AudioSet names to the website at all.
 A test makes sure they stay out.
 
-### 17.7 Known and harmless
+### 18.7 Known and harmless
 
 - **One test warning:** the web library (Starlette 1.10) suggests a newer
   testing helper (`httpx2`) instead of the one used (`httpx`). Nothing is
@@ -1913,7 +2209,7 @@ A test makes sure they stay out.
 
 *The entries below were found in step 02, mostly on real hardware.*
 
-### 17.8 Every new recording started with half a second of fake silence
+### 18.8 Every new recording started with half a second of fake silence
 
 **Symptom:** the first real `check-mic` reported a noise floor of −120 dBFS,
 the lowest value the app can display.
@@ -1931,7 +2227,7 @@ the report and gets flagged.
 **Lesson:** a measurement that looks impossibly good deserves suspicion, not
 celebration.
 
-### 17.9 The laptop's sound is being "cleaned" before Sound Spy sees it
+### 18.9 The laptop's sound is being "cleaned" before Sound Spy sees it
 
 **Symptom:** with the start-up silence removed, the noise floor still read
 −120 dBFS. Over a whole 5-second take every 50 ms window stayed below −100 dBFS,
@@ -1960,7 +2256,7 @@ samples). So the "duplicated mono" above was the enhancement processing, not the
 hardware. Two laptop microphones a few centimetres apart can't replace the
 ReSpeaker for real direction finding, but they are no longer "mono".
 
-### 17.10 The same microphone wasn't recognised as itself
+### 18.10 The same microphone wasn't recognised as itself
 
 **Symptom:** in a test, the app chose the MME microphone instead of its WASAPI
 twin.
@@ -1973,7 +2269,7 @@ was 30 characters long and the other 31, and they never matched.
 **Fix:** cut first, then remove spaces. The test fake reproduces exactly this
 name, so the mistake can't come back unnoticed.
 
-### 17.12 A warning that cried wolf: isolated zeros are normal
+### 18.12 A warning that cried wolf: isolated zeros are normal
 
 **Symptom:** after the enhancements were switched off, every `check-mic` still
 warned that 1.4–5 % of samples were "exact digital silence", although the noise
@@ -1995,16 +2291,111 @@ signal with isolated zeros to make sure it stays that way.
 **Lesson:** a check written from one bad recording needs a second, good recording
 before it can be trusted not to fire on healthy input.
 
-### 17.11 Times without a time zone
+### 18.11 Times without a time zone
 
 SQLite stores dates as plain text without a time zone. A recording made at
 16:05 in Romania and one made at 14:30 UTC would sort wrongly if each were stored
 in its own local time. All recording times are therefore stored in UTC, and the
 API marks them as UTC when it sends them.
 
+*The entries below were found in step 03.*
+
+### 18.13 A test folder pretending to be part of Python
+
+**Symptom:** running only the storage tests (`pytest tests/io/test_storage.py`) failed with
+`cannot import name 'StringIO' from 'io'`, while the full test run passed.
+
+**Cause:** the test folder `tests/io/` contained an empty `__init__.py`, which makes a folder a
+Python *package*. When pytest started inside that folder, it registered it under its plain name,
+`io`, which is the name of one of Python's own core modules. From then on, anything asking for
+Python's `io` got the test folder instead.
+
+**Fix:** the empty `__init__.py` files were removed from all test folders (pytest's import mode
+doesn't need them); folders with no tests yet keep a `.gitkeep` so git still tracks them. Running
+`pytest tests/io` now works.
+
+**Lesson:** a test suite has to work the way people actually run it, including one folder at a
+time, not only as a whole.
+
+### 18.14 The channel-reduction guard flagged three innocent lines
+
+The scan that enforces "channels are only reduced in `ChannelReducer`" (Chapter 3) found
+`[:, 0]` and `.sum(axis=1)` in three new files. None of them reduced audio channels: one took the
+already-mono output of the `ChannelReducer`, one checked the rows of the mel filter table, one
+reshaped a gain curve. Rather than weaken the guard, the three lines were rewritten
+(`.ravel()`, `.max(axis=1)`, `.reshape(-1, 1)`). The guard stays strict, so a real violation
+still fails the build.
+
+### 18.15 "Listen" seemed to ignore the volume for a moment
+
+**Symptom:** a test changed the volume and the server's reply still showed the old value.
+
+**Cause:** by design, a change is applied at the start of the next 20 ms chunk (Chapter 9.3), and
+the reply was built before that moment.
+
+**Fix:** the status now reports the requested setting while it waits to be applied, so the page
+shows what the user just chose.
+
+### 18.16 A test that listened to silence
+
+The first monitoring test played a file whose two channels were exact opposites (channel 1 =
+−channel 0) and expected to hear something. The chain mixes the channels to one, and opposites
+cancel to perfect silence. The code was right; the test file was wrong. Real stereo recordings
+rarely cancel, but it's a reminder that a mono mix *can* lose sound when microphones pick it up
+in opposite phase. That's one reason the analyzer and the recordings always keep every channel.
+
+### 18.17 Latency vs clicks: the prebuffer trade-off
+
+Measured on the laptop, 30 seconds each: with a prebuffer of 2 chunks the typical latency is 94 ms
+and there were **no** underruns; with 1 chunk it's 84 ms but there was **one** underrun (a click).
+The default stays at 2. Chapter 9.5 explains the parts of the delay.
+
+### 18.18 Plugging in headphones broke the next session
+
+**Symptom (owner's test):** everything worked, including Listen with headphones. Then a file
+session started without an output device ("no output device is available for monitoring" when
+Listen was clicked). After a backend restart, even the microphone failed to open with
+*"Unanticipated host error … WDM-KS error"*. A few minutes later, both devices opened normally
+again.
+
+**Cause:** the sound library (PortAudio) reads the device list once and keeps the handles it found.
+Plugging headphones into a Realtek jack makes Windows reconfigure its audio endpoints, and opening
+a stream through the old handles can then fail, briefly even for a freshly started backend while
+Windows is still switching. The "WDM-KS" in the message was misleading: PortAudio attaches the
+*last* host error it recorded, which came from its WDM-KS device scan, not from the WASAPI stream
+that actually failed. Sound Spy never chose a WDM-KS device; `soundspy devices` resolved to WASAPI
+index 9 throughout.
+
+**Fix:**
+- every session start re-reads the device list first (only when no session is running, because
+  re-initialising PortAudio would cut off open streams);
+- a failed open is retried once after another re-read;
+- a failure that persists gets a message explaining the likely reason;
+- a session that starts without an output device says why in a notice, and disables Listen with
+  an explanation;
+- `soundspy serve` now prints Sound Spy's own log messages, which were invisible before, so such
+  problems leave a trace in the backend window;
+- `GET /api/devices` also re-reads the list while idle.
+
+Tests reproduce the stale-handle failure with the fake sound card; on the real laptop a
+microphone → file → microphone sequence now gets the speakers every time.
+
+### 18.19 The Listen box wouldn't tick while no session was running
+
+**Symptom (owner's test):** Listen unticked during a session, session stopped, Listen ticked
+again: the box stayed unticked until the next Start (which then did start listening).
+
+**Cause:** while idle, the backend stored the choice for the next session correctly, but answered
+with the status of the session that had just ended, which still said "not listening". The page
+showed that answer.
+
+**Fix:** while no session runs, the status reports the stored Listen, volume and mute settings, so
+the box shows what the user chose and the next session starts with it. A test replays the exact
+sequence.
+
 ---
 
-## 18. Design decisions and why
+## 19. Design decisions and why
 
 The full dated list is in [docs/decisions.md](docs/decisions.md). The
 reasoning behind the most important ones:
@@ -2074,15 +2465,40 @@ has no migration tool yet. If the file comes back, the next sync re-adds it.
 This will be revisited once offline processing runs exist (step 06), because
 deleting a recording's row also deletes its runs.
 
+**Why 20 ms chunks?** (step 03) Short enough to keep the delay low (one chunk is one of the
+delays you hear), long enough that the computer handles 50 of them a second with almost no
+effort (RTF 0.06). Detection and extraction models of later steps may need longer windows; they
+can collect several chunks internally without changing the engine.
+
+**Why separate input and output streams with their own queues?** (step 03) The microphone and
+the headphones may be different devices with different clocks. Two independent streams joined by
+a small queue (cushion before playing, drop the oldest when too full) tolerate that drift, where
+a single combined stream would need both sides on one device and one clock.
+
+**Why is the safety limiter always on?** (step 03) The laptop's microphone already exceeds full
+scale and the volume adds up to +12 dB. A sudden clap or a dropped plate could otherwise reach the
+ears at full blast. Hearing safety isn't a setting.
+
+**Why is Listen off by default, behind a headphone question?** (step 03) Through laptop speakers
+the sound feeds back and howls within a second, which is unpleasant and could startle people
+nearby. Listening has to be a deliberate choice.
+
+**Why record the raw input rather than what you hear?** (step 03) What you hear will change as the
+processing improves; the raw input can always be processed again by a better method. It is also
+exactly what `soundspy record` saves, so recordings from the page and from the command line are
+interchangeable.
+
 ---
 
-## 19. Known limitations
+## 20. Known limitations
 
 These are understood and accepted for now, not oversights.
 
 1. **No audio is processed yet.** Step 01 built the frame. The sound path
    starts in step 02. *(After step 02: sound can be captured and recorded, but
    nothing processes or plays it yet. The live session comes in step 03.)*
+   *(After step 03: a live session runs and plays the sound, but nothing is
+   recognised or removed yet. That begins with steps 05–06.)*
 2. **Tabs 2 and 3 need hardware that hasn't arrived.** The ReSpeaker array's
    microphone positions are still to be filled in from its datasheet.
 3. **The website's message types are typed by hand.** They must be kept in
@@ -2111,13 +2527,25 @@ These are understood and accepted for now, not oversights.
 10. **Microphones plugged in while the backend runs aren't seen** (step 02).
     PortAudio reads the device list once, at start-up, so restart the backend
     (or re-run the command) after plugging in a USB microphone.
+    *(Step 03: no longer needed. Every Start, and the devices list while idle,
+    re-read the devices. A device plugged in **during** a running session is
+    picked up at the next Start.)*
 11. **The website doesn't show devices or recordings yet** (step 02). They exist
     in the API (`/api/devices`, `/api/recordings`). The page that uses them comes
     with the live session in step 03.
+    *(Step 03: recordings are now listed and playable on the page. Choosing a
+    microphone or output device on the page is still not possible; the profile
+    and `output.device` in `default.yaml` decide.)*
+12. **The listening delay is about 94 ms** (step 03). Noticeable when you hear
+    your own voice, natural for other people's. It is mostly the sound system's own
+    buffers (Chapter 9.5); a smaller cushion saves ~10 ms but caused a click in
+    testing. Bluetooth headphones add far more; use wired ones.
+13. **Only one session at a time, one output device**, and the page can't choose
+    between microphones yet (step 03).
 
 ---
 
-## 20. Third-party code
+## 21. Third-party code
 
 Sound Spy is original code. It uses ordinary libraries installed with `pip` and `npm` (NumPy,
 SciPy, sounddevice, soundfile, FastAPI, React and so on), each under its own licence; those are
@@ -2131,7 +2559,7 @@ table below with where it came from, its licence, and which of our files contain
 |---|---|---|---|
 | *(none so far)* | | | |
 
-**Ideas, not code.** The extraction design (Chapter 14) follows the **SemanticHearing** project
+**Ideas, not code.** The extraction design (Chapter 15) follows the **SemanticHearing** project
 (Veluri et al., UIST 2023, https://github.com/vb000/SemanticHearing, MIT licence): the
 label-conditioned Waveformer model, chunked streaming inference, the AudioSet class mapping and
 synthetic training mixtures. No code from it has been adapted. If any is in future, it gets a row
@@ -2139,7 +2567,7 @@ above.
 
 ---
 
-## 21. Quick reference
+## 22. Quick reference
 
 ### Start
 
@@ -2171,11 +2599,15 @@ GET  /api/health                        is the backend alive, which version
 GET  /api/config                        classes, which tabs are available, device profile
 GET  /api/devices                       devices + what the profile resolves to (503 = no PortAudio)
 GET  /api/recordings                    recordings, newest first (re-indexes data/raw)
-POST /api/session/start | stop          501 until step 03
-PUT  /api/session/target                501 until step 03
-GET  /api/recordings/{id}[/audio]       501 until step 03
+GET  /api/recordings/{id}[/audio]       one recording / its WAV (audio/wav)
+GET  /api/session                       current session status
+POST /api/session/start | stop          {mode, source: {type: mic|file, path, loop}, monitor}
+PUT  /api/session/target                TargetSpec (422 unknown class; audible from step 05)
+PUT  /api/session/monitor               {enabled, gain_db -40..12, muted}
+POST /api/session/record/start | stop   {label, notes} / returns the new recording
 POST /api/recordings/{id}/process       501 until step 06
-WS   /ws/session                        live channel: status every 2 s, error replies
+WS   /ws/session                        status 1/s, levels 20/s, waveform + spectrogram 25/s,
+                                        warning, error; heartbeat every 2 s when idle
 ```
 
 ### The numbers worth remembering
@@ -2187,14 +2619,17 @@ WS   /ws/session                        live channel: status every 2 s, error re
 | Database | `data/soundspy.db` |
 | Sound classes | 7 |
 | Default suppression of unchosen sounds | 30 dB (to about 3% of its size) |
-| Engine chunk | 1,024 frames (~21 ms at 48 kHz) |
+| Engine chunk | 1,024 frames (~21 ms at 48 kHz); *since step 03:* 20 ms (960 frames at 48 kHz) |
+| Listening delay (laptop, wired) | about 94 ms (22 in + 20 chunk + ~30 queue + 22 out) |
+| Processing load (laptop) | RTF p95 0.06; ~12 % of one CPU core |
+| Speaker cushion / max queue / limiter | 2 chunks / 8 chunks / −1 dBFS ceiling, 50 ms release |
 | Heartbeat / health check | every 2 s / every 5 s |
 | Python / Node | 3.11 / 24 |
 | Laptop microphone | WASAPI index 9, 48 kHz, 2 real mics (≥ ~4.3 cm apart), 16-bit + 7.44 dB gain |
 | Honest noise floor (enhancements off) | about −65 dBFS |
 | WASAPI start-up silence (discarded) | 500 ms with enhancements on, none with them off |
 | Mic stall timeout / live chunk queue | 2 s / 32 chunks, oldest dropped first |
-| Backend tests / website tests | 185 / 5 (after step 02) |
+| Backend tests / website tests | 264 / 18 (after step 03) |
 
 ### Files that matter most
 
@@ -2203,7 +2638,11 @@ WS   /ws/session                        live channel: status every 2 s, error re
 | `backend/configs/classes.yaml` | the sound classes — IDs, display names, descriptions, AudioSet mapping |
 | `backend/configs/default.yaml` | paths, active microphone profile, port, database location |
 | `backend/src/soundspy/core/` | the shared data types every part relies on |
-| `backend/src/soundspy/engine/` | the chunk-by-chunk processing frame |
+| `backend/src/soundspy/engine/` | the chunk-by-chunk processing frame; `session.py` runs it live, `factory.py` builds the chain |
+| `backend/src/soundspy/io/speaker_sink.py` | listening: speaker queue, limiter, underrun counting |
+| `backend/src/soundspy/analysis/analyzer.py` | the data behind the live pictures |
+| `backend/src/soundspy/api/services/session_manager.py` | starts sessions and passes their events to the web server |
+| `frontend/src/components/viz/` | the live canvases and their frame buffer (`liveFrames.ts`) |
 | `backend/configs/devices/*.yaml` | the microphone profiles |
 | `backend/src/soundspy/io/devices.py` | choosing a microphone (host-API twins, preference order) |
 | `backend/src/soundspy/io/mic_source.py` | the live microphone: read, chunks, stall and start-up handling |

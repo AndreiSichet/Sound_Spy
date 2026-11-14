@@ -83,14 +83,14 @@ def _meter(mic: MicSource, max_seconds: float | None) -> None:
 
 def run(args: argparse.Namespace) -> int:
     try:
-        _, profile = load_profile(args)
+        config, profile = load_profile(args)
         resolved = resolve_input(profile)
         print_device_line(resolved)
         if args.meter:
-            with MicSource(resolved) as mic:
+            with MicSource(resolved, config.capture) as mic:
                 _meter(mic, args.meter_seconds)
             return 0
-        with MicSource(resolved) as mic:
+        with MicSource(resolved, config.capture) as mic:
             countdown(args.countdown, f"Recording {args.seconds:g} s")
             buf = mic.read(args.seconds)
         print("done.")

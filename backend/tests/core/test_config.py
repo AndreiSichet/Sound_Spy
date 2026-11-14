@@ -71,6 +71,64 @@ def test_invalid_profiles_are_clear_errors(data, fragment) -> None:
     assert "device profile 'bad' (bad.yaml)" in str(exc.value)
 
 
+def test_session_sections_loaded(config) -> None:
+    assert config.capture.stall_timeout_s == 2.0 and config.capture.queue_chunks == 32
+    assert config.engine.chunk_ms == 20 and config.engine.chunk_frames(48000) == 960
+    assert config.engine.chunk_frames(16000) == 320
+    assert config.output.device is None and config.output.limiter_ceiling_dbfs == -1.0
+    assert config.analysis.spectrogram_bands == 128 and config.analysis.spectrogram_fft == 2048
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value", "fragment"),
+    [
+        ("capture", "queue_chunks", 0, "capture.queue_chunks' must be an integer >= 1"),
+        ("engine", "chunk_ms", 0, "engine.chunk_ms' must be > 0"),
+        ("engine", "chunk_ms", "20", "must be a number"),
+        ("output", "limiter_ceiling_dbfs", 3, "must be <= 0"),
+        ("output", "max_queue_chunks", 1, "max_queue_chunks' must be >= prebuffer"),
+        ("output", "device", True, "output.device"),
+        ("analysis", "spectrogram_fft", 2000, "power of two"),
+        ("analysis", "levels_hz", -5, "levels_hz' must be > 0"),
+    ],
+)
+def test_invalid_session_settings(tmp_path, configs_dir, section, key, value, fragment) -> None:
+    import shutil
+
+    import yaml
+
+    from soundspy.config import load_config
+
+    copy = tmp_path / "configs"
+    shutil.copytree(configs_dir, copy)
+    data = yaml.safe_load((copy / "default.yaml").read_text(encoding="utf-8"))
+    data[section][key] = value
+    (copy / "default.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ConfigError, match=fragment):
+        load_config(copy)
+
+
+def test_missing_and_unknown_keys(tmp_path, configs_dir) -> None:
+    import shutil
+
+    import yaml
+
+    from soundspy.config import load_config
+
+    copy = tmp_path / "configs"
+    shutil.copytree(configs_dir, copy)
+    data = yaml.safe_load((copy / "default.yaml").read_text(encoding="utf-8"))
+    del data["engine"]["chunk_ms"]
+    data["analysis"]["colour"] = "blue"
+    (copy / "default.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ConfigError, match="'engine' is missing \\['chunk_ms'\\]"):
+        load_config(copy)
+    del data["engine"]
+    (copy / "default.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ConfigError, match="missing section 'engine'"):
+        load_config(copy)
+
+
 def test_module_configs_loaded(config) -> None:
     assert config.detection["sample_rate"] == 16000
     assert set(config.extraction) == {"mask_baseline", "neural_tse"}

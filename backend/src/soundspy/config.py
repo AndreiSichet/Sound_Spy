@@ -132,11 +132,50 @@ class ApiConfig:
     port: int = 8765
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
     ws_heartbeat_s: float = 2.0
+    ws_client_queue: int = 64
+
+
+# The sections below have no defaults in code: every value comes from default.yaml.
+
+
+@dataclass(frozen=True)
+class CaptureConfig:
+    stall_timeout_s: float
+    queue_chunks: int
+    startup_silence_max_s: float
 
 
 @dataclass(frozen=True)
 class EngineConfig:
-    chunk_size: int = 1024
+    chunk_ms: float
+    rtf_warning: float
+    rtf_window_s: float
+    status_interval_s: float
+
+    def chunk_frames(self, sample_rate: int) -> int:
+        return max(1, round(self.chunk_ms * sample_rate / 1000))
+
+
+@dataclass(frozen=True)
+class OutputConfig:
+    device: str | int | None
+    prebuffer_chunks: int
+    max_queue_chunks: int
+    limiter_ceiling_dbfs: float
+    limiter_release_ms: float
+    default_gain_db: float
+
+
+@dataclass(frozen=True)
+class AnalysisConfig:
+    levels_hz: float
+    spectrogram_hz: float
+    spectrogram_fft: int
+    spectrogram_bands: int
+    spectrogram_fmin_hz: float
+    spectrogram_db_floor: float
+    waveform_hz: float
+    waveform_points: int
 
 
 @dataclass(frozen=True)
@@ -146,11 +185,112 @@ class AppConfig:
     paths: dict[str, Path]
     device_profile: DeviceProfile
     labels: LabelSet
+    capture: CaptureConfig
     engine: EngineConfig
+    output: OutputConfig
+    analysis: AnalysisConfig
     api: ApiConfig
     database_url: str
     detection: dict[str, Any] = field(default_factory=dict)
     extraction: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+class _Section:
+    """Reads one mapping from default.yaml with type and range checks (clear ConfigError)."""
+
+    def __init__(self, data: dict[str, Any], name: str, keys: tuple[str, ...]) -> None:
+        section = data.get(name)
+        if not isinstance(section, dict):
+            raise ConfigError(f"default.yaml: missing section '{name}'")
+        missing = [k for k in keys if k not in section]
+        unknown = sorted(set(section) - set(keys))
+        if missing:
+            raise ConfigError(f"default.yaml: '{name}' is missing {missing}")
+        if unknown:
+            raise ConfigError(f"default.yaml: '{name}' has unknown key(s) {unknown}")
+        self.data, self.name = section, name
+
+    def _fail(self, key: str, rule: str) -> ConfigError:
+        value = self.data[key]
+        return ConfigError(f"default.yaml: '{self.name}.{key}' must be {rule}, got {value!r}")
+
+    def number(self, key: str, *, gt: float | None = None, ge: float | None = None,
+               le: float | None = None) -> float:
+        value = self.data[key]
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise self._fail(key, "a number")
+        if gt is not None and not value > gt:
+            raise self._fail(key, f"> {gt}")
+        if ge is not None and not value >= ge:
+            raise self._fail(key, f">= {ge}")
+        if le is not None and not value <= le:
+            raise self._fail(key, f"<= {le}")
+        return float(value)
+
+    def integer(self, key: str, *, ge: int) -> int:
+        value = self.data[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < ge:
+            raise self._fail(key, f"an integer >= {ge}")
+        return int(value)
+
+
+def _capture(data: dict[str, Any]) -> CaptureConfig:
+    s = _Section(data, "capture", ("stall_timeout_s", "queue_chunks", "startup_silence_max_s"))
+    return CaptureConfig(
+        stall_timeout_s=s.number("stall_timeout_s", gt=0),
+        queue_chunks=s.integer("queue_chunks", ge=1),
+        startup_silence_max_s=s.number("startup_silence_max_s", ge=0),
+    )
+
+
+def _engine(data: dict[str, Any]) -> EngineConfig:
+    s = _Section(data, "engine", ("chunk_ms", "rtf_warning", "rtf_window_s", "status_interval_s"))
+    return EngineConfig(
+        chunk_ms=s.number("chunk_ms", gt=0, le=1000),
+        rtf_warning=s.number("rtf_warning", gt=0),
+        rtf_window_s=s.number("rtf_window_s", gt=0),
+        status_interval_s=s.number("status_interval_s", gt=0),
+    )
+
+
+def _output(data: dict[str, Any]) -> OutputConfig:
+    keys = ("device", "prebuffer_chunks", "max_queue_chunks", "limiter_ceiling_dbfs",
+            "limiter_release_ms", "default_gain_db")
+    s = _Section(data, "output", keys)
+    device = s.data["device"]
+    if isinstance(device, bool) or not (device is None or isinstance(device, int | str)):
+        raise s._fail("device", "null, a device index or a name substring")
+    prebuffer = s.integer("prebuffer_chunks", ge=0)
+    max_queue = s.integer("max_queue_chunks", ge=1)
+    if max_queue < prebuffer:
+        raise ConfigError("default.yaml: 'output.max_queue_chunks' must be >= prebuffer_chunks")
+    return OutputConfig(
+        device=device,
+        prebuffer_chunks=prebuffer,
+        max_queue_chunks=max_queue,
+        limiter_ceiling_dbfs=s.number("limiter_ceiling_dbfs", le=0),
+        limiter_release_ms=s.number("limiter_release_ms", gt=0),
+        default_gain_db=s.number("default_gain_db", ge=-40, le=12),
+    )
+
+
+def _analysis(data: dict[str, Any]) -> AnalysisConfig:
+    keys = ("levels_hz", "spectrogram_hz", "spectrogram_fft", "spectrogram_bands",
+            "spectrogram_fmin_hz", "spectrogram_db_floor", "waveform_hz", "waveform_points")
+    s = _Section(data, "analysis", keys)
+    fft = s.integer("spectrogram_fft", ge=64)
+    if fft & (fft - 1):
+        raise s._fail("spectrogram_fft", "a power of two")
+    return AnalysisConfig(
+        levels_hz=s.number("levels_hz", gt=0, le=200),
+        spectrogram_hz=s.number("spectrogram_hz", gt=0, le=200),
+        spectrogram_fft=fft,
+        spectrogram_bands=s.integer("spectrogram_bands", ge=8),
+        spectrogram_fmin_hz=s.number("spectrogram_fmin_hz", ge=0),
+        spectrogram_db_floor=s.number("spectrogram_db_floor", le=-10),
+        waveform_hz=s.number("waveform_hz", gt=0, le=200),
+        waveform_points=s.integer("waveform_points", ge=2),
+    )
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -194,7 +334,6 @@ def load_config(
 
     paths = {key: resolve_path(value, project_root) for key, value in default["paths"].items()}
     api = default.get("api", {})
-    engine = default.get("engine", {})
     extraction_dir = configs_dir / "extraction"
 
     return AppConfig(
@@ -203,12 +342,16 @@ def load_config(
         paths=paths,
         device_profile=load_device_profile(default["active_device_profile"], configs_dir),
         labels=load_label_set(configs_dir / "classes.yaml"),
-        engine=EngineConfig(chunk_size=int(engine.get("chunk_size", 1024))),
+        capture=_capture(default),
+        engine=_engine(default),
+        output=_output(default),
+        analysis=_analysis(default),
         api=ApiConfig(
             host=str(api.get("host", "127.0.0.1")),
             port=int(api.get("port", 8765)),
             cors_origins=tuple(api.get("cors_origins", ["http://localhost:5173"])),
             ws_heartbeat_s=float(api.get("ws_heartbeat_s", 2.0)),
+            ws_client_queue=int(api.get("ws_client_queue", 64)),
         ),
         database_url=str(default["database"]["url"]),
         detection=load_yaml(configs_dir / "detection" / "default.yaml"),

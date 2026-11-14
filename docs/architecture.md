@@ -84,12 +84,49 @@ sounddevice input callback ──► bounded input queue ──► engine worker
 
 The session/worker is implemented in step 03; in step 01 the engine status is always `idle`.
 
+### Session lifecycle (implemented in step 03)
+
+```
+SessionManager.start(request)                                   (API thread pool, under a lock)
+   ├─ build_chain(mode)        SEMANTIC: [ChannelReducer(mean) → extractor=Passthrough] + [Analyzer]
+   ├─ source                   MicSource(resolve_input(profile), capture)  |  FileSource(path, realtime, loop)
+   ├─ output                   SpeakerSink(resolve_output(output.device), output)  (None if unavailable)
+   └─ Session.start()          source.open → chain.configure(sr, ch) → output.open(sr, out_ch)
+                               → worker thread "soundspy-session" → status event
+
+worker loop, per chunk (engine.chunk_ms = 20 ms):
+   apply pending target / monitor  →  chain.process(chunk)  →  output.write(out) if monitoring
+   →  recorder.write(chunk) (raw input, under _rec_lock)  →  emit events  →  status every 1 s,
+   warning if p95 RTF > engine.rtf_warning over engine.rtf_window_s
+
+Session.stop()  (idempotent)    set stop flag → source.close() (unblocks the worker) → join
+                                → close output → finish an active recording → status "idle"
+worker error                    state "error" + message → status event → release devices;
+                                never propagates to the API process
+app shutdown (lifespan exit)    SessionManager.shutdown() stops the session: no thread outlives the app
+```
+
+**Thread → asyncio bridge.** `Session` calls `on_event(event)` on the worker thread.
+`SessionManager._on_event` only calls `loop.call_soon_threadsafe(self._publish, event)` (the loop
+captured in the lifespan) and returns. `_publish` runs on the event loop, converts the event to a
+`WsMessage` and puts it into every client's queue. Each WebSocket client has a bounded
+`ClientQueue` (`api.ws_client_queue` = 64) drained by its own sender task; when full, the oldest
+`levels` / `waveform` / `spectrogram` message is dropped, `status` / `warning` / `error` never.
+
+**Input backpressure.** `MicSource` drops the oldest chunk when its queue
+(`capture.queue_chunks` = 32) is full and counts it (`dropped_chunks`). **Output.** `SpeakerSink`
+plays after `output.prebuffer_chunks` (2), drops the oldest above `output.max_queue_chunks` (8),
+plays silence and counts an underrun when empty, then re-prebuffers; gain → 1→N upmix →
+peak limiter (instant attack, `limiter_release_ms` release, `limiter_ceiling_dbfs` ceiling, final
+hard clip).
+
 ## WebSocket protocol (`/ws/session`)
 
 Every message, in both directions, uses one envelope:
 
 ```json
-{"type": "status" | "levels" | "spectrogram" | "detections" | "sources" | "error" | "set_target",
+{"type": "status" | "levels" | "waveform" | "spectrogram" | "detections" | "sources"
+         | "warning" | "error" | "set_target",
  "t": 12.34,
  "payload": { ... }}
 ```
@@ -97,15 +134,17 @@ Every message, in both directions, uses one envelope:
 - `t`: seconds since session start (0.0 when no session is running).
 - `payload` = the event's fields without `t`:
 
-| type | direction | payload |
-|---|---|---|
-| `status` | server → client | `EngineStatus`: `state`, `mode`, `device`, `sample_rate`, `channels`, `message` |
-| `levels` | server → client | `LevelFrame`: `rms_dbfs[]`, `peak_dbfs[]`, `clipping[]` (per channel) |
-| `spectrogram` | server → client | `SpectrogramFrame`: `magnitudes_db[]`, `freq_max_hz` |
-| `detections` | server → client | `{"items": [Detection, ...]}` |
-| `sources` | server → client | `{"items": [SoundSource, ...]}` |
-| `error` | server → client | `{"message": "..."}` |
-| `set_target` | client → server | `TargetSpec`: `labels[]`, `direction`, `source_id`, `attenuation_db` |
+| type | direction | payload | rate (step 03 defaults) |
+|---|---|---|---|
+| `status` | server → client | `EngineStatus`: `state`, `mode`, `device`, `sample_rate`, `channels`, `message`, `source`, `output_device`, `monitoring`, `muted`, `gain_db`, `recording`, `recording_seconds`, `latency_ms`, `chunk_ms`, `chunks_processed`, `proc_ms_mean`, `proc_ms_p95`, `rtf_p95`, `input_overflows`, `output_underruns`, `dropped_chunks`, `output_dropped` | on connect, on every change, 1/s while running (`engine.status_interval_s`), 1 per 2 s heartbeat when idle |
+| `levels` | server → client | `LevelFrame`: `rms_dbfs[]`, `peak_dbfs[]`, `clipping[]` (per input channel, 0.1 dB) | 20/s (`analysis.levels_hz`) |
+| `waveform` | server → client | `WaveformFrame`: `mins[]`, `maxs[]` (64 pairs, mono mix) | 25/s (`analysis.waveform_hz`) |
+| `spectrogram` | server → client | `SpectrogramFrame`: `magnitudes_db[]` (128 mel bands, floor −100), `freq_min_hz`, `freq_max_hz` | 25/s (`analysis.spectrogram_hz`) |
+| `detections` | server → client | `{"items": [Detection, ...]}` | step 05 |
+| `sources` | server → client | `{"items": [SoundSource, ...]}` | module 5 |
+| `warning` | server → client | `{"code", "message"}` (e.g. `rtf_high`) | when needed, ≤ 1 per `rtf_window_s` |
+| `error` | server → client | `{"message": "..."}` | reply to a bad client message |
+| `set_target` | client → server | `TargetSpec`: `labels[]`, `direction`, `source_id`, `attenuation_db` | validated against `LabelSet`, stored, forwarded; replied with `status` |
 
 On connect the server sends a `status` message, then a `status` heartbeat every
 `api.ws_heartbeat_s` seconds (2 s). Unknown or malformed client messages get an `error` reply;
@@ -119,8 +158,13 @@ are produced (`set_target` answers "not implemented (step-03)").
 | `GET /api/health`, `GET /api/config` | 01 (implemented) |
 | `GET /api/devices` | 02 (implemented): 200 with `resolved_input: null` + `error` if the profile does not resolve; 503 if PortAudio is unavailable |
 | `GET /api/recordings` | 02 (implemented): re-indexes `data/raw`, newest first |
-| `POST /api/session/start`, `POST /api/session/stop`, `PUT /api/session/target` | 03 |
-| `GET /api/recordings/{id}`, `GET /api/recordings/{id}/audio` | 03 |
+| `GET /api/session` | 03 (implemented): status, idle if none |
+| `POST /api/session/start` | 03 (implemented): `{mode, source: {type: mic\|file, path, loop}, monitor}`; 409 running, 400 bad mode/source (file paths must be inside the project root), 503 no audio backend |
+| `POST /api/session/stop` | 03 (implemented): idempotent |
+| `PUT /api/session/target` | 03 (implemented): `TargetSpec`, 422 unknown label |
+| `PUT /api/session/monitor` | 03 (implemented): `{enabled, gain_db ∈ [−40, 12], muted}`; 409 no output device |
+| `POST /api/session/record/start`, `/record/stop` | 03 (implemented): 409 no session / (not) recording; stop syncs the index and returns the `Recording` |
+| `GET /api/recordings/{id}`, `GET /api/recordings/{id}/audio` | 03 (implemented): `audio/wav`, 404 if missing |
 | `POST /api/recordings/{id}/process` | 06 |
 
 Unimplemented routes return HTTP 501 `{"detail": "not implemented (step-XX)"}`.

@@ -50,6 +50,23 @@ export interface EngineStatus {
   sample_rate: number | null
   channels: number | null
   message: string
+  source?: string | null
+  output_device?: string | null
+  monitoring?: boolean
+  muted?: boolean
+  gain_db?: number
+  recording?: boolean
+  recording_seconds?: number
+  latency_ms?: number | null
+  chunk_ms?: number | null
+  chunks_processed?: number
+  proc_ms_mean?: number | null
+  proc_ms_p95?: number | null
+  rtf_p95?: number | null
+  input_overflows?: number
+  output_underruns?: number
+  dropped_chunks?: number
+  output_dropped?: number
 }
 
 export interface LevelFrame {
@@ -58,9 +75,58 @@ export interface LevelFrame {
   clipping: boolean[]
 }
 
+export interface WaveformFrame {
+  mins: number[]
+  maxs: number[]
+}
+
 export interface SpectrogramFrame {
   magnitudes_db: number[]
   freq_max_hz: number
+  freq_min_hz?: number
+}
+
+export interface WarningPayload {
+  code: string
+  message: string
+}
+
+// --- REST: session and recordings ---
+
+export interface SourceRequest {
+  type: 'mic' | 'file'
+  path?: string
+  loop?: boolean
+}
+
+export interface SessionStartRequest {
+  mode: Mode
+  source: SourceRequest
+  monitor?: boolean
+}
+
+export interface MonitorRequest {
+  enabled: boolean
+  gain_db: number
+  muted: boolean
+}
+
+export interface RecordStartRequest {
+  label?: string | null
+  notes?: string
+}
+
+export interface Recording {
+  id: number
+  created_at: string
+  path: string
+  duration_s: number
+  sample_rate: number
+  channels: number
+  device: string
+  profile: string
+  label: string | null
+  notes: string
 }
 
 export interface Detection {
@@ -93,9 +159,11 @@ export interface Envelope<T extends string, P> {
 export type ServerMessage =
   | Envelope<'status', EngineStatus>
   | Envelope<'levels', LevelFrame>
+  | Envelope<'waveform', WaveformFrame>
   | Envelope<'spectrogram', SpectrogramFrame>
   | Envelope<'detections', { items: Detection[] }>
   | Envelope<'sources', { items: SoundSource[] }>
+  | Envelope<'warning', WarningPayload>
   | Envelope<'error', ErrorPayload>
 
 export type ClientMessage = Envelope<'set_target', TargetSpec>
@@ -105,8 +173,10 @@ export type ServerMessageType = ServerMessage['type']
 export const SERVER_MESSAGE_TYPES: readonly ServerMessageType[] = [
   'status',
   'levels',
+  'waveform',
   'spectrogram',
   'detections',
   'sources',
+  'warning',
   'error',
 ]

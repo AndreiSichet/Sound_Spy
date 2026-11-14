@@ -51,7 +51,7 @@ class SoundSource(Event):
 
 @dataclass(frozen=True)
 class LevelFrame(Event):
-    """Per-channel levels of one chunk."""
+    """Per-channel levels over one analysis interval."""
 
     rms_dbfs: list[float]
     peak_dbfs: list[float]
@@ -59,11 +59,31 @@ class LevelFrame(Event):
 
 
 @dataclass(frozen=True)
+class WaveformFrame(Event):
+    """Min/max envelope of the mono mix over one interval (``waveform_points`` pairs)."""
+
+    mins: list[float]
+    maxs: list[float]
+
+
+@dataclass(frozen=True)
 class SpectrogramFrame(Event):
-    """One spectrogram column (magnitudes in dB, linearly spaced from 0 to ``freq_max_hz``)."""
+    """One spectrogram column: mel-band magnitudes in dB between ``freq_min_hz`` and
+    ``freq_max_hz`` (bands equally spaced on the mel scale, lowest first)."""
 
     magnitudes_db: list[float]
     freq_max_hz: float
+    freq_min_hz: float = 0.0
+
+
+@dataclass(frozen=True)
+class WarningEvent(Event):
+    """Something the user should know that is not a failure (e.g. processing too slow).
+
+    Named ``WarningEvent`` rather than ``Warning`` so it does not shadow Python's built-in."""
+
+    code: str
+    message: str
 
 
 @dataclass(frozen=True)
@@ -76,3 +96,20 @@ class EngineStatus(Event):
     sample_rate: int | None = None
     channels: int | None = None
     message: str = ""
+    source: str | None = None  # "mic" | "file"
+    output_device: str | None = None
+    monitoring: bool = False
+    muted: bool = False
+    gain_db: float = 0.0
+    recording: bool = False
+    recording_seconds: float = 0.0
+    latency_ms: float | None = None
+    chunk_ms: float | None = None
+    chunks_processed: int = 0
+    proc_ms_mean: float | None = None
+    proc_ms_p95: float | None = None
+    rtf_p95: float | None = None
+    input_overflows: int = 0
+    output_underruns: int = 0
+    dropped_chunks: int = 0  # input queue (consumer too slow)
+    output_dropped: int = 0  # output queue (clock drift / bursts)

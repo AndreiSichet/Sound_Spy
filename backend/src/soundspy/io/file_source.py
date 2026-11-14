@@ -13,6 +13,7 @@ as the same 4 channels a live array would give.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -59,17 +60,32 @@ class FileSource(AudioSource):
         self._keep = np.asarray(self.channel_indices, dtype=np.intp)
         self._file: sf.SoundFile | None = None
         self._closed = True
+        # close() may come from another thread (a session stopping) while chunks() is reading.
+        self._lock = threading.Lock()
 
     def open(self) -> None:
-        if self._file is None:
-            self._file = sf.SoundFile(str(self.path))
-            self._closed = False
+        with self._lock:
+            if self._file is None:
+                self._file = sf.SoundFile(str(self.path))
+                self._closed = False
 
     def close(self) -> None:
-        self._closed = True
-        if self._file is not None:
-            self._file.close()
-            self._file = None
+        with self._lock:
+            self._closed = True
+            if self._file is not None:
+                self._file.close()
+                self._file = None
+
+    def describe(self) -> dict[str, Any]:
+        info: dict[str, Any] = {
+            "source": "file",
+            "device": f"file: {self.path.name}",
+            "hostapi": None,
+            "channel_indices": list(self.channel_indices),
+        }
+        if self.profile is not None:
+            info["profile"] = self.profile.name
+        return info
 
     def _metadata(self) -> dict[str, Any]:
         meta: dict[str, Any] = {
@@ -82,26 +98,31 @@ class FileSource(AudioSource):
         return meta
 
     def _take(self, n: int) -> tuple[np.ndarray, int]:
-        """Next ``n`` frames (selected channels); zero-padded at the end unless looping."""
-        if self._file is None:
-            self.open()
-        assert self._file is not None
+        """Next ``n`` frames (selected channels); zero-padded at the end unless looping.
+
+        Returns zero valid frames once the source has been closed.
+        """
         out = np.zeros((n, self.num_channels), dtype=np.float32)
         filled = 0
-        while filled < n:
-            block = self._file.read(n - filled, dtype="float32", always_2d=True)
-            got = block.shape[0]
-            if got:
-                out[filled : filled + got] = block[:, self._keep]
-                filled += got
-            if filled < n:
-                if not self.loop:
-                    break
-                self._file.seek(0)
+        with self._lock:
+            if self._file is None:
+                return out, 0
+            while filled < n:
+                block = self._file.read(n - filled, dtype="float32", always_2d=True)
+                got = block.shape[0]
+                if got:
+                    out[filled : filled + got] = block[:, self._keep]
+                    filled += got
+                if filled < n:
+                    if not self.loop:
+                        break
+                    self._file.seek(0)
         return out, filled
 
     def read(self, seconds: float) -> AudioBuffer:
         n = frames_for(seconds, self.sample_rate)
+        if self._file is None:
+            self.open()
         data, valid = self._take(n)
         self.stats.frames_delivered += valid
         meta = self._metadata()

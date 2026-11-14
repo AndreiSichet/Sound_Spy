@@ -9,6 +9,8 @@ from soundspy.core.events import (
     LevelFrame,
     SoundSource,
     SpectrogramFrame,
+    WarningEvent,
+    WaveformFrame,
 )
 from soundspy.core.labels import ClassDef, LabelSet
 from soundspy.core.target import Direction, TargetSpec
@@ -26,4 +28,6 @@ __all__ = [
     "SoundSource",
     "SpectrogramFrame",
     "TargetSpec",
+    "WarningEvent",
+    "WaveformFrame",
 ]

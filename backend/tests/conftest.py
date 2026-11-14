@@ -29,6 +29,7 @@ LAPTOP_MIC = "Microphone Array (Intel® Smart Sound Technology for Digital Micro
 RESPEAKER = "reSpeaker 4 Mic Array (UAC1.0)"
 FAKE_CHANNEL_DELAY = 3  # samples between consecutive channels of the default signal
 FAKE_NOISE_AMPLITUDE = 0.1
+STALE_HANDLE_ERROR = "Error starting stream: Unanticipated host error [PaErrorCode -9999]"
 
 SignalFn = Callable[[int, int, int, int], np.ndarray]
 
@@ -72,6 +73,8 @@ class WasapiSettings:
 
 
 class FakeInputStream:
+    latency = 0.01
+
     def __init__(
         self,
         fake: FakeSoundDevice,
@@ -86,6 +89,9 @@ class FakeInputStream:
         **_: object,
     ) -> None:
         info = fake.devices[device]
+        if fake.fail_input_opens > 0:  # like stale WASAPI handles after a jack was plugged
+            fake.fail_input_opens -= 1
+            raise PortAudioError(STALE_HANDLE_ERROR)
         if channels is None or channels > info["max_input_channels"]:
             raise PortAudioError(f"Invalid number of channels [PaErrorCode -9998]: {channels}")
         hostapi = fake.hostapis[info["hostapi"]]["name"]
@@ -112,7 +118,7 @@ class FakeInputStream:
         return self._thread is not None and self._thread.is_alive()
 
     def start(self) -> None:
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread = threading.Thread(target=self._run, name="fake-input-stream", daemon=True)
         self._thread.start()
 
     def _run(self) -> None:
@@ -136,6 +142,92 @@ class FakeInputStream:
                 break
             frame += self.blocksize
             block += 1
+            time.sleep(period)
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None and self._thread is not threading.current_thread():
+            self._thread.join(timeout=2.0)
+
+    def close(self) -> None:
+        self.stop()
+        self.closed = True
+
+
+class FakeOutputStream:
+    """Pulls frames through the callback like a sound card and keeps everything it 'played'.
+
+    With ``fake.output_autorun`` False no thread is started; tests call ``pull(frames)`` to run
+    exactly one callback, which makes sink tests deterministic.
+    """
+
+    latency = 0.012
+
+    def __init__(
+        self,
+        fake: FakeSoundDevice,
+        *,
+        device: int | None = None,
+        channels: int | None = None,
+        samplerate: float | None = None,
+        dtype: str = "float32",
+        callback=None,
+        blocksize: int = 0,
+        extra_settings=None,
+        **_: object,
+    ) -> None:
+        info = fake.devices[device]
+        if fake.fail_output_opens > 0:
+            fake.fail_output_opens -= 1
+            raise PortAudioError(STALE_HANDLE_ERROR)
+        if channels is None or channels > info["max_output_channels"]:
+            raise PortAudioError(f"Invalid number of channels [PaErrorCode -9998]: {channels}")
+        hostapi = fake.hostapis[info["hostapi"]]["name"]
+        auto_convert = bool(getattr(extra_settings, "auto_convert", False))
+        if hostapi == "Windows WASAPI" and int(samplerate) != int(info["default_samplerate"]) \
+                and not auto_convert:
+            raise PortAudioError("Invalid sample rate [PaErrorCode -9997]")
+        self.fake = fake
+        self.device, self.channels, self.samplerate = device, channels, int(samplerate)
+        self.callback = callback
+        self.blocksize = blocksize or 256
+        self.extra_settings = extra_settings
+        self.played: list[np.ndarray] = []
+        self.closed = False
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        fake.streams.append(self)
+
+    @property
+    def active(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def pull(self, frames: int | None = None) -> np.ndarray:
+        frames = frames or self.blocksize
+        out = np.full((frames, self.channels), np.nan, dtype=np.float32)
+        self.callback(out, frames, None, types.SimpleNamespace(output_underflow=False))
+        self.played.append(out.copy())
+        return out
+
+    def played_audio(self) -> np.ndarray:
+        if not self.played:
+            return np.empty((0, self.channels), dtype=np.float32)
+        return np.concatenate(self.played)
+
+    def start(self) -> None:
+        if self.fake.output_autorun:
+            self._thread = threading.Thread(
+                target=self._run, name="fake-output-stream", daemon=True
+            )
+            self._thread.start()
+
+    def _run(self) -> None:
+        period = self.blocksize / self.samplerate / self.fake.speed
+        while not self._stop.is_set():
+            try:
+                self.pull()
+            except (CallbackStop, CallbackAbort):
+                break
             time.sleep(period)
 
     def stop(self) -> None:
@@ -196,7 +288,11 @@ class FakeSoundDevice(types.ModuleType):
         self.stall_after_frames: int | None = None
         self.overflow_every = 0
         self.leading_zero_frames = 0  # digital silence at the start of every stream
-        self.streams: list[FakeInputStream] = []
+        self.output_autorun = True  # False: output callbacks only via stream.pull()
+        self.fail_input_opens = 0  # the next N InputStream(...) calls raise PortAudioError
+        self.fail_output_opens = 0
+        self.refreshes = 0  # how often PortAudio was re-initialised (_terminate + _initialize)
+        self.streams: list[FakeInputStream | FakeOutputStream] = []
 
     SIGNALS: dict[str, SignalFn] = {
         "delayed_noise": delayed_noise,
@@ -220,14 +316,26 @@ class FakeSoundDevice(types.ModuleType):
     def query_hostapis(self, index=None):
         return [dict(h) for h in self.hostapis] if index is None else dict(self.hostapis[index])
 
+    def _terminate(self) -> None:
+        pass
+
+    def _initialize(self) -> None:
+        self.refreshes += 1
+
     def InputStream(self, **kwargs):  # noqa: N802 - mirrors the sounddevice class name
         return FakeInputStream(self, **kwargs)
+
+    def OutputStream(self, **kwargs):  # noqa: N802
+        return FakeOutputStream(self, **kwargs)
+
+    def output_streams(self) -> list[FakeOutputStream]:
+        return [s for s in self.streams if isinstance(s, FakeOutputStream)]
 
     def _no_hardware(self, *args, **kwargs):
         raise RuntimeError("fake sounddevice: blocking capture/playback is not available in tests")
 
     rec = playrec = play = wait = _no_hardware
-    Stream = OutputStream = _no_hardware
+    Stream = _no_hardware
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -281,6 +389,31 @@ def config():
     from soundspy.config import load_config
 
     return load_config()
+
+
+AUDIO_THREAD_NAMES = ("soundspy-session", "fake-input-stream", "fake-output-stream")
+
+
+@pytest.fixture
+def no_leaked_threads():
+    """Fail a test that leaves a session worker or a (fake) audio stream thread running.
+
+    Runs its check before the autouse fixture closes leftover fake streams, so the code under
+    test must have stopped them itself.
+    """
+    before = {t.ident for t in threading.enumerate()}
+    yield
+    deadline = time.monotonic() + 3.0
+    while True:
+        leaked = [
+            t.name
+            for t in threading.enumerate()
+            if t.ident not in before and t.is_alive() and t.name in AUDIO_THREAD_NAMES
+        ]
+        if not leaked or time.monotonic() > deadline:
+            break
+        time.sleep(0.02)
+    assert not leaked, f"threads still running after the test: {leaked}"
 
 
 @pytest.fixture
