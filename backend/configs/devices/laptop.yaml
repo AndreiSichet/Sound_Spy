@@ -1,11 +1,18 @@
 # Device profile: laptop built-in microphone (Semantic tab). No geometry -> spatial modes unavailable.
 
-# Input device: name substring or index as listed by `soundspy devices`.
-# null = system default input device.
+# Input device: null = system default input | int index | case-insensitive name substring,
+# as listed by `soundspy devices`.
 device: null
+
+# Host API: null = preference order (Windows WASAPI > DirectSound > MME > WDM-KS) |
+# a host API name such as "Windows WASAPI".
+hostapi: null
+
+# Sample rate in Hz: null = the device's native rate.
+sample_rate: null
 
 # Raw device channel indices to keep (0-based). null = all channels the device exposes.
 raw_channels: null
 
-# Mic coordinates in metres, one [x, y, z] per kept channel. null = unknown / not needed.
+# Mic coordinates in metres, one [x, y, z] per kept channel. null = no spatial modes.
 geometry: null

@@ -14,9 +14,10 @@ envelope). ``detections`` and ``sources`` carry ``{"items": [...]}``. Client -> 
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from soundspy.core import events as core_events
 from soundspy.core.target import Direction, TargetSpec
@@ -146,3 +147,47 @@ class ConfigResponse(BaseModel):
 
 class NotImplementedResponse(BaseModel):
     detail: str
+
+
+class AudioDeviceModel(BaseModel):
+    index: int
+    name: str
+    hostapi: str
+    max_channels: int
+    default_samplerate: int
+    is_default: bool
+
+
+class ResolvedInputModel(BaseModel):
+    index: int
+    name: str
+    hostapi: str
+    channels_used: list[int]
+    sample_rate: int
+
+
+class DevicesResponse(BaseModel):
+    active_profile: str
+    resolved_input: ResolvedInputModel | None
+    error: str | None = None
+    inputs: list[AudioDeviceModel]
+    outputs: list[AudioDeviceModel]
+
+
+class RecordingModel(_FromCore):
+    id: int
+    created_at: datetime
+    path: str  # relative to the project root when inside it
+    duration_s: float
+    sample_rate: int
+    channels: int
+    device: str
+    profile: str
+    label: str | None
+    notes: str
+
+    @field_validator("created_at")
+    @classmethod
+    def _assume_utc(cls, value: datetime) -> datetime:
+        # SQLite returns naive datetimes; the index stores UTC (see services/recordings.py).
+        return value if value.tzinfo else value.replace(tzinfo=UTC)

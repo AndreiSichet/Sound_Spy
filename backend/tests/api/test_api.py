@@ -42,10 +42,8 @@ def test_config(client: TestClient) -> None:
 @pytest.mark.parametrize(
     ("method", "path", "step"),
     [
-        ("get", "/api/devices", "step-02"),
         ("post", "/api/session/start", "step-03"),
         ("post", "/api/session/stop", "step-03"),
-        ("get", "/api/recordings", "step-03"),
         ("get", "/api/recordings/1", "step-03"),
         ("get", "/api/recordings/1/audio", "step-03"),
         ("post", "/api/recordings/1/process", "step-06"),

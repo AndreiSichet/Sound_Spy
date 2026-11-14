@@ -7,6 +7,7 @@ Run it with ``soundspy serve`` or ``uvicorn soundspy.api.app:create_app --factor
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -17,7 +18,10 @@ from soundspy import __version__
 from soundspy.api import ws
 from soundspy.api.db.base import init_db, make_engine, make_session_factory
 from soundspy.api.routes import devices, recordings, session, system
+from soundspy.api.services.recordings import sync_recordings
 from soundspy.config import AppConfig, load_config
+
+logger = logging.getLogger("soundspy.api")
 
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
@@ -29,6 +33,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         init_db(engine)
         app.state.db_engine = engine
         app.state.session_factory = make_session_factory(engine)
+        with app.state.session_factory() as db:
+            result = sync_recordings(db, config.paths["raw"], config.project_root)
+        logger.info("recordings index: %d added, %d removed", result.added, result.removed)
         try:
             yield
         finally:

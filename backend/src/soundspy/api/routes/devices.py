@@ -1,17 +1,29 @@
 """Audio device routes.
 
-TODO(step-02): list input/output devices and the active device profile.
+``GET /api/devices``: every input and output device plus what the active device profile resolves
+to. An unresolvable profile is still HTTP 200 (``resolved_input: null`` + ``error``) so the UI can
+show why; HTTP 503 means PortAudio itself is unavailable.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
-from soundspy.api.routes import NOT_IMPLEMENTED, not_implemented
+from soundspy.api.deps import ConfigDep
+from soundspy.api.schemas import DevicesResponse
+from soundspy.io.devices import AudioBackendUnavailable, devices_report
 
 router = APIRouter(prefix="/api", tags=["devices"])
 
 
-@router.get("/devices", responses=NOT_IMPLEMENTED)
-def list_devices() -> None:
-    raise not_implemented("step-02")
+@router.get(
+    "/devices",
+    response_model=DevicesResponse,
+    responses={503: {"description": "PortAudio (the audio backend) is unavailable"}},
+)
+def list_devices(config: ConfigDep) -> DevicesResponse:
+    try:
+        report = devices_report(config.device_profile)
+    except AudioBackendUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"audio backend unavailable: {exc}") from exc
+    return DevicesResponse.model_validate(report)

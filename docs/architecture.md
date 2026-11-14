@@ -1,5 +1,9 @@
 # Architecture
 
+The precise technical reference: layers, contracts, protocols, step plan. For a plain-language
+explanation of how the app works (with a glossary), read
+[`project_insights.md`](../project_insights.md) first.
+
 ## Runtime picture
 
 ```
@@ -113,13 +117,60 @@ are produced (`set_target` answers "not implemented (step-03)").
 | Route | Step |
 |---|---|
 | `GET /api/health`, `GET /api/config` | 01 (implemented) |
-| `GET /api/devices` | 02 |
+| `GET /api/devices` | 02 (implemented): 200 with `resolved_input: null` + `error` if the profile does not resolve; 503 if PortAudio is unavailable |
+| `GET /api/recordings` | 02 (implemented): re-indexes `data/raw`, newest first |
 | `POST /api/session/start`, `POST /api/session/stop`, `PUT /api/session/target` | 03 |
-| `GET /api/recordings`, `GET /api/recordings/{id}`, `GET /api/recordings/{id}/audio` | 03 |
+| `GET /api/recordings/{id}`, `GET /api/recordings/{id}/audio` | 03 |
 | `POST /api/recordings/{id}/process` | 06 |
 
 Unimplemented routes return HTTP 501 `{"detail": "not implemented (step-XX)"}`.
 Interactive docs: http://127.0.0.1:8765/docs.
+
+## Audio capture: from device to chunks
+
+```
+backend/configs/devices/<profile>.yaml
+        │  device / hostapi / sample_rate / raw_channels / geometry   (validated: config.ConfigError)
+        ▼
+io/devices.resolve_input(profile) ──► ResolvedInput
+        │  device (WASAPI twin preferred), open_channels = max(raw_channels)+1 or all,
+        │  channel_indices to keep, sample_rate (native unless set), wasapi_auto_convert
+        ▼
+io/mic_source.MicSource ── one sd.InputStream, callback on PortAudio's thread:
+        │     indata[:, raw_channels]  (hardware selection, not a downmix)
+        │     drop leading digital zeros after open (≤ warmup_max_s; WASAPI start-up silence)
+        ├──► read(seconds): fills a preallocated buffer, exactly round(seconds·sr) frames
+        └──► chunks(n):     cuts fixed n-frame chunks into a bounded deque;
+                            full → drop the OLDEST chunk (stats.dropped_chunks)
+        no audio for 2 s → MicStallError; close() / leaving chunks() always stops the stream
+
+io/file_source.FileSource ── same interface from a WAV (raw_channels applied if a profile is
+        given; last chunk zero-padded with metadata["valid_frames"]; realtime= and loop= options)
+io/file_sink.FileSink ── writes chunks incrementally (32-bit float WAV), honours valid_frames
+```
+
+**Host-API twins.** On Windows each physical device is listed once per host API. When the
+profile names no host API, the twin on the most preferred one is chosen: WASAPI → DirectSound →
+MME → WDM-KS (then Core Audio, ALSA). MME truncates names to 31 characters, so twins are matched
+case-insensitively on the first 31 characters. WASAPI streams are opened with
+`WasapiSettings(auto_convert=True)` so a non-native `sample_rate` is accepted.
+
+**Drop-oldest.** In live use fresh audio matters more than complete audio: a consumer that falls
+behind gets the newest chunks, and the drop is counted rather than hidden.
+
+## Recordings: the sidecar is the source of truth
+
+`io/storage.save_recording` writes `<label|rec>_<YYYYmmdd-HHMMSS-mmm>.wav` (32-bit float, native
+rate, every kept channel) and a JSON sidecar with the same stem (device, host API, profile,
+channel indices, label, notes, overflows, app version, …). Files are created exclusively, so
+nothing is ever overwritten.
+
+The database is only an **index** of the sidecars. `api/services/recordings.sync_recordings` runs
+on API startup and on every `GET /api/recordings`: it adds a row for every unindexed sidecar and
+**deletes** rows whose WAV is gone (a later sync re-adds the file if it comes back). The CLI
+(`soundspy record`) writes files only and never touches the database, which keeps the library free
+of SQLAlchemy and means a database can always be rebuilt from `data/raw/`. Paths are stored
+relative to the project root; times in UTC (SQLite keeps no time zone).
 
 ## Database
 
@@ -127,7 +178,7 @@ SQLite at `data/soundspy.db` (SQLAlchemy 2.x, URL in `configs/default.yaml`), ta
 startup by `init_db()`:
 
 - `recordings`: id, created_at, path (unique), duration_s, sample_rate, channels, device,
-  profile, label?, notes.
+  profile, label?, notes. An index of the sidecars in `data/raw/` (see above).
 - `processing_runs`: id, created_at, recording_id → recordings, mode, target_json, method
   (`mask_baseline` | `neural_tse`), output_path?, metrics_json?, status (`pending` | `done` |
   `failed`), error?.
@@ -153,7 +204,9 @@ Audio files stay on disk; the database stores paths and metadata. No migrations 
 10. **Config over constants.** Reproducible, comparable experiments.
 11. **No hardware in tests.** The suite runs anywhere.
 12. **Windows-first.** The development machine is Windows 11.
-13–16. Git read-only for Claude Code, license hygiene, scope discipline, a report per step.
+13–17. Git read-only for Claude Code; adapted third-party code keeps its license header and is
+listed in the "Third-party code" section of `project_insights.md`; scope discipline; the step
+report is given in chat; `project_insights.md` is updated every step.
 
 ## Step plan (numbers used in `TODO(...)` markers)
 

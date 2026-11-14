@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from soundspy.config import load_device_profile
+import pytest
+
+from soundspy.config import ConfigError, load_device_profile, parse_device_profile
 
 
 def test_paths_resolve_to_project_root(config, project_root) -> None:
@@ -22,6 +24,51 @@ def test_respeaker_profile(configs_dir) -> None:
     profile = load_device_profile("respeaker_xvf3800", configs_dir)
     assert profile.device == "reSpeaker"
     assert profile.raw_channels == (2, 3, 4, 5)
+    assert profile.hostapi is None and profile.sample_rate is None
+
+
+def test_missing_profile_lists_available(configs_dir) -> None:
+    with pytest.raises(ConfigError, match="available: \\['laptop', 'respeaker_xvf3800'\\]"):
+        load_device_profile("zoom", configs_dir)
+
+
+def test_full_profile_parses() -> None:
+    profile = parse_device_profile(
+        "array",
+        {
+            "device": 3,
+            "hostapi": "Windows WASAPI",
+            "sample_rate": 16000,
+            "raw_channels": [2, 3],
+            "geometry": [[0.0, 0.03, 0], [0.0, -0.03, 0]],
+        },
+    )
+    assert profile.device == 3 and profile.sample_rate == 16000
+    assert profile.geometry == ((0.0, 0.03, 0.0), (0.0, -0.03, 0.0)) and profile.has_geometry
+
+
+@pytest.mark.parametrize(
+    ("data", "fragment"),
+    [
+        ({"devise": None}, "unknown field"),
+        ({"device": True}, "'device' must be"),
+        ({"device": -1}, "index must be >= 0"),
+        ({"device": "  "}, "must not be empty"),
+        ({"hostapi": 5}, "'hostapi' must be"),
+        ({"sample_rate": 0}, "'sample_rate' must be"),
+        ({"sample_rate": 44100.0}, "'sample_rate' must be"),
+        ({"raw_channels": []}, "'raw_channels' must be"),
+        ({"raw_channels": [0, -1]}, "'raw_channels' must be"),
+        ({"raw_channels": "0,1"}, "'raw_channels' must be"),
+        ({"raw_channels": [1, 1]}, "duplicates"),
+        ({"geometry": [[0, 0]]}, "\\[x, y, z\\]"),
+        ({"raw_channels": [0, 1], "geometry": [[0, 0, 0]]}, "has 1 positions"),
+    ],
+)
+def test_invalid_profiles_are_clear_errors(data, fragment) -> None:
+    with pytest.raises(ConfigError, match=fragment) as exc:
+        parse_device_profile("bad", data, source="bad.yaml")
+    assert "device profile 'bad' (bad.yaml)" in str(exc.value)
 
 
 def test_module_configs_loaded(config) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib
 import pkgutil
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -15,17 +16,15 @@ import yaml
 import soundspy
 from soundspy.cli.main import main
 
+IMPLEMENTED_COMMANDS = ["serve", "devices", "check-mic", "record"]
 PLACEHOLDER_COMMANDS = {
-    "devices": "step-02",
-    "check-mic": "step-02",
-    "record": "step-02",
     "record-dataset": "step-04",
     "data": "step-04",
     "train": "step-05",
     "detect": "step-05",
     "extract": "step-06",
 }
-ALL_COMMANDS = ["serve", *PLACEHOLDER_COMMANDS]
+ALL_COMMANDS = [*IMPLEMENTED_COMMANDS, *PLACEHOLDER_COMMANDS]
 PACKAGE_DIR = Path(soundspy.__file__).parent
 FORBIDDEN_IN_LIBRARY = ("fastapi", "starlette", "sqlalchemy", "soundspy.api")
 
@@ -78,6 +77,29 @@ def test_library_import_does_not_load_api_frameworks() -> None:
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )
     assert result.stdout.strip() == ""
+
+
+# Files allowed to index audio channels (rule 4): the reducer itself, level measurement (reads
+# channels without changing the audio) and the sources applying a profile's raw_channels.
+CHANNEL_INDEXING_ALLOWED = {
+    "dsp/channels.py",
+    "dsp/levels.py",
+    "io/mic_source.py",
+    "io/file_source.py",
+}
+CHANNEL_INDEXING = re.compile(r"\[\s*:\s*,|\.(mean|sum|average)\([^)]*axis\s*=\s*(1|-1)")
+
+
+def test_channels_are_only_reduced_in_allowed_places() -> None:
+    offenders = []
+    for path in PACKAGE_DIR.rglob("*.py"):
+        rel = path.relative_to(PACKAGE_DIR).as_posix()
+        if rel in CHANNEL_INDEXING_ALLOWED:
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if CHANNEL_INDEXING.search(line):
+                offenders.append(f"{rel}:{number}: {line.strip()}")
+    assert not offenders, offenders
 
 
 def test_sounddevice_is_faked(fake_sounddevice) -> None:

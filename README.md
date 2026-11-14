@@ -25,6 +25,8 @@ Target scenario: a crowded cafeteria — "let me hear speech, suppress dishes an
 - Extraction: detector-guided spectral-masking baseline, then a label-conditioned neural target
   sound extraction model (ideas from SemanticHearing, Veluri et al., UIST 2023).
 
+New to the project? Start with [project_insights.md](project_insights.md): a plain-language guide
+to how everything works, with a glossary.
 Details: [docs/architecture.md](docs/architecture.md) · decisions: [docs/decisions.md](docs/decisions.md)
 
 ## Requirements
@@ -49,6 +51,20 @@ npm run dev               # http://localhost:5173
 ```
 
 The Vite dev server proxies `/api` and `/ws` to the backend, so open http://localhost:5173.
+
+### Microphone
+
+```powershell
+soundspy devices                              # which mic the active profile uses
+soundspy check-mic                            # 5 s test: levels, channel comparison, warnings
+soundspy check-mic --meter                    # live level meter (Ctrl+C to stop)
+soundspy record --seconds 10 --label speech   # WAV + JSON sidecar in data/raw
+```
+
+Before recording anything you want to keep, switch **off** Windows audio enhancements /
+Voice Clarity for the microphone (Settings → System → Sound → your microphone → Properties) and
+re-run `check-mic`. [project_insights.md](project_insights.md) ("Audio capture") explains how to
+read the output.
 
 ### Machine-learning extras (from step 05)
 
@@ -89,4 +105,5 @@ npm run build
 - `experiments/` — one folder per training run (config tracked, checkpoints ignored)
 - `data/`, `models/`, `outputs/` — git-ignored working data (`data/soundspy.db` is the app database)
 - `notebooks/` — exploration only
-- `THIRD_PARTY_NOTICES.md` — adapted third-party code
+- `project_insights.md` — how the app works, in plain language (including any adapted
+  third-party code, in its "Third-party code" section)
