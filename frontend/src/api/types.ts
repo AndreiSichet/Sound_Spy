@@ -67,6 +67,26 @@ export interface EngineStatus {
   output_underruns?: number
   dropped_chunks?: number
   output_dropped?: number
+  /** Present while a detection model runs in the session (step 05). */
+  detector?: DetectorStatus | null
+}
+
+export interface DetectorStatus {
+  model: string
+  device: string
+  hop_s: number
+  /** Mean inference time per window. */
+  latency_ms: number | null
+  /** Windows skipped because the model was still busy with the previous one. */
+  skipped: number
+}
+
+/** Live detection (WebSocket `detections`, one per hop; `t` = end of the analysed window). */
+export interface DetectionFrame {
+  /** Smoothed probability per class ID (every class). */
+  probabilities: Record<string, number>
+  /** Class IDs currently switched on (threshold + hysteresis). */
+  active: string[]
 }
 
 export interface LevelFrame {
@@ -136,6 +156,18 @@ export interface Detection {
   t_end: number
 }
 
+/** Offline detection of a recording (POST /api/recordings/{id}/detect). */
+export interface DetectionTimeline {
+  duration_s: number
+  hop_s: number
+  window_s: number
+  labels: string[]
+  /** End time of each analysed window (seconds). */
+  times: number[]
+  probabilities: Record<string, number[]>
+  segments: Detection[]
+}
+
 export interface SoundSource {
   id: string
   label: string
@@ -161,7 +193,7 @@ export type ServerMessage =
   | Envelope<'levels', LevelFrame>
   | Envelope<'waveform', WaveformFrame>
   | Envelope<'spectrogram', SpectrogramFrame>
-  | Envelope<'detections', { items: Detection[] }>
+  | Envelope<'detections', DetectionFrame>
   | Envelope<'sources', { items: SoundSource[] }>
   | Envelope<'warning', WarningPayload>
   | Envelope<'error', ErrorPayload>

@@ -15,6 +15,10 @@ activity:
 
 splits:
   esc50:  {train: [1, 2, 3], val: [4], test: [5]}   # official folds
+  fsd50k:
+    # eval = test (official). Dev train/val is made uploader-disjoint, then whole training
+    # uploaders move to val until every class has at least this many val clips.
+    min_val_clips_per_class: 40
   custom: {val_fraction: 0.15, test_fraction: 0.15, seed: 0}   # split by recording session
 
 mixtures:

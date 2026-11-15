@@ -44,6 +44,9 @@ class Processor(ABC):
     def reset(self) -> None:  # noqa: B027 - optional hook, no-op by default
         """Clear internal state (e.g. filter memories, model state buffers)."""
 
+    def close(self) -> None:  # noqa: B027 - optional hook, no-op by default
+        """Release resources (threads, devices) when the session ends."""
+
 
 class SideProcessor(ABC):
     """Observes chunks without changing them; emits events."""
@@ -64,6 +67,9 @@ class SideProcessor(ABC):
 
     def reset(self) -> None:  # noqa: B027 - optional hook, no-op by default
         """Clear internal state."""
+
+    def close(self) -> None:  # noqa: B027 - optional hook, no-op by default
+        """Release resources (e.g. the detector's inference thread) when the session ends."""
 
 
 class Passthrough(Processor):

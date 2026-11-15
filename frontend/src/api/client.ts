@@ -1,6 +1,7 @@
 // Small fetch wrapper for the backend REST API (/api/*, proxied by Vite in dev).
 import type {
   ConfigResponse,
+  DetectionTimeline,
   EngineStatus,
   HealthResponse,
   MonitorRequest,
@@ -63,4 +64,5 @@ export const api = {
     send<EngineStatus>('POST', '/session/record/start', body),
   recordStop: () => send<Recording>('POST', '/session/record/stop'),
   recordings: () => apiFetch<Recording[]>('/recordings'),
+  detectRecording: (id: number) => send<DetectionTimeline>('POST', `/recordings/${id}/detect`),
 }

@@ -1,18 +1,57 @@
-# Sound detection (multi-label) configuration. All values are placeholders.
+# Sound detection (multi-label, step 05). Every key is required and validated at load time.
 
-backbone: null            # TODO(step-05): pretrained audio model to fine-tune
-pretrained_weights: null  # TODO(step-05): checkpoint name/path under models/
-sample_rate: 16000        # TODO(step-05): set by the chosen pretrained model
+backbone: efficientat_mn10_as      # efficientat_mn10_as | stub (tiny random CNN, tests only)
+model_sample_rate: 32000           # EfficientAT mn10_as is trained on 32 kHz audio
+pretrained:                        # downloaded to paths.model_cache/efficientat/ and verified
+  file: mn10_as_mAP_471.pt
+  url: "https://github.com/fschmid56/EfficientAT/releases/download/v0.0.1/mn10_as_mAP_471.pt"
+  sha256: 0bd7dc2443af498c289a2e739f02ebb515d6aa3fd3ab9db539c86123ae368a4e
+audioset_labels: audioset_labels.csv   # the 527 AudioSet outputs (index, mid, name), this folder
+head_init: audioset                # audioset = start each class row from its AudioSet rows | random
 
-window:
-  seconds: 1.0            # TODO(step-05): analysis window for chunked inference
-  hop_seconds: 0.5        # TODO(step-05): hop between windows
+window_s: 1.0                      # labelled window (what one detection describes)
+input_context_s: 10.0              # the window is zero-padded to this before the model:
+                                   # EfficientAT was trained on 10 s clips and fails on < 5 s
+min_active_s: 0.1                  # a class is "present" in a window if it sounds this long
+activity_rate_hz: 100              # time resolution of the per-class activity used for labels
 
-threshold: 0.5            # TODO(step-05): per-class decision threshold
+checkpoint: experiments/det_mn10_v1/checkpoints/best.pt   # model used live and by `detect`
 
-training:                 # TODO(step-05): tune
-  batch_size: 32
+live:
+  hop_s: 0.25                      # a new detection every 0.25 s
+  ema_alpha: 0.5                   # smoothing: p = alpha * new + (1 - alpha) * previous
+  hysteresis: 0.1                  # on at threshold, off below threshold - hysteresis
+  device: auto                     # auto | cuda | cpu
+  cpu_threads: 1                   # on the CPU: 1 thread = ~70 ms/window at ~25 % of a core;
+                                   # all 12 were barely faster but busy-waited ~10 cores
+
+offline:
+  max_seconds: 120                 # longer recordings are rejected by the API (413)
+
+training:
+  name: det_mn10_v1
   epochs: 30
-  learning_rate: 1.0e-4
-  weight_decay: 1.0e-2
+  batch_size: 32                   # halved automatically if the GPU runs out of memory
+  num_workers: 4                   # training loader; validation uses half (each ~1 GB RAM)
+  loader_timeout_s: 120            # abort with a clear error if no batch arrives in time
+  lr_backbone: 1.0e-4
+  lr_head: 1.0e-3
+  weight_decay: 1.0e-4
+  warmup_epochs: 1                 # linear warm-up, then cosine decay to 0
+  pos_weight: true                 # BCE pos_weight per class = negatives / positives (train)
+  amp: true                        # mixed precision on the GPU
   seed: 42
+  smoke_epochs: 2                  # --smoke: quick end-to-end check
+  smoke_train_recipes: 500
+  smoke_val_recipes: 200
+
+augment:
+  gain_db: 6.0                     # random gain in [-6, +6] dB per window
+  noise_snr_db: [30, 50]           # low-level white noise at this SNR range (null = off)
+  freqm: 48                        # SpecAugment: mask up to 48 mel bands (0 = off)
+  timem: 20                        # SpecAugment: mask up to 20 frames (0.2 s) (0 = off)
+  mel_range: true                  # jitter the mel filterbank range, as EfficientAT training
+
+evaluation:
+  windows_per_recipe: 2            # fixed, seeded windows per recipe for val/test metrics
+  seed: 1234

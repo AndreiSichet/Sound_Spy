@@ -30,10 +30,20 @@ class ProcessorChain:
         self._input_format: tuple[int, int] | None = None
         self._output_channels: int | None = None
         self._names: dict[str, Processor | SideProcessor] = {}
+        # (code, message) pairs a session emits as warnings when it starts (e.g. no detector)
+        self.warnings: list[tuple[str, str]] = []
         for name, stage in (names or {}).items():
             if not any(stage is s for s in [*self.main, *self.side]):
                 raise ValueError(f"named stage {name!r} is not part of the chain")
             self._names[name] = stage
+
+    def has(self, name: str) -> bool:
+        return name in self._names
+
+    def close(self) -> None:
+        """Release every stage's resources (called once when a session ends)."""
+        for stage in [*self.main, *self.side]:
+            stage.close()
 
     def stage(self, name: str) -> Processor | SideProcessor:
         """A stage by name (e.g. ``"extractor"``, which later steps replace)."""

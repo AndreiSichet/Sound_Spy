@@ -14,7 +14,7 @@ from soundspy.core.audio import AudioBuffer
 from soundspy.data.activity import ActivityStore, active_mask, active_regions, rms_envelope_db
 from soundspy.data.aliases import AliasError, resolve_alias, to_alias
 from soundspy.data.prepare import COLUMNS, load_clip_index, prepare
-from soundspy.data.splits import leaking_groups, majority_split, split_groups
+from soundspy.data.splits import leaking_groups, majority_split, rebalance_val, split_groups
 
 
 def by_id(index):
@@ -25,7 +25,7 @@ def test_index_columns_roles_and_splits(prepared_env: Any, kit) -> None:
     index = load_clip_index(prepared_env.config.paths["processed"])
     assert tuple(index.columns) == COLUMNS
     rows = by_id(index)
-    assert len(index) == 25 + 50  # FSD50K + ESC-50
+    assert len(index) == 25 + 60  # FSD50K + ESC-50
     # FSD50K official split
     assert rows["fsd50k:101"].split == "train"
     assert rows["fsd50k:201"].split == "val"
@@ -40,7 +40,9 @@ def test_index_columns_roles_and_splits(prepared_env: Any, kit) -> None:
     assert rows["fsd50k:109"].role == "excluded"  # alarm + traffic overlap
     assert rows["esc50:1-1011-A-25"].role == "fg:footsteps"
     assert rows["esc50:1-1010-A-0"].role == "bg"
-    assert rows["esc50:1-1014-A-34"].role == "excluded"  # mapped to null
+    assert rows["esc50:1-1014-A-34"].role == "bg"  # mapped to "background"
+    assert rows["esc50:1-1015-A-44"].role == "excluded"  # mapped to "excluded"
+    assert list(rows["esc50:1-1015-A-44"].mids) == []
     # ESC-50 folds 1-3 train, 4 val, 5 test
     assert rows["esc50:3-1030-B-0"].split == "train"
     assert rows["esc50:4-1040-A-0"].split == "val"
@@ -86,7 +88,7 @@ def test_second_prepare_reads_no_audio(prepared_env: Any, monkeypatch) -> None:
     config = prepared_env.config
     summary = prepare(config, workers=1, progress=False)
     assert calls == []
-    assert summary.clips == {"fsd50k": 25, "esc50": 50}
+    assert summary.clips == {"fsd50k": 25, "esc50": 60}
     assert summary.moved_split == 1
     store = ActivityStore.load(config.paths["processed"] / "activity" / "fsd50k.npz",
                                config.data.activity_hop_s)
@@ -206,3 +208,67 @@ def test_majority_split_moves_whole_groups_to_their_bigger_side() -> None:
              ("c", "val"), ("c", "train"),  # tie -> train
              ("d", "val")]
     assert majority_split(pairs) == {"a": "train", "b": "val", "c": "train", "d": "val"}
+
+
+def test_esc50_mapping_decisions_are_explicit(tmp_path: Path) -> None:
+    from soundspy.data.collectors import CollectorError
+    from soundspy.data.collectors.esc50 import load_mapping
+
+    good = tmp_path / "ok.yaml"
+    good.write_text('a: ["/m/x"]\nb: background\nc: excluded\n', encoding="utf-8")
+    assert load_mapping(good) == {"a": ["/m/x"], "b": "background", "c": "excluded"}
+    for bad in ("a: null\n", "a: []\n", "a: maybe\n", "a: [3]\n"):
+        path = tmp_path / "bad.yaml"
+        path.write_text(bad, encoding="utf-8")
+        with pytest.raises(CollectorError, match="'background' or 'excluded'"):
+            load_mapping(path)
+
+
+def test_rebalance_val_moves_cheapest_whole_groups() -> None:
+    clips = (
+        [("big", "train", "dishes")] * 3 + [("big", "train", None)] * 20   # 3 of 23 useful
+        + [("small", "train", "dishes")] * 2 + [("small", "train", None)]  # 2 of 3 useful
+        + [("tiny", "train", "dishes")]                                     # 1 of 1 useful
+        + [("v", "val", "dishes")] + [("v", "val", "music")] * 5
+        + [("esc", "train", "dishes")] * 9                                  # not movable
+    )
+    moved, val = rebalance_val(clips, ["dishes", "music"], min_per_class=4,
+                               movable=lambda g: g != "esc")
+    assert moved == ["tiny", "small"]  # best useful share first, never the big one
+    assert val == {"dishes": 4, "music": 5}
+    again, _ = rebalance_val(clips, ["dishes", "music"], min_per_class=4,
+                             movable=lambda g: g != "esc")
+    assert again == moved  # deterministic
+    # unreachable target: stops when nothing movable helps
+    moved, val = rebalance_val(clips, ["dishes", "music"], min_per_class=50,
+                               movable=lambda g: g != "esc")
+    assert set(moved) == {"tiny", "small", "big"} and val["dishes"] == 7
+
+
+def test_prepare_rebalances_validation(data_env: Any) -> None:
+    import json
+
+    base = data_env.config
+    prepare(base, workers=1, progress=False)
+    before = load_clip_index(base.paths["processed"])
+    config = dataclasses.replace(
+        base, data=dataclasses.replace(base.data, fsd50k_min_val_clips_per_class=2))
+    summary = prepare(config, workers=1, progress=False)
+    index = load_clip_index(config.paths["processed"])
+    fg_val = index[(index.split == "val") & index.role.str.startswith("fg:")]
+    counts = fg_val.role.str[3:].value_counts().to_dict()
+    for cls in ("speech", "music", "footsteps", "alarm", "traffic"):
+        assert counts.get(cls, 0) >= 2, (cls, counts)
+    assert summary.rebalanced  # some uploaders moved, always whole
+    moved = {f"uploader:{u}" for u in summary.rebalanced}
+    assert set(index[index.group.isin(moved)].split) == {"val"}
+    changed = index.merge(before, on="clip_id", suffixes=("", "_before"))
+    changed = changed[changed.split != changed.split_before]
+    assert set(changed.dataset) == {"fsd50k"}  # ESC-50 folds never change
+    assert set(changed.split_before) == {"train"} and set(changed.split) == {"val"}
+    assert set(index[index.split == "test"].clip_id) == set(before[before.split == "test"].clip_id)
+    log = json.loads((config.paths["processed"] / "val_rebalance.json").read_text())
+    assert log["moved_uploaders"] == summary.rebalanced
+    lost = int(changed.role.str.startswith("fg:").sum())
+    assert sum(summary.rebalance_train_loss.values()) == lost
+    assert leaking_groups(index[["dataset", "group", "split"]].itertuples(index=False)) == {}

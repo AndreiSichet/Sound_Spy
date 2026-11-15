@@ -130,7 +130,9 @@ def test_missing_and_unknown_keys(tmp_path, configs_dir) -> None:
 
 
 def test_module_configs_loaded(config) -> None:
-    assert config.detection["sample_rate"] == 16000
+    assert config.detection.model_sample_rate == 32000
+    assert config.detection.backbone == "efficientat_mn10_as"
+    assert config.detection.window_s == 1.0 and config.detection.input_context_s == 10.0
     assert set(config.extraction) == {"mask_baseline", "neural_tse"}
     assert len(config.labels) == 7
     assert config.api.cors_origins == ("http://localhost:5173",)

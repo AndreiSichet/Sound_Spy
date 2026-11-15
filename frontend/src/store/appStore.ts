@@ -1,8 +1,16 @@
 // Global UI state (Zustand): connection, active tab, backend config, latest status, recordings,
-// toasts. High-rate visual frames are NOT here: they live in components/viz/liveFrames.ts.
+// toasts, the latest detection (4 per second, for the class chips) and the selected classes.
+// High-rate visual frames and the detection history are NOT here: they live in
+// components/viz/liveFrames.ts.
 import { create } from 'zustand'
 import type { SocketState } from '../api/ws.ts'
-import type { ConfigResponse, EngineStatus, Mode, Recording } from '../api/types.ts'
+import type {
+  ConfigResponse,
+  DetectionFrame,
+  EngineStatus,
+  Mode,
+  Recording,
+} from '../api/types.ts'
 
 export type BackendState = 'unknown' | 'up' | 'down'
 
@@ -21,6 +29,9 @@ export interface AppState {
   status: EngineStatus | null
   recordings: Recording[]
   toasts: Toast[]
+  detection: (DetectionFrame & { t: number }) | null
+  /** Class IDs the user selected as the target (sent as TargetSpec.labels). */
+  selected: string[]
   setBackend: (state: BackendState, version?: string | null) => void
   setWsState: (state: SocketState) => void
   setActiveTab: (tab: Mode) => void
@@ -29,6 +40,8 @@ export interface AppState {
   setRecordings: (recordings: Recording[]) => void
   pushToast: (kind: Toast['kind'], message: string) => void
   dismissToast: (id: number) => void
+  setDetection: (frame: (DetectionFrame & { t: number }) | null) => void
+  setSelected: (labels: string[]) => void
 }
 
 export const initialAppState = {
@@ -40,6 +53,8 @@ export const initialAppState = {
   status: null,
   recordings: [] as Recording[],
   toasts: [] as Toast[],
+  detection: null as (DetectionFrame & { t: number }) | null,
+  selected: [] as string[],
 }
 
 const MAX_TOASTS = 4
@@ -61,4 +76,6 @@ export const useAppStore = create<AppState>()((set) => ({
       return { toasts: [...state.toasts, toast].slice(-MAX_TOASTS) }
     }),
   dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+  setDetection: (detection) => set({ detection }),
+  setSelected: (selected) => set({ selected }),
 }))

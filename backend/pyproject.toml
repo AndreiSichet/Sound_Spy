@@ -24,6 +24,8 @@ api = [
     "pydantic>=2.7",
 ]
 # On Windows install torch/torchaudio FIRST from the official CUDA wheel index (see README).
+# Tested (step 05): torch 2.11.0+cu126, torchaudio 2.11.0+cu126 (torchaudio has no builds for
+# newer torch). Needed for detection/training; the data pipeline (extra "data") works without.
 ml = [
     "torch>=2.2",
     "torchaudio>=2.2",

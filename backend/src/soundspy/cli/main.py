@@ -14,6 +14,7 @@ from soundspy.cli import (
     data_cmd,
     detect_cmd,
     devices_cmd,
+    evaluate_cmd,
     extract_cmd,
     record_cmd,
     record_dataset_cmd,
@@ -29,6 +30,7 @@ COMMAND_MODULES = (
     record_dataset_cmd,
     data_cmd,
     train_cmd,
+    evaluate_cmd,
     detect_cmd,
     extract_cmd,
 )

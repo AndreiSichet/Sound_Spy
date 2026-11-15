@@ -130,6 +130,24 @@ export function SessionBar() {
             }`}
             warn={problems > 0}
           />
+          {status?.detector ? (
+            <>
+              <Stat label="Detector" value={`${status.detector.model} · ${status.detector.device}`} />
+              <Stat
+                label="Inference"
+                value={
+                  status.detector.latency_ms != null ? `${status.detector.latency_ms} ms` : '–'
+                }
+              />
+              <Stat
+                label="Skipped windows"
+                value={String(status.detector.skipped)}
+                warn={status.detector.skipped > 0}
+              />
+            </>
+          ) : (
+            <Stat label="Detector" value="off" />
+          )}
         </div>
       )}
     </section>

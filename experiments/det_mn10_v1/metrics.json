@@ -1,0 +1,586 @@
+{
+  "val": {
+    "windows": 4000,
+    "recipes": 2000,
+    "fine_tuned": {
+      "per_class": {
+        "speech": {
+          "ap": 0.7588751393112017,
+          "roc_auc": 0.9253037765527019,
+          "positives": 383,
+          "windows": 4000,
+          "threshold": 0.7147276401519775,
+          "precision": 0.7002652519893899,
+          "recall": 0.6892950391644909,
+          "f1": 0.6947368421052631
+        },
+        "music": {
+          "ap": 0.5489047490284534,
+          "roc_auc": 0.8868662555805864,
+          "positives": 509,
+          "windows": 4000,
+          "threshold": 0.621540904045105,
+          "precision": 0.48118279569892475,
+          "recall": 0.7033398821218074,
+          "f1": 0.5714285714285713
+        },
+        "footsteps": {
+          "ap": 0.5998559261421514,
+          "roc_auc": 0.8823263132400104,
+          "positives": 521,
+          "windows": 4000,
+          "threshold": 0.740174412727356,
+          "precision": 0.6003937007874016,
+          "recall": 0.5854126679462572,
+          "f1": 0.5928085519922255
+        },
+        "dishes": {
+          "ap": 0.41187172196217053,
+          "roc_auc": 0.8499969456944473,
+          "positives": 335,
+          "windows": 4000,
+          "threshold": 0.6870003342628479,
+          "precision": 0.42265193370165743,
+          "recall": 0.45671641791044776,
+          "f1": 0.43902439024390244
+        },
+        "chair_scrape": {
+          "ap": 0.429139315676172,
+          "roc_auc": 0.8233704255320531,
+          "positives": 431,
+          "windows": 4000,
+          "threshold": 0.6483550071716309,
+          "precision": 0.44469525959367945,
+          "recall": 0.45707656612529,
+          "f1": 0.4508009153318077
+        },
+        "alarm": {
+          "ap": 0.5945299894910211,
+          "roc_auc": 0.8937732402282947,
+          "positives": 472,
+          "windows": 4000,
+          "threshold": 0.6263527274131775,
+          "precision": 0.49149922720247297,
+          "recall": 0.673728813559322,
+          "f1": 0.5683646112600537
+        },
+        "traffic": {
+          "ap": 0.49323181030078117,
+          "roc_auc": 0.8317633974169827,
+          "positives": 611,
+          "windows": 4000,
+          "threshold": 0.755636990070343,
+          "precision": 0.4946070878274268,
+          "recall": 0.5253682487725041,
+          "f1": 0.5095238095238096
+        }
+      },
+      "map": 0.5480583788445645,
+      "roc_auc": 0.8704857648921537,
+      "f1": 0.5466696702693762,
+      "precision": 0.5193278938287075,
+      "recall": 0.5844196622285885,
+      "false_positives": {
+        "speech": {
+          "chair_scrape": 12,
+          "footsteps": 16,
+          "alarm": 15,
+          "background": 45,
+          "traffic": 14,
+          "dishes": 10,
+          "music": 23
+        },
+        "music": {
+          "alarm": 132,
+          "traffic": 84,
+          "dishes": 57,
+          "chair_scrape": 85,
+          "background": 65,
+          "footsteps": 38,
+          "speech": 63
+        },
+        "footsteps": {
+          "chair_scrape": 47,
+          "background": 65,
+          "alarm": 29,
+          "music": 32,
+          "dishes": 21,
+          "speech": 19,
+          "traffic": 32
+        },
+        "dishes": {
+          "chair_scrape": 37,
+          "traffic": 32,
+          "background": 66,
+          "footsteps": 14,
+          "alarm": 49,
+          "music": 46,
+          "speech": 20
+        },
+        "chair_scrape": {
+          "music": 44,
+          "background": 70,
+          "dishes": 28,
+          "alarm": 64,
+          "footsteps": 46,
+          "speech": 20,
+          "traffic": 39
+        },
+        "alarm": {
+          "music": 151,
+          "dishes": 52,
+          "chair_scrape": 64,
+          "footsteps": 31,
+          "traffic": 48,
+          "background": 54,
+          "speech": 47
+        },
+        "traffic": {
+          "background": 112,
+          "footsteps": 62,
+          "dishes": 37,
+          "alarm": 54,
+          "speech": 27,
+          "chair_scrape": 66,
+          "music": 54
+        }
+      }
+    },
+    "zero_shot": {
+      "per_class": {
+        "speech": {
+          "ap": 0.6586428136861135,
+          "roc_auc": 0.8849568797187057,
+          "positives": 383,
+          "windows": 4000,
+          "threshold": 0.24418270587921143,
+          "precision": 0.6556473829201102,
+          "recall": 0.6214099216710183,
+          "f1": 0.6380697050938338
+        },
+        "music": {
+          "ap": 0.5005200869800288,
+          "roc_auc": 0.7982811822035782,
+          "positives": 509,
+          "windows": 4000,
+          "threshold": 0.24944725632667542,
+          "precision": 0.5644028103044496,
+          "recall": 0.47347740667976423,
+          "f1": 0.5149572649572649
+        },
+        "footsteps": {
+          "ap": 0.4100184358875343,
+          "roc_auc": 0.7852825756292623,
+          "positives": 521,
+          "windows": 4000,
+          "threshold": 0.003914823289960623,
+          "precision": 0.3711615487316422,
+          "recall": 0.5335892514395394,
+          "f1": 0.4377952755905512
+        },
+        "dishes": {
+          "ap": 0.22805431331760612,
+          "roc_auc": 0.7082417381034799,
+          "positives": 335,
+          "windows": 4000,
+          "threshold": 0.0023413407616317272,
+          "precision": 0.29411764705882354,
+          "recall": 0.31343283582089554,
+          "f1": 0.30346820809248554
+        },
+        "chair_scrape": {
+          "ap": 0.19841026046473742,
+          "roc_auc": 0.6436473785933134,
+          "positives": 431,
+          "windows": 4000,
+          "threshold": 0.0046455576084554195,
+          "precision": 0.17005813953488372,
+          "recall": 0.54292343387471,
+          "f1": 0.2589928057553957
+        },
+        "alarm": {
+          "ap": 0.38236701434974907,
+          "roc_auc": 0.7986786699142934,
+          "positives": 472,
+          "windows": 4000,
+          "threshold": 0.014337030239403248,
+          "precision": 0.36591809775429324,
+          "recall": 0.586864406779661,
+          "f1": 0.4507729861676159
+        },
+        "traffic": {
+          "ap": 0.3560745598828365,
+          "roc_auc": 0.7219566625247081,
+          "positives": 611,
+          "windows": 4000,
+          "threshold": 0.011419613845646381,
+          "precision": 0.40675675675675677,
+          "recall": 0.49263502454991814,
+          "f1": 0.44559585492227977
+        }
+      },
+      "map": 0.3905839263669436,
+      "roc_auc": 0.7630064409553345,
+      "f1": 0.43566458579706097,
+      "precision": 0.40400891186585136,
+      "recall": 0.5091903258307867,
+      "false_positives": {
+        "speech": {
+          "dishes": 9,
+          "background": 58,
+          "traffic": 23,
+          "footsteps": 22,
+          "chair_scrape": 13,
+          "alarm": 14,
+          "music": 12
+        },
+        "music": {
+          "dishes": 33,
+          "chair_scrape": 29,
+          "alarm": 68,
+          "background": 44,
+          "traffic": 33,
+          "footsteps": 16,
+          "speech": 23
+        },
+        "footsteps": {
+          "chair_scrape": 55,
+          "background": 225,
+          "music": 41,
+          "dishes": 32,
+          "traffic": 104,
+          "alarm": 34,
+          "speech": 52
+        },
+        "dishes": {
+          "background": 123,
+          "traffic": 27,
+          "chair_scrape": 30,
+          "alarm": 32,
+          "speech": 24,
+          "music": 26,
+          "footsteps": 33
+        },
+        "chair_scrape": {
+          "dishes": 158,
+          "traffic": 215,
+          "background": 406,
+          "alarm": 129,
+          "footsteps": 242,
+          "speech": 78,
+          "music": 115
+        },
+        "alarm": {
+          "background": 130,
+          "chair_scrape": 102,
+          "traffic": 71,
+          "music": 164,
+          "dishes": 50,
+          "footsteps": 33,
+          "speech": 37
+        },
+        "traffic": {
+          "speech": 34,
+          "footsteps": 46,
+          "alarm": 87,
+          "dishes": 35,
+          "music": 105,
+          "background": 158,
+          "chair_scrape": 58
+        }
+      }
+    }
+  },
+  "test": {
+    "windows": 4000,
+    "recipes": 2000,
+    "fine_tuned": {
+      "per_class": {
+        "speech": {
+          "ap": 0.7318566323902393,
+          "roc_auc": 0.9101204703262843,
+          "positives": 424,
+          "windows": 4000,
+          "threshold": 0.7147276401519775,
+          "precision": 0.6534883720930232,
+          "recall": 0.6627358490566038,
+          "f1": 0.65807962529274
+        },
+        "music": {
+          "ap": 0.5237794466929849,
+          "roc_auc": 0.8885214323195121,
+          "positives": 456,
+          "windows": 4000,
+          "threshold": 0.621540904045105,
+          "precision": 0.4935064935064935,
+          "recall": 0.6666666666666666,
+          "f1": 0.5671641791044776
+        },
+        "footsteps": {
+          "ap": 0.6238011518266011,
+          "roc_auc": 0.890884872556071,
+          "positives": 542,
+          "windows": 4000,
+          "threshold": 0.740174412727356,
+          "precision": 0.577490774907749,
+          "recall": 0.577490774907749,
+          "f1": 0.577490774907749
+        },
+        "dishes": {
+          "ap": 0.5167443637020088,
+          "roc_auc": 0.8822583500038407,
+          "positives": 326,
+          "windows": 4000,
+          "threshold": 0.6870003342628479,
+          "precision": 0.4664804469273743,
+          "recall": 0.5122699386503068,
+          "f1": 0.48830409356725146
+        },
+        "chair_scrape": {
+          "ap": 0.43802761573390153,
+          "roc_auc": 0.7964002450040515,
+          "positives": 493,
+          "windows": 4000,
+          "threshold": 0.6483550071716309,
+          "precision": 0.45535714285714285,
+          "recall": 0.41379310344827586,
+          "f1": 0.43358129649309246
+        },
+        "alarm": {
+          "ap": 0.6623126979952446,
+          "roc_auc": 0.8893477582251648,
+          "positives": 468,
+          "windows": 4000,
+          "threshold": 0.6263527274131775,
+          "precision": 0.5007656967840735,
+          "recall": 0.6987179487179487,
+          "f1": 0.5834076717216771
+        },
+        "traffic": {
+          "ap": 0.41547244291084534,
+          "roc_auc": 0.8224811376262773,
+          "positives": 519,
+          "windows": 4000,
+          "threshold": 0.755636990070343,
+          "precision": 0.42775665399239543,
+          "recall": 0.43352601156069365,
+          "f1": 0.43062200956937796
+        }
+      },
+      "map": 0.558856335893118,
+      "roc_auc": 0.8685734665801715,
+      "f1": 0.5340928072366237,
+      "precision": 0.5106922258668931,
+      "recall": 0.5664571847154635,
+      "false_positives": {
+        "speech": {
+          "background": 51,
+          "dishes": 12,
+          "chair_scrape": 30,
+          "alarm": 21,
+          "traffic": 26,
+          "music": 34,
+          "footsteps": 15
+        },
+        "music": {
+          "chair_scrape": 90,
+          "background": 65,
+          "dishes": 48,
+          "alarm": 88,
+          "footsteps": 33,
+          "traffic": 45,
+          "speech": 30
+        },
+        "footsteps": {
+          "music": 28,
+          "background": 78,
+          "speech": 23,
+          "dishes": 27,
+          "traffic": 58,
+          "chair_scrape": 49,
+          "alarm": 21
+        },
+        "dishes": {
+          "background": 61,
+          "speech": 15,
+          "music": 50,
+          "alarm": 38,
+          "chair_scrape": 29,
+          "traffic": 25,
+          "footsteps": 21
+        },
+        "chair_scrape": {
+          "speech": 25,
+          "music": 38,
+          "alarm": 54,
+          "dishes": 42,
+          "traffic": 57,
+          "footsteps": 35,
+          "background": 59
+        },
+        "alarm": {
+          "speech": 58,
+          "music": 137,
+          "footsteps": 34,
+          "traffic": 50,
+          "background": 60,
+          "dishes": 35,
+          "chair_scrape": 61
+        },
+        "traffic": {
+          "footsteps": 48,
+          "background": 112,
+          "speech": 40,
+          "music": 55,
+          "dishes": 22,
+          "chair_scrape": 48,
+          "alarm": 49
+        }
+      }
+    },
+    "zero_shot": {
+      "per_class": {
+        "speech": {
+          "ap": 0.6635792388812733,
+          "roc_auc": 0.884200817293487,
+          "positives": 424,
+          "windows": 4000,
+          "threshold": 0.24418270587921143,
+          "precision": 0.6552567237163814,
+          "recall": 0.6320754716981132,
+          "f1": 0.6434573829531813
+        },
+        "music": {
+          "ap": 0.4888575322048777,
+          "roc_auc": 0.7904173349570314,
+          "positives": 456,
+          "windows": 4000,
+          "threshold": 0.24944725632667542,
+          "precision": 0.6017191977077364,
+          "recall": 0.4605263157894737,
+          "f1": 0.5217391304347827
+        },
+        "footsteps": {
+          "ap": 0.43233729657303915,
+          "roc_auc": 0.8032390264619824,
+          "positives": 542,
+          "windows": 4000,
+          "threshold": 0.003914823289960623,
+          "precision": 0.38734177215189874,
+          "recall": 0.5645756457564576,
+          "f1": 0.4594594594594595
+        },
+        "dishes": {
+          "ap": 0.3811179063218693,
+          "roc_auc": 0.7783654665014644,
+          "positives": 326,
+          "windows": 4000,
+          "threshold": 0.0023413407616317272,
+          "precision": 0.3726027397260274,
+          "recall": 0.4171779141104294,
+          "f1": 0.3936324167872648
+        },
+        "chair_scrape": {
+          "ap": 0.2340225517573312,
+          "roc_auc": 0.6404302377568826,
+          "positives": 493,
+          "windows": 4000,
+          "threshold": 0.0046455576084554195,
+          "precision": 0.17857142857142858,
+          "recall": 0.537525354969574,
+          "f1": 0.2680829539706626
+        },
+        "alarm": {
+          "ap": 0.43433349094757,
+          "roc_auc": 0.8166724743734936,
+          "positives": 468,
+          "windows": 4000,
+          "threshold": 0.014337030239403248,
+          "precision": 0.39589442815249265,
+          "recall": 0.5769230769230769,
+          "f1": 0.4695652173913043
+        },
+        "traffic": {
+          "ap": 0.22890648963457932,
+          "roc_auc": 0.6855127117260282,
+          "positives": 519,
+          "windows": 4000,
+          "threshold": 0.011419613845646381,
+          "precision": 0.31217838765008576,
+          "recall": 0.35067437379576105,
+          "f1": 0.33030852994555354
+        }
+      },
+      "map": 0.4090220723315057,
+      "roc_auc": 0.7712625812957672,
+      "f1": 0.44089215584888697,
+      "precision": 0.4147949539537215,
+      "recall": 0.5056397361489837,
+      "false_positives": {
+        "speech": {
+          "background": 55,
+          "chair_scrape": 23,
+          "alarm": 14,
+          "traffic": 27,
+          "footsteps": 13,
+          "music": 20,
+          "dishes": 18
+        },
+        "music": {
+          "chair_scrape": 39,
+          "alarm": 32,
+          "speech": 17,
+          "background": 34,
+          "dishes": 35,
+          "footsteps": 7,
+          "traffic": 17
+        },
+        "footsteps": {
+          "background": 233,
+          "speech": 57,
+          "chair_scrape": 58,
+          "music": 47,
+          "dishes": 32,
+          "alarm": 26,
+          "traffic": 103
+        },
+        "dishes": {
+          "background": 115,
+          "chair_scrape": 17,
+          "footsteps": 34,
+          "alarm": 29,
+          "music": 28,
+          "speech": 19,
+          "traffic": 12
+        },
+        "chair_scrape": {
+          "background": 435,
+          "speech": 91,
+          "music": 114,
+          "alarm": 140,
+          "footsteps": 287,
+          "dishes": 162,
+          "traffic": 220
+        },
+        "alarm": {
+          "music": 141,
+          "background": 120,
+          "speech": 51,
+          "footsteps": 29,
+          "dishes": 33,
+          "traffic": 48,
+          "chair_scrape": 86
+        },
+        "traffic": {
+          "music": 79,
+          "chair_scrape": 74,
+          "speech": 47,
+          "alarm": 82,
+          "background": 147,
+          "footsteps": 43,
+          "dishes": 19
+        }
+      }
+    }
+  }
+}

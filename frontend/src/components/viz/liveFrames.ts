@@ -7,10 +7,16 @@
 //
 // History is trimmed by time (from each message's `t`, seconds since the session started), so the
 // buffers do not depend on the server's frame rates.
-import type { LevelFrame, SpectrogramFrame, WaveformFrame } from '../../api/types.ts'
+import type {
+  DetectionFrame,
+  LevelFrame,
+  SpectrogramFrame,
+  WaveformFrame,
+} from '../../api/types.ts'
 
 export const WAVEFORM_SECONDS = 5
 export const SPECTROGRAM_SECONDS = 10
+export const TIMELINE_SECONDS = 30
 export const PEAK_HOLD_MS = 1000
 export const CLIP_LED_MS = 1000
 
@@ -24,6 +30,10 @@ export interface SpectrogramColumn {
   magnitudes: Float32Array
 }
 
+export interface TimedDetection extends DetectionFrame {
+  t: number
+}
+
 export class LiveFrames {
   version = 0
   levels: (LevelFrame & { t: number }) | null = null
@@ -33,6 +43,7 @@ export class LiveFrames {
   waveform: TimedWaveform[] = []
   spectrogram: SpectrogramColumn[] = []
   spectrogramSeq = 0
+  detections: TimedDetection[] = []
   freqMinHz = 50
   freqMaxHz = 24000
   latestT = 0
@@ -44,6 +55,7 @@ export class LiveFrames {
     this.clipAt = []
     this.waveform = []
     this.spectrogram = []
+    this.detections = []
     this.latestT = 0
     this.version += 1
   }
@@ -90,6 +102,16 @@ export class LiveFrames {
     const oldest = t - SPECTROGRAM_SECONDS
     while (this.spectrogram.length && (this.spectrogram[0]?.t ?? t) < oldest) {
       this.spectrogram.shift()
+    }
+    this.version += 1
+  }
+
+  pushDetections(frame: DetectionFrame, t: number): void {
+    this.checkTime(t)
+    this.detections.push({ ...frame, t })
+    const oldest = t - TIMELINE_SECONDS
+    while (this.detections.length && (this.detections[0]?.t ?? t) < oldest) {
+      this.detections.shift()
     }
     this.version += 1
   }

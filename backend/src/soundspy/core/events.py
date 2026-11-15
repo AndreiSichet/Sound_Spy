@@ -8,7 +8,7 @@ the WebSocket message envelope.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from soundspy.core.target import Direction
 
@@ -36,6 +36,26 @@ class Detection(Event):
             raise ValueError(f"probability must be in [0, 1], got {self.probability}")
         if self.t_end < self.t_start:
             raise ValueError("t_end must be >= t_start")
+
+
+@dataclass(frozen=True)
+class DetectionFrame(Event):
+    """Live detection at time ``t`` (end of the analysed window, seconds since session start).
+
+    ``probabilities``: smoothed probability per class (every class of the ``LabelSet``);
+    ``active``: the classes currently switched on (threshold + hysteresis), in class order.
+    """
+
+    probabilities: dict[str, float]
+    active: list[str]
+
+    def __post_init__(self) -> None:
+        for label, p in self.probabilities.items():
+            if not 0.0 <= p <= 1.0:
+                raise ValueError(f"probability of {label!r} must be in [0, 1], got {p}")
+        unknown = [a for a in self.active if a not in self.probabilities]
+        if unknown:
+            raise ValueError(f"active labels without a probability: {unknown}")
 
 
 @dataclass(frozen=True)
@@ -113,3 +133,5 @@ class EngineStatus(Event):
     output_underruns: int = 0
     dropped_chunks: int = 0  # input queue (consumer too slow)
     output_dropped: int = 0  # output queue (clock drift / bursts)
+    # {model, device, hop_s, latency_ms, skipped} while a detector runs, else None (step 05)
+    detector: dict[str, Any] | None = None

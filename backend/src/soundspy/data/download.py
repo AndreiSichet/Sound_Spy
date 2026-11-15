@@ -88,12 +88,14 @@ class SevenZipMissingError(DownloadError):
 
 @dataclass(frozen=True)
 class RemoteFile:
-    """One file to download. ``md5`` (when known) is checked; SHA-256 is always recorded."""
+    """One file to download. ``md5`` / ``sha256`` (when known) are checked; SHA-256 is always
+    recorded."""
 
     name: str
     url: str
     size: int | None = None
     md5: str | None = None
+    sha256: str | None = None
 
 
 @dataclass
@@ -198,7 +200,7 @@ def download_file(
     part = dest_dir / (remote.name + ".part")
     if final.exists() and (remote.size is None or final.stat().st_size == remote.size):
         md5, sha = hash_file(final)
-        _check_md5(remote, md5, final)
+        _check_md5(remote, md5, final, sha)
         return FileRecord(remote.name, remote.url, final.stat().st_size, md5, sha,
                           remote.md5 is not None)
 
@@ -230,7 +232,7 @@ def download_file(
 
     md5, sha = hash_file(part)
     try:
-        _check_md5(remote, md5, part)
+        _check_md5(remote, md5, part, sha)
     except ChecksumError:
         part.unlink(missing_ok=True)
         raise
@@ -243,11 +245,16 @@ class _RetryableHTTP(Exception):
     pass
 
 
-def _check_md5(remote: RemoteFile, md5: str, path: Path) -> None:
+def _check_md5(remote: RemoteFile, md5: str, path: Path, sha256: str | None = None) -> None:
     if remote.md5 is not None and md5.lower() != remote.md5.lower():
         raise ChecksumError(
             f"{remote.name}: MD5 mismatch (expected {remote.md5}, got {md5}). The corrupt file "
             f"was deleted; run the download again. ({path})"
+        )
+    if remote.sha256 is not None and sha256 is not None and sha256.lower() != remote.sha256.lower():
+        raise ChecksumError(
+            f"{remote.name}: SHA-256 mismatch (expected {remote.sha256}, got {sha256}). The "
+            f"file was deleted; run the download again. ({path})"
         )
 
 

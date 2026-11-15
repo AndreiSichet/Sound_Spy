@@ -20,9 +20,12 @@ frontend/dist/
 *.db
 *.db-journal
 
-# Experiments: config.json and notes are tracked, checkpoints and logs are not
+# Experiments: config.json, metrics.json, thresholds.json and plots/ are tracked;
+# checkpoints and logs are not
 experiments/*/checkpoints/
 experiments/*/logs/
+experiments/*/log.csv
+experiments/*/*.log
 
 # Data, models and outputs: ignore contents, keep the folder skeleton (.gitkeep)
 data/**

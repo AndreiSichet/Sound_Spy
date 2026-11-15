@@ -212,7 +212,72 @@ class DataConfig:
     custom_val_fraction: float
     custom_test_fraction: float
     custom_seed: int
+    fsd50k_min_val_clips_per_class: int
     mixtures: MixtureConfig
+
+
+@dataclass(frozen=True)
+class LiveDetectionConfig:
+    hop_s: float
+    ema_alpha: float
+    hysteresis: float
+    device: str  # auto | cuda | cpu
+    cpu_threads: int  # PyTorch threads of the inference thread when it runs on the CPU
+
+
+@dataclass(frozen=True)
+class TrainingConfig:
+    name: str
+    epochs: int
+    batch_size: int
+    num_workers: int
+    loader_timeout_s: float
+    lr_backbone: float
+    lr_head: float
+    weight_decay: float
+    warmup_epochs: float
+    pos_weight: bool
+    amp: bool
+    seed: int
+    smoke_epochs: int
+    smoke_train_recipes: int
+    smoke_val_recipes: int
+
+
+@dataclass(frozen=True)
+class AugmentConfig:
+    gain_db: float
+    noise_snr_db: tuple[float, float] | None
+    freqm: int
+    timem: int
+    mel_range: bool
+
+
+@dataclass(frozen=True)
+class DetectionConfig:
+    """``configs/detection/default.yaml`` (step 05)."""
+
+    backbone: str
+    model_sample_rate: int
+    pretrained_file: str
+    pretrained_url: str
+    pretrained_sha256: str
+    audioset_labels: Path  # absolute
+    head_init: str  # audioset | random
+    window_s: float
+    input_context_s: float
+    min_active_s: float
+    activity_rate_hz: float
+    checkpoint: Path | None  # absolute (resolved against the project root)
+    live: LiveDetectionConfig
+    offline_max_seconds: float
+    training: TrainingConfig
+    augment: AugmentConfig
+    eval_windows_per_recipe: int
+    eval_seed: int
+
+
+BACKBONES = ("efficientat_mn10_as", "stub")
 
 
 @dataclass(frozen=True)
@@ -229,7 +294,7 @@ class AppConfig:
     api: ApiConfig
     database_url: str
     data: DataConfig
-    detection: dict[str, Any] = field(default_factory=dict)
+    detection: DetectionConfig | None = None
     extraction: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
@@ -394,7 +459,7 @@ def load_data_config(path: Path) -> DataConfig:
     enabled = {ds: datasets.sub(ds, ("enabled",)).boolean("enabled") for ds in DATASETS}
     roles = section("roles", ("min_fg_clips_warning",))
     activity = section("activity", ("hop_s", "threshold_db_below_peak"))
-    splits = section("splits", ("esc50", "custom"))
+    splits = section("splits", ("esc50", "fsd50k", "custom"))
     esc = splits.sub("esc50", SPLITS)
     folds = {split: esc.int_list(split, ge=1, le=5) for split in SPLITS}
     all_folds = [f for fs in folds.values() for f in fs]
@@ -440,7 +505,101 @@ def load_data_config(path: Path) -> DataConfig:
         custom_val_fraction=val_fraction,
         custom_test_fraction=test_fraction,
         custom_seed=custom.integer("seed", ge=0),
+        fsd50k_min_val_clips_per_class=splits.sub(
+            "fsd50k", ("min_val_clips_per_class",)).integer("min_val_clips_per_class", ge=0),
         mixtures=mixtures,
+    )
+
+
+def load_detection_config(path: Path, project_root: Path) -> DetectionConfig:
+    """Load and validate ``configs/detection/default.yaml``."""
+    path = Path(path)
+    source = f"detection/{path.name}"
+    top = _Section({"root": load_yaml(path)}, "root", (
+        "backbone", "model_sample_rate", "pretrained", "audioset_labels", "head_init",
+        "window_s", "input_context_s", "min_active_s", "activity_rate_hz", "checkpoint", "live",
+        "offline",
+        "training", "augment", "evaluation"), source)
+    top.name = ""
+    d = top.data
+
+    def sub(key: str, keys: tuple[str, ...]) -> _Section:
+        return _Section(d, key, keys, source)
+
+    def choice(sec: _Section, key: str, options: tuple[str, ...]) -> str:
+        if sec.data[key] not in options:
+            raise sec._fail(key, f"one of {list(options)}")
+        return str(sec.data[key])
+
+    def text(sec: _Section, key: str) -> str:
+        if not isinstance(sec.data[key], str) or not sec.data[key]:
+            raise sec._fail(key, "a non-empty string")
+        return str(sec.data[key])
+
+    pre = sub("pretrained", ("file", "url", "sha256"))
+    sha = text(pre, "sha256").lower()
+    if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+        raise pre._fail("sha256", "a 64-character hex SHA-256")
+    live = sub("live", ("hop_s", "ema_alpha", "hysteresis", "device", "cpu_threads"))
+    off = sub("offline", ("max_seconds",))
+    tr = sub("training", ("name", "epochs", "batch_size", "num_workers", "loader_timeout_s",
+                          "lr_backbone",
+                          "lr_head", "weight_decay", "warmup_epochs", "pos_weight", "amp",
+                          "seed", "smoke_epochs", "smoke_train_recipes", "smoke_val_recipes"))
+    aug = sub("augment", ("gain_db", "noise_snr_db", "freqm", "timem", "mel_range"))
+    ev = sub("evaluation", ("windows_per_recipe", "seed"))
+    window = top.number("window_s", gt=0, le=10)
+    checkpoint = d["checkpoint"]
+    if checkpoint is not None and (not isinstance(checkpoint, str) or not checkpoint):
+        raise top._fail("checkpoint", "a path or null")
+    return DetectionConfig(
+        backbone=choice(top, "backbone", BACKBONES),
+        model_sample_rate=top.integer("model_sample_rate", ge=8000),
+        pretrained_file=text(pre, "file"),
+        pretrained_url=text(pre, "url"),
+        pretrained_sha256=sha,
+        audioset_labels=path.parent / text(top, "audioset_labels"),
+        head_init=choice(top, "head_init", ("audioset", "random")),
+        window_s=window,
+        input_context_s=top.number("input_context_s", ge=window, le=60),
+        min_active_s=top.number("min_active_s", ge=0, le=window),
+        activity_rate_hz=top.number("activity_rate_hz", gt=0, le=1000),
+        checkpoint=resolve_path(checkpoint, project_root) if checkpoint else None,
+        live=LiveDetectionConfig(
+            hop_s=live.number("hop_s", gt=0, le=window),
+            ema_alpha=live.number("ema_alpha", gt=0, le=1),
+            hysteresis=live.number("hysteresis", ge=0, le=1),
+            device=choice(live, "device", ("auto", "cuda", "cpu")),
+            cpu_threads=live.integer("cpu_threads", ge=1),
+        ),
+        offline_max_seconds=off.number("max_seconds", gt=0),
+        training=TrainingConfig(
+            name=text(tr, "name"),
+            epochs=tr.integer("epochs", ge=1),
+            batch_size=tr.integer("batch_size", ge=1),
+            num_workers=tr.integer("num_workers", ge=0),
+            loader_timeout_s=tr.number("loader_timeout_s", gt=0),
+            lr_backbone=tr.number("lr_backbone", gt=0),
+            lr_head=tr.number("lr_head", gt=0),
+            weight_decay=tr.number("weight_decay", ge=0),
+            warmup_epochs=tr.number("warmup_epochs", ge=0),
+            pos_weight=tr.boolean("pos_weight"),
+            amp=tr.boolean("amp"),
+            seed=tr.integer("seed", ge=0),
+            smoke_epochs=tr.integer("smoke_epochs", ge=1),
+            smoke_train_recipes=tr.integer("smoke_train_recipes", ge=1),
+            smoke_val_recipes=tr.integer("smoke_val_recipes", ge=1),
+        ),
+        augment=AugmentConfig(
+            gain_db=aug.number("gain_db", ge=0, le=40),
+            noise_snr_db=(None if aug.data["noise_snr_db"] is None
+                          else aug.pair("noise_snr_db", ge=-20, le=120)),
+            freqm=aug.integer("freqm", ge=0),
+            timem=aug.integer("timem", ge=0),
+            mel_range=aug.boolean("mel_range"),
+        ),
+        eval_windows_per_recipe=ev.integer("windows_per_recipe", ge=1),
+        eval_seed=ev.integer("seed", ge=0),
     )
 
 
@@ -530,6 +689,7 @@ def load_config(
         ),
         database_url=str(default["database"]["url"]),
         data=load_data_config(configs_dir / "data" / "default.yaml"),
-        detection=load_yaml(configs_dir / "detection" / "default.yaml"),
+        detection=load_detection_config(configs_dir / "detection" / "default.yaml",
+                                        project_root),
         extraction={p.stem: load_yaml(p) for p in sorted(extraction_dir.glob("*.yaml"))},
     )

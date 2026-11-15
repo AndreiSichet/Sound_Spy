@@ -2,7 +2,13 @@
 
 ``meta/esc50.csv`` columns: ``filename, fold, target, category, esc10, src_file, take``.
 ESC-50's own 50 categories are mapped to AudioSet mids by the hand-written
-``configs/data/esc50_to_audioset.yaml`` (``null`` = no sensible match -> no mids -> excluded).
+``configs/data/esc50_to_audioset.yaml``. Each category is one of:
+
+* a list of mids -> the role comes from the role rule (``roles.py``);
+* ``background`` -> no AudioSet match and it cannot contain any of our classes -> ``bg``;
+* ``excluded`` -> it could contain one of our classes -> never used.
+
+(``null`` was accepted in step 04 and is now an error: every decision is explicit.)
 Split from the official fold; group = source recording (``1-100032`` of ``1-100032-A-0.wav``).
 """
 
@@ -16,22 +22,29 @@ from soundspy.config import load_yaml
 from soundspy.data.aliases import dataset_root, to_alias
 from soundspy.data.collectors import ClipRow, CollectorError
 from soundspy.data.ontology import Ontology
+from soundspy.data.roles import BG, EXCLUDED
 from soundspy.data.splits import esc50_group, esc50_split
 
 LICENSE = "CC BY-NC 3.0"
 CATEGORIES = 50
+DECISIONS = {"background": BG, "excluded": EXCLUDED}
+
+Mapping_ = dict[str, "list[str] | str"]
 
 
-def load_mapping(path: Path, ontology: Ontology | None = None) -> dict[str, list[str]]:
-    """``{category: [mid, ...]}`` (empty list for ``null``); every mid checked if ``ontology``."""
+def load_mapping(path: Path, ontology: Ontology | None = None) -> Mapping_:
+    """``{category: [mid, ...] | "background" | "excluded"}``; mids checked if ``ontology``."""
     raw = load_yaml(path)
-    mapping: dict[str, list[str]] = {}
+    mapping: Mapping_ = {}
     for category, mids in raw.items():
-        if mids is None:
-            mapping[category] = []
+        if isinstance(mids, str) and mids in DECISIONS:
+            mapping[category] = mids
             continue
-        if not isinstance(mids, list) or not all(isinstance(m, str) for m in mids):
-            raise CollectorError(f"{path.name}: {category!r} must be a list of mids or null")
+        if (not isinstance(mids, list) or not mids
+                or not all(isinstance(m, str) for m in mids)):
+            raise CollectorError(
+                f"{path.name}: {category!r} must be a non-empty list of mids, 'background' or "
+                f"'excluded', got {mids!r}")
         if ontology is not None:
             unknown = [m for m in mids if m not in ontology]
             if unknown:
@@ -42,7 +55,7 @@ def load_mapping(path: Path, ontology: Ontology | None = None) -> dict[str, list
 
 def collect(
     paths: Mapping[str, Path],
-    mapping: Mapping[str, list[str]],
+    mapping: Mapping[str, list[str] | str],
     folds: Mapping[str, tuple[int, ...]],
 ) -> list[ClipRow]:
     root = dataset_root("esc50", paths)
@@ -59,16 +72,19 @@ def collect(
                 )
             filename = rec["filename"]
             stem = filename.rsplit(".", 1)[0]
+            value = mapping[category]
+            decided = isinstance(value, str)
             rows.append(ClipRow(
                 clip_id=f"esc50:{stem}",
                 dataset="esc50",
                 path=to_alias("esc50", f"audio/{filename}"),
                 file=root / "audio" / filename,
-                mids=list(mapping[category]),
+                mids=[] if decided else list(value),
                 raw_labels=[category],
                 split=esc50_split(int(rec["fold"]), folds),
                 group=esc50_group(filename),
                 license=LICENSE,
+                role=DECISIONS[value] if decided else None,
             ))
     missing = sorted(set(mapping) - {r.raw_labels[0] for r in rows})
     if missing:

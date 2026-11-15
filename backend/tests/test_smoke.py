@@ -16,10 +16,11 @@ import yaml
 import soundspy
 from soundspy.cli.main import main
 
-IMPLEMENTED_COMMANDS = ["serve", "devices", "check-mic", "record", "record-dataset", "data"]
+IMPLEMENTED_COMMANDS = [
+    "serve", "devices", "check-mic", "record", "record-dataset", "data", "train",
+    "evaluate", "detect",
+]
 PLACEHOLDER_COMMANDS = {
-    "train": "step-05",
-    "detect": "step-05",
     "extract": "step-06",
 }
 ALL_COMMANDS = [*IMPLEMENTED_COMMANDS, *PLACEHOLDER_COMMANDS]

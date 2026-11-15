@@ -140,6 +140,8 @@ class Session:
         self._emit(self.status)
         if output_problem is not None:  # tell the user why Listen will not work
             self._emit(WarningEvent(t=0.0, code="output_unavailable", message=output_problem))
+        for code, message in self._chain.warnings:  # e.g. no detection model
+            self._emit(WarningEvent(t=0.0, code=code, message=message))
 
     def stop(self) -> None:
         thread = self._thread
@@ -176,6 +178,10 @@ class Session:
         with self._rec_lock:
             if self._recorder is not None:
                 self.last_recording = self._finish_recording()
+        try:
+            self._chain.close()  # stops the detector's inference thread
+        except Exception:  # noqa: BLE001
+            logger.exception("closing the processing chain failed")
 
     # --- control (any thread) ------------------------------------------------------------------
 
@@ -377,4 +383,12 @@ class Session:
             output_underruns=int(getattr(output, "underruns", 0)),
             dropped_chunks=source.stats.dropped_chunks,
             output_dropped=int(getattr(output, "dropped_chunks", 0)),
+            detector=self._detector_info(),
         )
+
+    def _detector_info(self) -> dict[str, Any] | None:
+        if not self._chain.has("detector"):
+            return None
+        stage = self._chain.stage("detector")
+        info = getattr(stage, "status_info", None)
+        return info() if callable(info) else None

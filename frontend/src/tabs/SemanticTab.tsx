@@ -1,5 +1,7 @@
-// Tab 1: the live session. Session bar, listening, recording, the three live visuals, the class
-// chips (selection arrives with detection in step 05) and the recordings list.
+// Tab 1: the live session. Session bar, listening, recording, the class chips (live detection
+// + target selection), the detection timeline, the three live visuals and the recordings list.
+import { ClassChips } from '../components/detection/ClassChips.tsx'
+import { DetectionTimeline } from '../components/detection/DetectionTimeline.tsx'
 import { MonitorControls } from '../components/session/MonitorControls.tsx'
 import { RecordControls } from '../components/session/RecordControls.tsx'
 import { RecordingsList } from '../components/session/RecordingsList.tsx'
@@ -7,11 +9,8 @@ import { SessionBar } from '../components/session/SessionBar.tsx'
 import { LevelMeters } from '../components/viz/LevelMeters.tsx'
 import { Spectrogram } from '../components/viz/Spectrogram.tsx'
 import { Waveform } from '../components/viz/Waveform.tsx'
-import { useAppStore } from '../store/appStore.ts'
 
 export function SemanticTab() {
-  const config = useAppStore((s) => s.config)
-
   return (
     <section className="space-y-5">
       <header>
@@ -28,6 +27,15 @@ export function SemanticTab() {
         <RecordControls />
       </div>
 
+      <ClassChips />
+
+      <figure className="space-y-1">
+        <DetectionTimeline />
+        <figcaption className="text-xs text-slate-500">
+          Detected sounds (last 30 s; brighter = more certain)
+        </figcaption>
+      </figure>
+
       <div className="grid gap-4 md:grid-cols-[8rem_1fr]">
         <figure className="space-y-1">
           <LevelMeters />
@@ -43,29 +51,6 @@ export function SemanticTab() {
             <figcaption className="text-xs text-slate-500">Waveform (mono mix)</figcaption>
           </figure>
         </div>
-      </div>
-
-      <div className="space-y-2">
-        {config === null ? (
-          <p className="text-sm text-slate-500">Waiting for the backend…</p>
-        ) : (
-          <ul className="flex flex-wrap gap-2" aria-label="Sound classes">
-            {config.classes.map((cls) => (
-              <li key={cls.name}>
-                <button
-                  type="button"
-                  disabled
-                  aria-pressed={false}
-                  title={cls.description}
-                  className="cursor-not-allowed rounded-full border border-slate-700 px-3 py-1 text-sm text-slate-400"
-                >
-                  {cls.display_name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="text-xs text-slate-500">Sound selection arrives with detection (step 05).</p>
       </div>
 
       <RecordingsList />

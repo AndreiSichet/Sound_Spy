@@ -1,6 +1,7 @@
 // Subscribes to /ws/session for the lifetime of the component and routes every message:
 // status -> store; levels/waveform/spectrogram -> liveFrames (no React re-render);
-// warning/error -> toasts. Also exposes sendTarget() for the class chips (wired in step 05).
+// detections -> liveFrames (timeline) + store (latest frame, for the chips);
+// warning/error -> toasts. Also exposes sendTarget() for the class chips.
 import { useEffect } from 'react'
 import type { ServerMessage, TargetSpec } from '../api/types.ts'
 import { SessionSocket, sessionSocketUrl } from '../api/ws.ts'
@@ -32,6 +33,10 @@ export function handleServerMessage(message: ServerMessage): void {
     case 'spectrogram':
       liveFrames.pushSpectrogram(message.payload, message.t)
       break
+    case 'detections':
+      liveFrames.pushDetections(message.payload, message.t)
+      store.setDetection({ ...message.payload, t: message.t })
+      break
     case 'warning':
       store.pushToast('warning', message.payload.message)
       break
@@ -39,7 +44,7 @@ export function handleServerMessage(message: ServerMessage): void {
       store.pushToast('error', message.payload.message)
       break
     default:
-      // detections / sources arrive from step 05 / module 5 on.
+      // sources arrive with module 5.
       break
   }
 }

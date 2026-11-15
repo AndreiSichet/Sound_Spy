@@ -79,11 +79,12 @@ describe('App shell', () => {
     await waitFor(() => expect(screen.getByText('Speech')).toBeInTheDocument())
   })
 
-  it('lists classes as disabled chips and shows array requirement on other tabs', async () => {
+  it('lists classes as selectable chips and shows array requirement on other tabs', async () => {
     vi.stubGlobal('fetch', mockFetch(true))
     render(<App />)
-    const chip = await screen.findByRole('button', { name: 'Chair scraping' })
-    expect(chip).toBeDisabled()
+    const chip = await screen.findByRole('button', { name: /Chair scraping/ })
+    expect(chip).toBeEnabled() // selectable since step 05
+    expect(chip).toHaveAttribute('aria-pressed', 'false')
     expect(chip).toHaveAttribute('title', 'Chairs dragged')
     expect(screen.queryByText('chair_scrape')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Spatial' }))

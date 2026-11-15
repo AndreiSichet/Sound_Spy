@@ -43,4 +43,4 @@ alarm:
 traffic:
   display_name: "Traffic"
   description: "Road traffic and passing vehicles"
-  audioset: ["Traffic noise, roadway noise", "Vehicle"]  # verified in step 04; "Vehicle" also covers aircraft, boats, trains (open question)
+  audioset: ["Traffic noise, roadway noise", "Motor vehicle (road)"]  # step 05: was "Vehicle" (also aircraft, rail, boats)

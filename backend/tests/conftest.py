@@ -386,13 +386,21 @@ def configs_dir() -> Path:
 
 @pytest.fixture
 def config():
-    """The real project configuration (laptop profile)."""
+    """The real project configuration (laptop profile), without the trained detection model.
+
+    ``detection.checkpoint = None``: once ``best.pt`` exists, chains built from the real config
+    would otherwise load it (on the GPU if there is one, against rule 11). Tests that need a
+    model use ``stub_experiment``.
+    """
     from soundspy.config import load_config
 
-    return load_config()
+    config = load_config()
+    return dataclasses.replace(config, detection=dataclasses.replace(config.detection,
+                                                                     checkpoint=None))
 
 
-AUDIO_THREAD_NAMES = ("soundspy-session", "fake-input-stream", "fake-output-stream")
+AUDIO_THREAD_NAMES = ("soundspy-session", "fake-input-stream", "fake-output-stream",
+                      "soundspy-detector")
 
 
 @pytest.fixture
@@ -419,7 +427,38 @@ def no_leaked_threads():
 
 @pytest.fixture
 def app_config(config, tmp_path: Path):
-    """Project configuration with the database and ``data/raw`` in a temporary folder."""
+    """Project configuration with the database and ``data/raw`` in a temporary folder.
+
+    No detection model (``detection.checkpoint = None``): sessions start without the detector
+    and warn, so tests never load a real trained model (use ``stub_experiment`` for one).
+    """
     db_url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
     paths = {**config.paths, "raw": tmp_path / "raw"}
-    return dataclasses.replace(config, database_url=db_url, paths=paths)
+    detection = dataclasses.replace(config.detection, checkpoint=None)
+    return dataclasses.replace(config, database_url=db_url, paths=paths, detection=detection)
+
+
+@pytest.fixture
+def stub_experiment(config, tmp_path: Path):
+    """A trained-looking detection experiment with the tiny ``stub`` backbone (CPU, no data).
+
+    Returns ``(config, experiment_dir)``; ``config.detection.checkpoint`` points at its
+    ``best.pt`` (16 kHz, 1 s window, 1 s context, threshold 0.5 for every class).
+    """
+    import json
+
+    from soundspy.detection.model import AudioSetRows, DetectorNet, ModelSpec, save_checkpoint
+
+    labels = list(config.labels)
+    rows = AudioSetRows({lab: [i] for i, lab in enumerate(labels)},
+                        {lab: [i, i + 10] for i, lab in enumerate(labels)})
+    spec = ModelSpec("stub", labels, 16_000, 1.0, rows, {}, 1.0)
+    model = DetectorNet(spec).eval()
+    exp = tmp_path / "experiments" / "stub_v1"
+    save_checkpoint(exp / "checkpoints" / "best.pt", model, {"epoch": 1})
+    (exp / "thresholds.json").write_text(
+        json.dumps({"thresholds": {lab: 0.5 for lab in labels}}), encoding="utf-8")
+    detection = dataclasses.replace(config.detection, checkpoint=exp / "checkpoints" / "best.pt",
+                                    live=dataclasses.replace(config.detection.live, device="cpu"))
+    paths = {**config.paths, "experiments": tmp_path / "experiments"}
+    return dataclasses.replace(config, detection=detection, paths=paths), exp

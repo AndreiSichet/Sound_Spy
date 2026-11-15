@@ -136,11 +136,11 @@ Every message, in both directions, uses one envelope:
 
 | type | direction | payload | rate (step 03 defaults) |
 |---|---|---|---|
-| `status` | server → client | `EngineStatus`: `state`, `mode`, `device`, `sample_rate`, `channels`, `message`, `source`, `output_device`, `monitoring`, `muted`, `gain_db`, `recording`, `recording_seconds`, `latency_ms`, `chunk_ms`, `chunks_processed`, `proc_ms_mean`, `proc_ms_p95`, `rtf_p95`, `input_overflows`, `output_underruns`, `dropped_chunks`, `output_dropped` | on connect, on every change, 1/s while running (`engine.status_interval_s`), 1 per 2 s heartbeat when idle |
+| `status` | server → client | `EngineStatus`: `state`, `mode`, `device`, `sample_rate`, `channels`, `message`, `source`, `output_device`, `monitoring`, `muted`, `gain_db`, `recording`, `recording_seconds`, `latency_ms`, `chunk_ms`, `chunks_processed`, `proc_ms_mean`, `proc_ms_p95`, `rtf_p95`, `input_overflows`, `output_underruns`, `dropped_chunks`, `output_dropped`, `detector` (`{model, device, hop_s, latency_ms, skipped}` or null, step 05) | on connect, on every change, 1/s while running (`engine.status_interval_s`), 1 per 2 s heartbeat when idle |
 | `levels` | server → client | `LevelFrame`: `rms_dbfs[]`, `peak_dbfs[]`, `clipping[]` (per input channel, 0.1 dB) | 20/s (`analysis.levels_hz`) |
 | `waveform` | server → client | `WaveformFrame`: `mins[]`, `maxs[]` (64 pairs, mono mix) | 25/s (`analysis.waveform_hz`) |
 | `spectrogram` | server → client | `SpectrogramFrame`: `magnitudes_db[]` (128 mel bands, floor −100), `freq_min_hz`, `freq_max_hz` | 25/s (`analysis.spectrogram_hz`) |
-| `detections` | server → client | `{"items": [Detection, ...]}` | step 05 |
+| `detections` | server → client | `DetectionFrame`: `probabilities` (every class, smoothed) and `active` (class IDs, threshold + hysteresis); `t` = end of the analysed 1 s window | every `detection.live.hop_s` (0.25 s) while a detector runs (step 05) |
 | `sources` | server → client | `{"items": [SoundSource, ...]}` | module 5 |
 | `warning` | server → client | `{"code", "message"}` (e.g. `rtf_high`) | when needed, ≤ 1 per `rtf_window_s` |
 | `error` | server → client | `{"message": "..."}` | reply to a bad client message |
@@ -281,6 +281,34 @@ by the same factor. Returns `mixture`, `target`, `rest` (`AudioBuffer (n, 1)`), 
 `target_hot` multi-hots, `class_activity (frames, classes)`. Deterministic. Spatial rendering:
 `TODO(module-3)` in `render`.
 
+## Detection (step 05, `soundspy.detection`, `soundspy.training`)
+
+`DetectorNet`: waveform `(B, n @ 32 kHz)` → zero-pad to `input_context_s` (10 s) → `EfficientATMel`
+(`dsp/features.py`, parity-tested against EfficientAT) → backbone `features` → `classifier[:5]`
+(1280-d) → `head` (`Linear(1280, len(LabelSet))`). The backbone's own 527-row AudioSet layer is
+frozen and used for head initialisation (mean of the rows of each class's `audioset` names) and
+the zero-shot baseline (max over rows in `F(c)`). Row lists live in the checkpoint
+(`ModelSpec.rows`), so inference never needs the ontology.
+
+Checkpoint (`torch.save` dict): `version`, `spec` (`ModelSpec` JSON), `model` (state dict), plus
+`epoch`/`val_map` (best) or optimizer/scheduler/scaler/`batch_size`/`pos_weight` (last).
+`thresholds.json` (`{"thresholds": {label: float}}`) sits two folders above `best.pt`.
+
+Windows: 1 s cut from a rendered recipe; label = class active ≥ `min_active_s` (0.1 s) in the
+window (`render()` activity at `activity_rate_hz` = 100). `DetectionDataset` items are
+`(index, epoch)` from `EpochSampler` (training) or `index` (eval, fixed epoch); seeded by
+`(seed, index, epoch)`. Workers: one BLAS/OpenMP thread each, `timeout = loader_timeout_s`.
+
+Live: `Detector(SideProcessor)` in the `SEMANTIC` chain (name `detector`): mono ring buffer of
+`window_s` at the native rate; a window every `hop_s` samples-exactly; one inference thread
+(`soundspy-detector`), skip-when-busy (`skipped`); `Smoother` (EMA `ema_alpha`, hysteresis);
+emits `DetectionFrame`. The inference thread warms the model up itself and `configure` waits
+for it (CUDA initialises per thread, ~3 s); on the CPU it limits itself to `live.cpu_threads`
+PyTorch threads (per-thread setting; idle PyTorch threads otherwise busy-wait). `ProcessorChain.close()` stops the thread when the session releases. No
+checkpoint / load failure → chain without detector + `chain.warnings` → session emits
+`WarningEvent(code="detector_unavailable")`. Offline: `detect_timeline()` (same windows/hop/
+smoothing; overlapping or touching segments of a class merged), `POST /api/recordings/{id}/detect` (413 above `offline.max_seconds`, 503 no model).
+
 ## Rules, explained
 
 1. **One audio format.** One always-2-D container means mono laptop audio and 4-channel array
@@ -312,7 +340,7 @@ report is given in chat; `project_insights.md` is updated every step.
 | 02 | Audio capture: devices, profiles, sources/sinks, storage, levels, ChannelReducer; CLI `devices`, `check-mic`, `record`; `GET /api/devices` | - |
 | 03 | Live session: engine worker, chunker, speaker sink, Analyzer; WS levels + spectrogram; record button; Semantic tab live monitor | 1 |
 | 04 | Data: ontology, collectors (ESC-50, FSD50K, own recordings), splits, foreground/background mixtures; `record-dataset` — **done** (data on D:, recipes in JSONL, `soundspy data …`) | - |
-| 05 | Detection: features, multi-label fine-tuning of a pretrained model, chunked inference, detections over WS | 1 |
+| 05 | Detection: features, multi-label fine-tuning of a pretrained model, chunked inference, detections over WS — **done** (EfficientAT mn10_as, `detection/`, `training/`) | 1 |
 | 06 | Extraction baseline (detector-guided masking) + SI-SDR metrics; offline processing with A/B playback | 1 |
 | 07 | Neural TSE (Waveformer-style, label-conditioned, streaming); live extraction in the Semantic tab | 1 |
 | 08 | End-to-end evaluation, robustness, polish, documentation for the university report | 1 |

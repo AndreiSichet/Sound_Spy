@@ -4,7 +4,9 @@
 2. Run the collectors of the enabled, downloaded datasets (ESC-50, FSD50K, custom).
 3. Read every new clip once, in parallel: header facts + RMS envelope (``activity.py``).
    Already analysed clips are skipped, so a second run takes seconds.
-4. Decide each clip's role (``roles.py``) and check that no leakage group spans two splits.
+4. Decide each clip's role (``roles.py``), rebalance validation (whole FSD50K training
+   uploaders -> val until every class has ``splits.fsd50k.min_val_clips_per_class``; logged in
+   ``val_rebalance.json``) and check that no leakage group spans two splits.
 5. Write ``<processed>/clip_index.parquet`` and a CSV copy for inspection.
 
 Index columns: ``clip_id, dataset, path, duration_s, sample_rate, channels, mids, raw_labels,
@@ -14,6 +16,7 @@ role, split, group, license``. ``mids`` / ``raw_labels`` are lists (``;``-joined
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,11 +26,12 @@ from soundspy.data.activity import ActivityStore, compute_missing
 from soundspy.data.collectors import ClipRow, CollectorError
 from soundspy.data.download import is_done
 from soundspy.data.ontology import Ontology, OntologyError, class_mids
-from soundspy.data.roles import BG, EXCLUDED, RoleRules
-from soundspy.data.splits import leaking_groups
+from soundspy.data.roles import BG, EXCLUDED, RoleRules, role_class
+from soundspy.data.splits import leaking_groups, rebalance_val
 
 INDEX_FILE = "clip_index.parquet"
 INDEX_CSV = "clip_index.csv"
+REBALANCE_FILE = "val_rebalance.json"
 ACTIVITY_DIR = "activity"
 COLUMNS = ("clip_id", "dataset", "path", "duration_s", "sample_rate", "channels", "mids",
            "raw_labels", "role", "split", "group", "license")
@@ -47,6 +51,9 @@ class PrepareSummary:
     overlaps: Counter = field(default_factory=Counter)  # (class, class, ...) -> clips
     mixed: int = 0
     moved_split: int = 0  # FSD50K dev clips moved to keep uploaders out of both train and val
+    rebalanced: list[str] = field(default_factory=list)  # uploaders moved train -> val
+    rebalance_train_loss: Counter = field(default_factory=Counter)  # class -> fg clips
+    val_fg: dict[str, int] = field(default_factory=dict)  # val fg clips per class, after
     bg_with_ancestor_labels: Counter = field(default_factory=Counter)  # label -> bg clips
 
     def text(self) -> str:
@@ -63,6 +70,13 @@ class PrepareSummary:
         if self.moved_split:
             lines.append(f"FSD50K dev clips moved between train and val (uploader-disjoint): "
                          f"{self.moved_split}")
+        if self.rebalanced:
+            loss = ", ".join(f"{c} -{n}" for c, n in self.rebalance_train_loss.items() if n)
+            lines.append(f"validation rebalance: {len(self.rebalanced)} FSD50K uploader(s) moved "
+                         f"train -> val (train fg clips lost: {loss or 'none'})")
+        if self.val_fg:
+            lines.append("val fg clips per class: "
+                         + ", ".join(f"{c} {n}" for c, n in self.val_fg.items()))
         lines.append(f"excluded as class + other sounds: {self.mixed}")
         for classes, n in self.overlaps.most_common():
             lines.append(f"excluded as overlap {' + '.join(classes)}: {n} clips")
@@ -188,6 +202,15 @@ def prepare(
             "license": row.license,
         })
 
+    apply_val_rebalance(records, config, summary)
+    (processed / REBALANCE_FILE).parent.mkdir(parents=True, exist_ok=True)
+    (processed / REBALANCE_FILE).write_text(json.dumps({
+        "min_val_clips_per_class": config.data.fsd50k_min_val_clips_per_class,
+        "moved_uploaders": summary.rebalanced,
+        "train_fg_clips_lost": dict(summary.rebalance_train_loss),
+        "val_fg_clips": summary.val_fg,
+    }, indent=2) + "\n", encoding="utf-8")
+
     leaks = leaking_groups((r["dataset"], r["group"], r["split"]) for r in records)
     if leaks:
         sample = ", ".join(f"{ds}:{g} in {sorted(s)}" for (ds, g), s in list(leaks.items())[:5])
@@ -206,6 +229,27 @@ def prepare(
         csv_frame[col] = csv_frame[col].map(";".join)
     csv_frame.to_csv(processed / INDEX_CSV, index=False)
     return summary
+
+
+def apply_val_rebalance(records: list[dict], config: AppConfig,
+                        summary: PrepareSummary) -> None:
+    """Move whole FSD50K training uploaders to val until every class has enough val clips."""
+    classes = list(config.labels)
+    moved, val = rebalance_val(
+        ((r["dataset"] + ":" + r["group"], r["split"], role_class(r["role"])) for r in records),
+        classes,
+        min_per_class=config.data.fsd50k_min_val_clips_per_class,
+        movable=lambda g: g.startswith("fsd50k:uploader:"),
+    )
+    chosen = set(moved)
+    for r in records:
+        if r["split"] == "train" and r["dataset"] + ":" + r["group"] in chosen:
+            r["split"] = "val"
+            cls = role_class(r["role"])
+            if cls is not None:
+                summary.rebalance_train_loss[cls] += 1
+    summary.rebalanced = [g.removeprefix("fsd50k:uploader:") for g in moved]
+    summary.val_fg = val
 
 
 def load_clip_index(processed: Path):

@@ -89,15 +89,27 @@ soundspy data cleanup-archives                # delete the downloaded zips when 
 ESC-50 is CC BY-NC; FSD50K clips carry per-clip CC licences, some non-commercial. Fine for this
 university project; review before any public or commercial use.
 
-### Machine-learning extras (from step 05)
+### Machine learning (step 05: detection)
 
-Install PyTorch **first** from the official CUDA wheel index — pick the command for your CUDA
-version at <https://pytorch.org/get-started/locally/>, for example:
+Install PyTorch **first** from the official CUDA wheel index, **then** the project with all extras
+(tested: torch 2.11.0 + torchaudio 2.11.0, CUDA 12.6 wheels, NVIDIA driver 621):
 
 ```powershell
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
-pip install -e ".[api,ml,dev]"
+pip install "torch==2.11.0+cu126" "torchaudio==2.11.0+cu126" --index-url https://download.pytorch.org/whl/cu126
+pip install -e ".[api,data,ml,dev]"
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
+
+```powershell
+soundspy train detection --smoke              # 2-epoch end-to-end check (~2 min)
+soundspy train detection                      # full run (hours); --resume continues
+soundspy evaluate detection --split test      # fine-tuned vs zero-shot
+soundspy detect dataaw\<file>.wav          # per-class timeline of a recording
+```
+
+The Semantic tab then shows live detections (chips + timeline) once
+`experiments/det_mn10_v1/checkpoints/best.pt` exists. Run the frontend checks from PowerShell
+(Git Bash confuses Vitest).
 
 Installing `.[ml]` without this first step pulls the CPU-only torch wheel from PyPI.
 Spatial extras (module 3): `pip install -e ".[spatial]"` (pyroomacoustics).

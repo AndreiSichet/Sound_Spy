@@ -8,8 +8,9 @@ WebSocket message envelope (both directions)::
      "payload": {...}}
 
 Server -> client payloads are the event models below without their ``t`` (it is in the
-envelope). ``detections`` and ``sources`` carry ``{"items": [...]}``. Client -> server:
-``set_target`` with a ``TargetSpecModel`` payload.
+envelope). ``detections`` carries a ``DetectionFrameModel`` (step 05: ``probabilities`` per
+class and the ``active`` classes, at the detector's hop rate); ``sources`` carries
+``{"items": [...]}``. Client -> server: ``set_target`` with a ``TargetSpecModel`` payload.
 """
 
 from __future__ import annotations
@@ -77,6 +78,31 @@ class DetectionModel(_FromCore):
     t_end: float
 
 
+class DetectionFrameModel(_FromCore):
+    probabilities: dict[str, float]
+    active: list[str]
+
+
+class DetectorStatusModel(BaseModel):
+    model: str
+    device: str
+    hop_s: float
+    latency_ms: float | None = None
+    skipped: int = 0
+
+
+class DetectionTimelineModel(BaseModel):
+    """Offline detection of a recording (``POST /api/recordings/{id}/detect``)."""
+
+    duration_s: float
+    hop_s: float
+    window_s: float
+    labels: list[str]
+    times: list[float]
+    probabilities: dict[str, list[float]]
+    segments: list[DetectionModel]
+
+
 class SoundSourceModel(_FromCore):
     id: str
     label: str
@@ -131,6 +157,7 @@ class EngineStatusModel(_FromCore):
     output_underruns: int = 0
     dropped_chunks: int = 0
     output_dropped: int = 0
+    detector: DetectorStatusModel | None = None
 
 
 class ErrorPayload(BaseModel):
@@ -161,6 +188,7 @@ _EVENT_MESSAGES: dict[type, tuple[str, type[BaseModel]]] = {
     core_events.SpectrogramFrame: ("spectrogram", SpectrogramFrameModel),
     core_events.WarningEvent: ("warning", WarningModel),
     core_events.EngineStatus: ("status", EngineStatusModel),
+    core_events.DetectionFrame: ("detections", DetectionFrameModel),
 }
 
 

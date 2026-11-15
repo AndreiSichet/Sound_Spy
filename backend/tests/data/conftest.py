@@ -91,13 +91,13 @@ FSD_CLIPS = [
 ]
 
 ESC_MAPPING = {"dog": ["/m/dog"], "footsteps": ["/m/walk"], "rain": ["/m/rain"],
-               "car_horn": ["/m/horn"], "can_opening": None}
+               "car_horn": ["/m/horn"], "can_opening": "background", "engine": "excluded"}
 # (filename, fold, category)
 ESC_CLIPS = [
     (f"{fold}-{1000 + fold * 10 + i}-{take}-{t}.wav", fold, cat)
     for fold in range(1, 6)
     for i, (cat, t) in enumerate([("dog", 0), ("footsteps", 25), ("rain", 10),
-                                  ("car_horn", 43), ("can_opening", 34)])
+                                  ("car_horn", 43), ("can_opening", 34), ("engine", 44)])
     for take in ("A", "B")
 ]
 
@@ -192,7 +192,8 @@ def build_tree(root: Path, base: AppConfig) -> DataEnv:
              "outputs": root / "outputs", "raw": root / "raw"}
     mix = dataclasses.replace(base.data.mixtures, counts={"train": 50, "val": 20, "test": 20},
                               duration_s=4.0)
-    data = dataclasses.replace(base.data, mixtures=mix)
+    # no validation rebalance by default: the fake tree is far below the real target of 40
+    data = dataclasses.replace(base.data, mixtures=mix, fsd50k_min_val_clips_per_class=0)
     config = dataclasses.replace(base, paths=paths, labels=LABELS, configs_dir=configs, data=data)
     return DataEnv(root, config, external)
 
