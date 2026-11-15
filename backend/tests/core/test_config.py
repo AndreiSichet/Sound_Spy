@@ -133,7 +133,11 @@ def test_module_configs_loaded(config) -> None:
     assert config.detection.model_sample_rate == 32000
     assert config.detection.backbone == "efficientat_mn10_as"
     assert config.detection.window_s == 1.0 and config.detection.input_context_s == 10.0
-    assert set(config.extraction) == {"mask_baseline", "neural_tse"}
+    ext = config.extraction
+    assert ext.method == "mask_baseline" and ext.offline_max_seconds == 300
+    assert (ext.mask_baseline.n_fft, ext.mask_baseline.hop) == (1024, 256)
+    assert ext.evaluation.n == 500 and ext.evaluation.sample_rate == 48000
+    assert "checkpoint" in ext.neural_tse  # placeholder until step 07
     assert len(config.labels) == 7
     assert config.api.cors_origins == ("http://localhost:5173",)
     assert (config.api.host, config.api.port) == ("127.0.0.1", 8765)
@@ -210,3 +214,49 @@ def test_cache_env_points_to_model_cache_only_if_unset(config, tmp_path, monkeyp
     assert applied == {"HF_HOME": str(tmp_path / "m" / "huggingface"),
                        "XDG_CACHE_HOME": str(tmp_path / "m" / "cache")}
     assert os.environ["HF_HOME"] == str(tmp_path / "m" / "huggingface")
+
+
+@pytest.mark.parametrize(
+    ("file", "path", "value", "fragment"),
+    [
+        ("mask_baseline.yaml", ["hop"], 300, "'hop' must be a divisor of n_fft"),
+        ("mask_baseline.yaml", ["hop"], 1024, "n_fft / hop >= 2"),
+        ("mask_baseline.yaml", ["n_fft"], 1023, "'n_fft' must be an even number"),
+        ("mask_baseline.yaml", ["dd_alpha"], 1.5, "'dd_alpha' must be <= 0.9999"),
+        ("mask_baseline.yaml", ["minstat_bias"], 0.5, "'minstat_bias' must be >= 1"),
+        ("default.yaml", ["method"], "neural_tse", "'method' must be one of"),
+        ("default.yaml", ["offline", "max_seconds"], 0, "'offline.max_seconds' must be > 0"),
+        ("default.yaml", ["evaluation", "n"], 0, "'evaluation.n' must be an integer >= 1"),
+    ],
+)
+def test_invalid_extraction_config(tmp_path, configs_dir, file, path, value, fragment) -> None:
+    import shutil
+
+    import yaml
+
+    from soundspy.config import load_config
+
+    copy = tmp_path / "configs"
+    shutil.copytree(configs_dir, copy)
+    target = copy / "extraction" / file
+    data = yaml.safe_load(target.read_text(encoding="utf-8"))
+    node = data
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    target.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ConfigError, match=fragment):
+        load_config(copy)
+
+
+def test_unknown_extraction_key_is_rejected(tmp_path, configs_dir) -> None:
+    import shutil
+
+    from soundspy.config import load_config
+
+    copy = tmp_path / "configs"
+    shutil.copytree(configs_dir, copy)
+    with (copy / "extraction" / "mask_baseline.yaml").open("a", encoding="utf-8") as fh:
+        fh.write("mask_type: wiener\n")
+    with pytest.raises(ConfigError, match=r"unknown key\(s\) \['mask_type'\]"):
+        load_config(copy)

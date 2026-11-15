@@ -1,6 +1,7 @@
 // The sound-class chips: live probability (smoothed) per class, highlighted while the detector
 // says the class is present, and multi-selectable. Selecting sends `set_target` over the
-// WebSocket (REST fallback when it is not connected). Extraction acts on it from step 06.
+// WebSocket (REST fallback when it is not connected) together with the attenuation; the
+// session's extractor then keeps the selected sounds and turns everything else down (step 06).
 import { api } from '../../api/client.ts'
 import { targetFor } from '../../api/target.ts'
 import { sendTarget } from '../../hooks/useSessionSocket.ts'
@@ -11,6 +12,7 @@ export function ClassChips() {
   const detection = useAppStore((s) => s.detection)
   const selected = useAppStore((s) => s.selected)
   const setSelected = useAppStore((s) => s.setSelected)
+  const attenuation = useAppStore((s) => s.attenuation)
   const status = useAppStore((s) => s.status)
   const detectorOn = status?.state === 'running' && status.detector != null
 
@@ -21,7 +23,7 @@ export function ClassChips() {
     // keep class order, not click order
     const ordered = config.classes.map((c) => c.name).filter((n) => next.includes(n))
     setSelected(ordered)
-    const target = targetFor(ordered)
+    const target = targetFor(ordered, attenuation)
     if (!sendTarget(target)) void api.setTarget(target).catch(() => undefined)
   }
 
@@ -62,12 +64,16 @@ export function ClassChips() {
           )
         })}
       </ul>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-500" data-testid="selection-hint">
         {selected.length
-          ? `Target: ${selected.length} sound type(s). `
-          : 'Click sound types to select them. '}
-        Selected sounds will be enhanced from step 06.
+          ? `Keeping ${selected.length} sound type(s); everything else is turned down by ${attenuation} dB.`
+          : 'Select one or more sounds to enhance them.'}
         {status?.state === 'running' && !status.detector && ' Detection is off for this session.'}
+        {status?.state === 'running' &&
+          selected.length > 0 &&
+          status.extraction?.method === 'mask_baseline' &&
+          !status.extraction.gating &&
+          ' Without detection the rest cannot be switched off: only steady noise is reduced.'}
       </p>
     </div>
   )

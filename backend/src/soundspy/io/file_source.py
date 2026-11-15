@@ -136,7 +136,9 @@ class FileSource(AudioSource):
         self.open()
         meta = self._metadata()
         chunk_s = chunk_frames / self.sample_rate
-        start = time.monotonic()
+        # perf_counter, not monotonic: on Windows (Python 3.11) monotonic() only ticks every
+        # ~15.6 ms, which released the 20 ms chunks in a 30 ms / 10 ms pattern.
+        start = time.perf_counter()
         index = 0
         try:
             while not self._closed:
@@ -144,7 +146,7 @@ class FileSource(AudioSource):
                 if valid == 0:
                     return
                 if self.realtime:
-                    delay = start + index * chunk_s - time.monotonic()
+                    delay = start + index * chunk_s - time.perf_counter()
                     if delay > 0:
                         time.sleep(delay)
                 self.stats.frames_delivered += valid

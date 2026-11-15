@@ -5,12 +5,14 @@
   ``status`` every ``engine.status_interval_s`` plus ``levels`` / ``waveform`` / ``spectrogram``
   at their analysis rates, and ``warning`` when something needs attention.
 - Client -> server: ``set_target`` (validated against the class list, then stored and forwarded
-  to the session). Malformed or unknown messages are answered with ``error``.
+  to the session) and ``set_bypass`` (``{"enabled": bool}``; A/B listening). Both are answered
+  with the new ``status``; malformed or unknown messages with ``error``.
+- ``run`` messages (an offline processing run changed state) come from the ``RunManager``.
 
 **Slow clients.** Every connection has its own bounded queue and a sender task. When the queue
 is full, the oldest *droppable* message (``levels``, ``waveform``, ``spectrogram``) is discarded;
-``status``, ``warning`` and ``error`` are never dropped. A browser tab in the background therefore
-cannot make the server hoard memory or delay other clients.
+``status``, ``run``, ``warning`` and ``error`` are never dropped. A browser tab in the background
+therefore cannot make the server hoard memory or delay other clients.
 
 Events reach this module from the session's worker thread through
 ``SessionManager`` (``loop.call_soon_threadsafe``), so ``publish`` always runs on the event loop.
@@ -31,6 +33,7 @@ from pydantic import ValidationError
 from soundspy.api.schemas import (
     CLIENT_MESSAGE_TYPES,
     DROPPABLE_TYPES,
+    BypassRequest,
     TargetSpecModel,
     WsMessage,
     error_message,
@@ -133,6 +136,9 @@ def handle_client_message(raw: str, sessions: SessionManager) -> WsMessage:
         return error_message(f"unknown message type {msg_type!r}")
     try:
         message = WsMessage.model_validate(data)
+        if msg_type == "set_bypass":
+            sessions.set_bypass(BypassRequest.model_validate(message.payload).enabled)
+            return status_message(sessions.status())
         target = TargetSpecModel.model_validate(message.payload).to_core()
         target.validate(sessions.labels)
     except ValidationError as exc:

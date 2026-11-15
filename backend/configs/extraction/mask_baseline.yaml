@@ -1,11 +1,23 @@
-# Detector-guided spectral-masking extraction (baseline). All values are placeholders.
+# Detector-gated Wiener filter (extraction baseline, step 06). No training.
+# Frame sizes are in samples at the PROCESSING rate (the live native rate, 48 kHz on the laptop).
 
-sample_rate: 16000        # TODO(step-06): processing rate (follows the detector)
+n_fft: 1024                # 21.3 ms window at 48 kHz; also the added latency (n_fft samples)
+hop: 256                   # 5.3 ms between frames; must divide n_fft (n_fft / hop >= 2)
 
-stft:                     # TODO(step-06): tune
-  n_fft: 1024
-  hop_length: 256
-  window: hann
+# Gate: how the gain moves between "target active" and the floor (TargetSpec.attenuation_db)
+open_ms: 10                # opening ramp
+hold_ms: 300               # stay open this long after the target stops (word endings)
+close_ms: 200              # closing ramp after the hold
 
-mask_type: wiener         # TODO(step-06): one of binary | ratio | wiener
-# The attenuation of non-target sound comes from TargetSpec.attenuation_db.
+# Noise estimate
+noise_alpha: 0.95          # recursive averaging over frames where the target is inactive
+noise_guard_s: 0.5         # live only: a frame counts as noise once the target has stayed
+                           # inactive this long after it (the detector switches on ~0.3 s late)
+noise_max_age_s: 5.0       # no inactive frame for this long -> minimum statistics only
+minstat_window_s: 1.5      # minimum of the smoothed power over this window (fallback)
+minstat_smoothing: 0.85    # smoothing of the power before the minimum is taken
+minstat_bias: 1.6          # the minimum underestimates the mean noise power by this factor
+
+# Gain while the target is active
+dd_alpha: 0.98             # decision-directed a-priori SNR (Ephraim-Malah)
+gain_smoothing: 0.6        # smoothing of the Wiener gain over time

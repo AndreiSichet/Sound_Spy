@@ -3,14 +3,17 @@
 WebSocket message envelope (both directions)::
 
     {"type": "status" | "levels" | "waveform" | "spectrogram" | "detections" | "sources"
-             | "warning" | "error" | "set_target",
+             | "run" | "warning" | "error" | "set_target" | "set_bypass",
      "t": float,          # seconds since session start (0.0 when idle)
      "payload": {...}}
 
 Server -> client payloads are the event models below without their ``t`` (it is in the
-envelope). ``detections`` carries a ``DetectionFrameModel`` (step 05: ``probabilities`` per
-class and the ``active`` classes, at the detector's hop rate); ``sources`` carries
-``{"items": [...]}``. Client -> server: ``set_target`` with a ``TargetSpecModel`` payload.
+envelope). ``levels`` / ``waveform`` / ``spectrogram`` carry ``source``: ``"input"`` or
+``"output"`` (step 06). ``detections`` carries a ``DetectionFrameModel`` (step 05:
+``probabilities`` per class and the ``active`` classes, at the detector's hop rate); ``sources``
+carries ``{"items": [...]}``; ``run`` carries a ``RunModel`` whenever an offline processing run
+changes state (step 06). Client -> server: ``set_target`` with a ``TargetSpecModel`` payload,
+``set_bypass`` with ``{"enabled": bool}``.
 """
 
 from __future__ import annotations
@@ -31,12 +34,14 @@ MessageType = Literal[
     "spectrogram",
     "detections",
     "sources",
+    "run",
     "warning",
     "error",
     "set_target",
+    "set_bypass",
 ]
 MESSAGE_TYPES: tuple[str, ...] = MessageType.__args__  # type: ignore[attr-defined]
-CLIENT_MESSAGE_TYPES: tuple[str, ...] = ("set_target",)
+CLIENT_MESSAGE_TYPES: tuple[str, ...] = ("set_target", "set_bypass")
 # High-rate visual messages a slow client may lose (oldest first); everything else is kept.
 DROPPABLE_TYPES: frozenset[str] = frozenset({"levels", "waveform", "spectrogram"})
 
@@ -111,21 +116,36 @@ class SoundSourceModel(_FromCore):
     last_seen: float
 
 
+Source = Literal["input", "output"]  # which side of the chain a visual frame observes
+
+
 class LevelFrameModel(_FromCore):
     rms_dbfs: list[float]
     peak_dbfs: list[float]
     clipping: list[bool]
+    source: Source = "input"
 
 
 class WaveformFrameModel(_FromCore):
     mins: list[float]
     maxs: list[float]
+    source: Source = "input"
 
 
 class SpectrogramFrameModel(_FromCore):
     magnitudes_db: list[float]
     freq_max_hz: float
     freq_min_hz: float = 0.0
+    source: Source = "input"
+
+
+class ExtractionStatusModel(BaseModel):
+    """The session's extractor (step 06)."""
+
+    method: str
+    latency_ms: float = 0.0  # its algorithmic delay (part of ``latency_ms`` of the status)
+    gating: bool = False  # True when a detector tells it whether the selected sounds are present
+    target_active: bool = False  # the selected sounds are currently considered present
 
 
 class WarningModel(_FromCore):
@@ -158,6 +178,8 @@ class EngineStatusModel(_FromCore):
     dropped_chunks: int = 0
     output_dropped: int = 0
     detector: DetectorStatusModel | None = None
+    bypass: bool = False
+    extraction: ExtractionStatusModel | None = None
 
 
 class ErrorPayload(BaseModel):
@@ -230,6 +252,18 @@ class RecordStartRequest(BaseModel):
     notes: str = Field(default="", max_length=2000)
 
 
+class BypassRequest(BaseModel):
+    enabled: bool
+
+
+class ProcessRequest(BaseModel):
+    """``POST /api/recordings/{id}/process``: extract ``labels`` from the recording."""
+
+    labels: list[str] = Field(min_length=1)
+    attenuation_db: float = Field(default=30.0, ge=0.0, le=60.0)
+    method: Literal["mask_baseline"] | None = None  # default: extraction.method
+
+
 # --- REST --------------------------------------------------------------------------------------
 
 
@@ -298,9 +332,34 @@ class RecordingModel(_FromCore):
     profile: str
     label: str | None
     notes: str
+    missing: bool = False  # the sidecar is there but the WAV is gone
 
     @field_validator("created_at")
     @classmethod
     def _assume_utc(cls, value: datetime) -> datetime:
         # SQLite returns naive datetimes; the index stores UTC (see services/recordings.py).
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+class RunModel(_FromCore):
+    """One offline processing run (index entry of ``outputs/processed/<run_id>.json``)."""
+
+    run_id: str
+    created_at: datetime
+    recording_id: int | None
+    recording_path: str
+    labels: list[str]
+    attenuation_db: float
+    method: str
+    activity_mode: str = ""
+    status: Literal["pending", "running", "done", "failed"]
+    error: str | None = None
+    output_path: str | None = None  # relative to the project root; set when done
+    duration_s: float | None = None
+    processing_seconds: float | None = None
+    info: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("created_at")
+    @classmethod
+    def _assume_utc(cls, value: datetime) -> datetime:
         return value if value.tzinfo else value.replace(tzinfo=UTC)

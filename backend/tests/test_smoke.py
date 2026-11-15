@@ -18,14 +18,15 @@ from soundspy.cli.main import main
 
 IMPLEMENTED_COMMANDS = [
     "serve", "devices", "check-mic", "record", "record-dataset", "data", "train",
-    "evaluate", "detect",
+    "evaluate", "detect", "extract", "db",
 ]
-PLACEHOLDER_COMMANDS = {
-    "extract": "step-06",
-}
+PLACEHOLDER_COMMANDS: dict[str, str] = {}
 ALL_COMMANDS = [*IMPLEMENTED_COMMANDS, *PLACEHOLDER_COMMANDS]
 PACKAGE_DIR = Path(soundspy.__file__).parent
 FORBIDDEN_IN_LIBRARY = ("fastapi", "starlette", "sqlalchemy", "soundspy.api")
+# The CLI's entry points into the API layer (imports inside their ``run`` only, so importing the
+# CLI still loads no API framework): ``serve`` starts the server, ``db`` rebuilds its index.
+API_ENTRY_POINTS = {"cli/db_cmd.py"}
 
 
 def test_version() -> None:
@@ -53,7 +54,8 @@ def _imported_modules(path: Path) -> set[str]:
 def test_library_does_not_import_api_frameworks() -> None:
     offenders = []
     for path in PACKAGE_DIR.rglob("*.py"):
-        if "api" in path.relative_to(PACKAGE_DIR).parts[:1]:
+        rel = path.relative_to(PACKAGE_DIR)
+        if "api" in rel.parts[:1] or rel.as_posix() in API_ENTRY_POINTS:
             continue
         for module in _imported_modules(path):
             if any(module == f or module.startswith(f + ".") for f in FORBIDDEN_IN_LIBRARY):
@@ -118,10 +120,8 @@ def test_help_lists_all_subcommands(capsys: pytest.CaptureFixture[str]) -> None:
         assert name in out
 
 
-@pytest.mark.parametrize(("name", "step"), PLACEHOLDER_COMMANDS.items())
-def test_subcommand_placeholder(name: str, step: str, capsys: pytest.CaptureFixture[str]) -> None:
-    assert main([name]) == 0
-    assert capsys.readouterr().out.strip() == f"not implemented yet ({step})"
+def test_no_placeholder_commands_are_left() -> None:
+    assert not PLACEHOLDER_COMMANDS  # every command of the plan so far is implemented
 
 
 def test_cli_runs_as_process() -> None:
@@ -145,6 +145,7 @@ def test_configs_are_valid_yaml(configs_dir: Path) -> None:
         "devices/laptop.yaml",
         "devices/respeaker_xvf3800.yaml",
         "detection/default.yaml",
+        "extraction/default.yaml",
         "extraction/mask_baseline.yaml",
         "extraction/neural_tse.yaml",
     }

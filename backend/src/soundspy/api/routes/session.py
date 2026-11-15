@@ -7,6 +7,7 @@
 | POST | /api/session/stop | status (idempotent) |
 | PUT  | /api/session/target | the stored target; 422 unknown label |
 | PUT  | /api/session/monitor | status; gain_db in [-40, +12]; 409 no output device |
+| PUT  | /api/session/bypass | status; ``{"enabled": bool}``: hear the unprocessed signal (A/B) |
 | POST | /api/session/record/start | status; 409 no session / already recording |
 | POST | /api/session/record/stop | the new Recording; 409 not recording |
 """
@@ -17,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from soundspy.api.deps import DbDep
 from soundspy.api.schemas import (
+    BypassRequest,
     EngineStatusModel,
     MonitorRequest,
     RecordingModel,
@@ -100,6 +102,13 @@ def set_monitor(body: MonitorRequest, request: Request) -> EngineStatusModel:
         sessions.set_monitor(body.enabled, body.gain_db, body.muted)
     except ConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _status(sessions)
+
+
+@router.put("/bypass", response_model=EngineStatusModel)
+def set_bypass(body: BypassRequest, request: Request) -> EngineStatusModel:
+    sessions = _sessions(request)
+    sessions.set_bypass(body.enabled)
     return _status(sessions)
 
 

@@ -25,6 +25,15 @@ class Processor(ABC):
     num_channels: int | None = None
     target: TargetSpec | None = None
 
+    @property
+    def latency_samples(self) -> int:
+        """Algorithmic delay of this stage in samples at the configured rate (0 = none).
+
+        A stage that buffers (e.g. an STFT) reports it here, so the session's latency estimate
+        and the delay-matched bypass signal include it.
+        """
+        return 0
+
     def configure(self, sample_rate: int, num_channels: int) -> int:
         """Prepare for chunks with this format; return the output channel count.
 

@@ -70,7 +70,9 @@ describe('class chips', () => {
       attenuation_db: 30 })
     fireEvent.click(screen.getByTestId('chip-speech'))
     expect(vi.mocked(sendTarget).mock.calls.at(-1)?.[0].labels).toEqual(['dishes'])
-    expect(screen.getByText(/enhanced from step 06/)).toBeInTheDocument()
+    expect(screen.getByTestId('selection-hint')).toHaveTextContent(
+      'Keeping 1 sound type(s); everything else is turned down by 30 dB.',
+    )
   })
 
   it('say when detection is off for the session', () => {

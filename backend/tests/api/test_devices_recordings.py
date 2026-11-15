@@ -100,12 +100,29 @@ def test_recordings_are_indexed_and_listed_newest_first(app_config) -> None:
     assert row["created_at"].endswith("Z") or row["created_at"].endswith("+00:00")
 
 
-def test_deleted_file_disappears_from_the_list(app_config) -> None:
+def test_a_deleted_wav_is_marked_missing_not_forgotten(app_config) -> None:
+    raw = app_config.paths["raw"]
+    wav = _record(raw, "gone")
+    with _client(app_config) as client:
+        (row,) = client.get("/api/recordings").json()
+        assert row["missing"] is False
+        saved = wav.read_bytes()
+        wav.unlink()  # the sidecar is still there
+        (after,) = client.get("/api/recordings").json()
+        assert after["missing"] is True and after["id"] == row["id"]
+        assert client.get(f"/api/recordings/{row['id']}/audio").status_code == 404
+        wav.write_bytes(saved)  # the file comes back
+        assert client.get("/api/recordings").json()[0]["missing"] is False
+
+
+def test_a_recording_without_sidecar_leaves_the_index(app_config) -> None:
+    """Nothing on disk describes it any more: keeping the row would be DB-only information."""
     raw = app_config.paths["raw"]
     wav = _record(raw, "gone")
     with _client(app_config) as client:
         assert len(client.get("/api/recordings").json()) == 1
         wav.unlink()
+        wav.with_suffix(".json").unlink()
         assert client.get("/api/recordings").json() == []
 
 
@@ -122,6 +139,26 @@ def test_sync_service(tmp_path: Path) -> None:
         paths = list(db.scalars(select(Recording.path)))
     assert (first.added, first.removed, again.added, again.removed) == (1, 0, 0, 0)
     assert paths == [f"data/raw/{wav.name}"]  # relative to the project root, forward slashes
+    wav.unlink()
+    with factory() as db:
+        gone = sync_recordings(db, raw, tmp_path)
+        row = db.scalars(select(Recording)).one()
+    assert (gone.added, gone.removed, gone.missing) == (0, 0, 1) and row.missing is True
+    engine.dispose()
+
+
+def test_a_sidecar_without_wav_is_indexed_as_missing(tmp_path: Path) -> None:
+    """A fresh index (rebuild) must give the same result as an old one that saw the file go."""
+    engine = make_engine(f"sqlite:///{(tmp_path / 'm.db').as_posix()}", tmp_path)
+    init_db(engine)
+    raw = tmp_path / "data" / "raw"
+    _record(raw, "a").unlink()
+    (raw / "notes.json").write_text('{"just": "some other json"}', encoding="utf-8")
+    with make_session_factory(engine)() as db:
+        result = sync_recordings(db, raw, tmp_path)
+        rows = list(db.scalars(select(Recording)))
+    assert (result.added, result.missing) == (1, 1)
+    assert len(rows) == 1 and rows[0].missing and rows[0].sample_rate == 48000
     engine.dispose()
 
 

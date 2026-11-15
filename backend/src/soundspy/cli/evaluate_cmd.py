@@ -1,9 +1,17 @@
-"""``soundspy evaluate``: score a trained model against the zero-shot baseline.
+"""``soundspy evaluate``: score the detection model or an extraction method.
 
     soundspy evaluate detection [--experiment det_mn10_v1] [--split test|val]
+    soundspy evaluate extraction --method mask_baseline [--split test] [--n 500]
+                                 [--sample-rate 48000]
 
-Writes the results into ``experiments/<name>/metrics.json`` and prints a per-class table.
-Without a trained checkpoint only the zero-shot baseline is scored.
+**detection** scores the trained model against the zero-shot baseline, writes
+``experiments/<name>/metrics.json`` and prints a per-class table (without a trained checkpoint
+only the zero-shot baseline is scored).
+
+**extraction** (step 06) runs five systems over the same seeded subset of recipes (no processing,
+the baseline with the offline / live / true activity, and the ideal-ratio-mask upper bound),
+writes ``experiments/ext_<method>/`` (``metrics.json``, ``metrics.md``, ``per_recipe.csv``) and
+renders listening examples to ``outputs/eval/ext_<method>/``.
 """
 
 from __future__ import annotations
@@ -12,17 +20,23 @@ import argparse
 import math
 
 NAME = "evaluate"
-HELP = "evaluate a detection model (fine-tuned vs zero-shot)"
+HELP = "evaluate the detection model or an extraction method"
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
-    parser.add_argument("task", choices=("detection",))
+    parser.add_argument("task", choices=("detection", "extraction"))
     parser.add_argument("--experiment", default=None, help="experiment name (default from config)")
     parser.add_argument("--split", choices=("val", "test"), default="test")
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--limit", type=int, default=None, help="only the first N recipes")
+    parser.add_argument("--method", choices=("mask_baseline",), default="mask_baseline",
+                        help="extraction: the method to evaluate")
+    parser.add_argument("--n", type=int, default=None,
+                        help="extraction: number of recipes (default from config)")
+    parser.add_argument("--sample-rate", type=int, default=None,
+                        help="extraction: processing rate (default from config)")
     parser.set_defaults(handler=run)
 
 
@@ -49,7 +63,36 @@ def format_table(result: dict, labels: list[str]) -> str:
     return "\n".join(lines)
 
 
+def run_extraction(args: argparse.Namespace) -> int:
+    from soundspy.config import ConfigError, load_config
+    from soundspy.data.mixtures import RecipeError
+    from soundspy.data.prepare import PrepareError
+    from soundspy.training.evaluate_extraction import (
+        ExtractionEvalError,
+        evaluate_extraction,
+        format_markdown,
+    )
+
+    try:
+        config = load_config()
+        result = evaluate_extraction(config, args.method, args.split, n=args.n,
+                                     sample_rate=args.sample_rate, device=args.device,
+                                     progress=lambda m: print(m, flush=True))
+    except (ConfigError, ExtractionEvalError, PrepareError, RecipeError, ValueError) as exc:
+        print(f"error: {exc}")
+        return 1
+    print()
+    print(format_markdown(result, list(config.labels)))
+    print(f"-> {result['experiment_dir']}")
+    if result["examples_dir"]:
+        print(f"listening examples -> {result['examples_dir']}")
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
+    if args.task == "extraction":
+        return run_extraction(args)
+
     from soundspy.config import ConfigError, load_config
     from soundspy.data.mixtures import RecipeError
     from soundspy.data.prepare import PrepareError

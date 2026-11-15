@@ -1,4 +1,7 @@
-"""``Analyzer``: live visual data for the UI (a ``SideProcessor`` on the **input** chunks).
+"""``Analyzer``: live visual data for the UI (a ``SideProcessor``).
+
+One instance observes the **input** chunks (``source="input"``); since step 06 a second one
+observes the chain's **output** (``source="output"``), so the page can show what was removed.
 
 Emits three kinds of events at configured rates that do not depend on the chunk size (an event
 is due every ``sample_rate / rate`` frames, counted sample-accurately across chunk boundaries;
@@ -52,8 +55,11 @@ class _Schedule:
 
 
 class Analyzer(SideProcessor):
-    def __init__(self, config: AnalysisConfig) -> None:
+    def __init__(self, config: AnalysisConfig, source: str = "input") -> None:
+        if source not in ("input", "output"):
+            raise ValueError(f"source must be 'input' or 'output', got {source!r}")
         self.config = config
+        self.source = source  # stamped on every event: which side of the chain it observes
         self._reducer = ChannelReducer("mean")
 
     def configure(self, sample_rate: int, num_channels: int) -> None:
@@ -90,6 +96,7 @@ class Analyzer(SideProcessor):
             rms_dbfs=_round(rms_dbfs(buf)),
             peak_dbfs=_round(peak_dbfs(buf)),
             clipping=[bool(c > 0) for c in clipping_ratio(buf)],
+            source=self.source,
         )
 
     def _wave_event(self, t: float) -> WaveformFrame:
@@ -98,7 +105,7 @@ class Analyzer(SideProcessor):
         bins = np.array_split(mono, min(self.config.waveform_points, max(1, mono.size)))
         mins = [round(float(b.min()), 4) if b.size else 0.0 for b in bins]
         maxs = [round(float(b.max()), 4) if b.size else 0.0 for b in bins]
-        return WaveformFrame(t=t, mins=mins, maxs=maxs)
+        return WaveformFrame(t=t, mins=mins, maxs=maxs, source=self.source)
 
     def _spec_event(self, t: float) -> SpectrogramFrame:
         spectrum = np.fft.rfft(self._history.astype(np.float64) * self._window)
@@ -111,6 +118,7 @@ class Analyzer(SideProcessor):
             magnitudes_db=_round(db),
             freq_max_hz=self.sample_rate / 2,
             freq_min_hz=self.config.spectrogram_fmin_hz,
+            source=self.source,
         )
 
     def _push_history(self, mono: np.ndarray) -> None:

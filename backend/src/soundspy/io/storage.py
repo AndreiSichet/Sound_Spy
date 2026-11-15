@@ -193,3 +193,38 @@ def iter_recordings(directory: str | Path) -> Iterator[tuple[Path, dict[str, Any
         except (OSError, ValueError):
             continue
         yield wav_path, metadata
+
+
+def iter_sidecars(directory: str | Path) -> Iterator[tuple[Path, dict[str, Any], bool]]:
+    """Yield ``(wav_path, sidecar, wav_exists)`` for every readable recording sidecar.
+
+    Unlike :func:`iter_recordings` this also reports sidecars whose WAV is gone, so an index can
+    show such a recording as *missing* instead of forgetting it.
+    """
+    directory = Path(directory)
+    if not directory.is_dir():
+        return
+    for sidecar_path in sorted(directory.glob(f"*{SIDECAR_SUFFIX}")):
+        wav_path = sidecar_path.with_suffix(".wav")
+        try:
+            metadata = read_sidecar(wav_path)
+        except (OSError, ValueError):
+            continue
+        if "sample_rate" not in metadata or "channels" not in metadata:
+            continue  # some other JSON file
+        yield wav_path, metadata, wav_path.is_file()
+
+
+def stored_path(path: str | Path, project_root: Path) -> str:
+    """How a file is referred to in sidecars and the index: relative to the project root when it
+    lives inside it (portable across machines), absolute otherwise; always forward slashes."""
+    path = Path(path).resolve()
+    try:
+        return path.relative_to(Path(project_root).resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def absolute_path(stored: str, project_root: Path) -> Path:
+    path = Path(stored)
+    return path if path.is_absolute() else Path(project_root) / path

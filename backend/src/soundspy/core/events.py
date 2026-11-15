@@ -1,5 +1,8 @@
 """Events emitted by side processors and the engine.
 
+The visual frames (``LevelFrame``, ``WaveformFrame``, ``SpectrogramFrame``) carry ``source``:
+``"input"`` for what the microphone heard, ``"output"`` for the chain's output (step 06).
+
 Every event carries ``t``: seconds since the session started (0.0 when no session is running).
 Events are plain dataclasses; the API layer converts them to Pydantic models and wraps them in
 the WebSocket message envelope.
@@ -76,6 +79,7 @@ class LevelFrame(Event):
     rms_dbfs: list[float]
     peak_dbfs: list[float]
     clipping: list[bool]
+    source: str = "input"  # "input" (what the microphone heard) | "output" (after the chain)
 
 
 @dataclass(frozen=True)
@@ -84,6 +88,7 @@ class WaveformFrame(Event):
 
     mins: list[float]
     maxs: list[float]
+    source: str = "input"
 
 
 @dataclass(frozen=True)
@@ -94,6 +99,7 @@ class SpectrogramFrame(Event):
     magnitudes_db: list[float]
     freq_max_hz: float
     freq_min_hz: float = 0.0
+    source: str = "input"
 
 
 @dataclass(frozen=True)
@@ -135,3 +141,7 @@ class EngineStatus(Event):
     output_dropped: int = 0  # output queue (clock drift / bursts)
     # {model, device, hop_s, latency_ms, skipped} while a detector runs, else None (step 05)
     detector: dict[str, Any] | None = None
+    # step 06: the speaker gets the unprocessed (delay-matched) signal instead of the output
+    bypass: bool = False
+    # {method, latency_ms, gating, target_active} of the chain's extractor, else None (step 06)
+    extraction: dict[str, Any] | None = None

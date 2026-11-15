@@ -16,7 +16,8 @@ threshold and **off** only below ``threshold - hysteresis``), so labels do not f
 * if that thread is still busy with the previous window, the new one is **skipped** and counted:
   the audio path never waits for the model;
 * ``observe()`` returns the results finished since the previous call as ``DetectionFrame``
-  events (``t`` = end of the analysed window).
+  events (``t`` = end of the analysed window) and writes the newest one into the shared
+  ``DetectionState`` (step 06), where the extractor reads which classes are active.
 
 **Offline** (``detect_timeline``): the same windows, hop and smoothing over a whole recording,
 without threads; returns per-class probabilities over time and the active segments.
@@ -38,6 +39,7 @@ from soundspy.core.audio import AudioBuffer
 from soundspy.core.events import Detection, DetectionFrame, Event
 from soundspy.dsp.channels import ChannelReducer
 from soundspy.dsp.resample import resample_array
+from soundspy.engine.detection_state import DetectionState
 from soundspy.engine.processor import SideProcessor
 
 log = logging.getLogger(__name__)
@@ -195,6 +197,30 @@ def window_ends(num_samples: int, sample_rate: int, window_s: float, hop_s: floa
     return list(range(win, num_samples + 1, hop))
 
 
+def probabilities_at(core: DetectionCore, audio: AudioBuffer, ends_s, *, batch: int = 32
+                     ) -> np.ndarray:
+    """Raw (unsmoothed) class probabilities of the windows **ending** at each time in ``ends_s``.
+
+    ``(len(ends_s), classes)``. A window is the ``core.window_s`` before its end; whatever lies
+    outside the file is silence. Used to build activity timelines (step 06): the same windows
+    serve "centred on t" (end = t + window/2) and "the last second before t" (end = t).
+    """
+    mono = ChannelReducer("mean").process(audio) if audio.num_channels > 1 else audio
+    x = resample_array(mono.samples, audio.sample_rate, core.sample_rate).ravel()
+    win, n = core.window_samples, x.shape[0]
+    ends = [int(round(float(e) * core.sample_rate)) for e in ends_s]
+    windows = np.zeros((len(ends), win), dtype=np.float32)
+    for i, end in enumerate(ends):
+        start = end - win
+        a, b = max(0, start), min(n, end)
+        if b > a:
+            windows[i, a - start:b - start] = x[a:b]
+    if not len(ends):
+        return np.zeros((0, len(core.labels)), np.float32)
+    return np.concatenate([core.predict(windows[i:i + batch])
+                           for i in range(0, len(windows), batch)])
+
+
 def detect_timeline(core: DetectionCore, audio: AudioBuffer, *, hop_s: float, ema_alpha: float,
                     hysteresis: float, batch: int = 32) -> Timeline:
     """Offline detection over a whole buffer (any rate/channels)."""
@@ -265,9 +291,10 @@ class Detector(SideProcessor):
     """Live detection: ring buffer + hop scheduling + one inference thread (skip when busy)."""
 
     def __init__(self, core: DetectionCore, *, hop_s: float, ema_alpha: float,
-                 hysteresis: float, warm_up: bool = True, cpu_threads: int | None = None
-                 ) -> None:
+                 hysteresis: float, warm_up: bool = True, cpu_threads: int | None = None,
+                 state: DetectionState | None = None) -> None:
         self.core = core
+        self.state = state  # shared with the extractor (step 06); written on the audio thread
         self.hop_s = float(hop_s)
         self.smoother = Smoother(core.labels, core.thresholds, ema_alpha, hysteresis)
         self.warm_up_on_start = warm_up
@@ -315,6 +342,8 @@ class Detector(SideProcessor):
             self._next_hop = getattr(self, "_win", 0)
             self._job, self._results = None, []
         self.smoother.reset()
+        if self.state is not None:
+            self.state.reset()
 
     def close(self) -> None:
         thread = self._thread
@@ -386,11 +415,14 @@ class Detector(SideProcessor):
         for t, probs in results:
             p, active = self.smoother.update(probs)
             labels = self.core.labels
-            events.append(DetectionFrame(
+            frame = DetectionFrame(
                 t=round(t, 3),
                 probabilities={lab: round(float(min(1.0, max(0.0, p[j]))), 4)
                                for j, lab in enumerate(labels)},
-                active=[lab for j, lab in enumerate(labels) if active[j]]))
+                active=[lab for j, lab in enumerate(labels) if active[j]])
+            events.append(frame)
+            if self.state is not None:
+                self.state.update(frame.t, frame.probabilities, frame.active)
         return events
 
     # -- inference thread --------------------------------------------------------------------
@@ -446,8 +478,8 @@ class Detector(SideProcessor):
                 "skipped": int(self.skipped)}
 
 
-def build_detector(config, *, checkpoint: Path | None = None, device: str | None = None
-                   ) -> Detector:
+def build_detector(config, *, checkpoint: Path | None = None, device: str | None = None,
+                   state: DetectionState | None = None) -> Detector:
     """A ``Detector`` from the detection config. Raises ``DetectorUnavailable`` with a reason."""
     det = config.detection
     path = checkpoint if checkpoint is not None else det.checkpoint
@@ -460,12 +492,13 @@ def build_detector(config, *, checkpoint: Path | None = None, device: str | None
         raise DetectorUnavailable("PyTorch is not installed (pip install -e \".[ml]\")") from exc
     core = load_core(Path(path), device or det.live.device)
     return Detector(core, hop_s=det.live.hop_s, ema_alpha=det.live.ema_alpha,
-                    hysteresis=det.live.hysteresis, cpu_threads=det.live.cpu_threads)
+                    hysteresis=det.live.hysteresis, cpu_threads=det.live.cpu_threads,
+                    state=state)
 
 
 __all__ = ["DetectionCore", "Detector", "DetectorUnavailable", "Smoother", "Timeline",
            "build_detector", "checkpoint_for", "detect_file", "detect_timeline", "load_core",
-           "window_ends"]
+           "probabilities_at", "window_ends"]
 
 
 def checkpoint_for(config, experiment: str | None = None) -> Path | None:

@@ -165,10 +165,58 @@ def test_websocket_streams_live_data(client: TestClient) -> None:
             seen.add(message["type"])
             if message["type"] == "spectrogram":
                 assert len(message["payload"]["magnitudes_db"]) == 128
-            if {"status", "levels", "waveform", "spectrogram"} <= seen:
+            if message["type"] in ("levels", "waveform", "spectrogram"):
+                seen.add(f"{message['type']}:{message['payload']['source']}")
+            if {"status", "spectrogram:input", "spectrogram:output", "levels:output",
+                    "waveform:output", "levels:input", "waveform:input"} <= seen:
                 break
         client.post("/api/session/stop")
     assert {"status", "levels", "waveform", "spectrogram"} <= seen
+    assert {"spectrogram:input", "spectrogram:output", "levels:output", "waveform:output"} <= seen
+
+
+def test_bypass_over_rest_and_websocket(client: TestClient, no_leaked_threads) -> None:
+    assert client.get("/api/session").json()["bypass"] is False
+    body = client.put("/api/session/bypass", json={"enabled": True}).json()
+    assert body["bypass"] is True and body["state"] == "idle"  # remembered while idle
+    started = client.post("/api/session/start", json=FILE_SOURCE).json()
+    assert started["bypass"] is True  # the new session starts bypassed
+    assert started["extraction"]["method"] == "mask_baseline"
+    assert started["extraction"]["latency_ms"] == pytest.approx(21.33)
+    assert started["extraction"]["gating"] is False  # no detection model in tests
+    assert started["latency_ms"] >= 20.0 + 21.3  # chunk + STFT
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "set_bypass", "t": 0, "payload": {"enabled": False}})
+        for _ in range(500):
+            message = ws.receive_json()
+            if message["type"] == "status" and message["payload"]["bypass"] is False:
+                break
+        else:
+            raise AssertionError("no status with bypass off")
+        ws.send_json({"type": "set_bypass", "t": 0, "payload": {"enabled": "maybe"}})
+        for _ in range(500):
+            message = ws.receive_json()
+            if message["type"] == "error":
+                assert "set_bypass" in message["payload"]["message"]
+                break
+        else:
+            raise AssertionError("no error for a malformed set_bypass")
+    assert client.get("/api/session").json()["bypass"] is False
+    assert client.put("/api/session/bypass", json={}).status_code == 422
+    client.post("/api/session/stop")
+
+
+def test_selected_target_reaches_the_extractor(client: TestClient, no_leaked_threads) -> None:
+    client.put("/api/session/target", json={"labels": ["speech"], "attenuation_db": 12})
+    client.post("/api/session/start", json=FILE_SOURCE)
+    session = client.app.state.session_manager.session
+    extractor = session._chain.stage("extractor")
+    deadline = time.monotonic() + 3
+    while extractor.target is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert extractor.target.labels == {"speech"} and extractor.target.attenuation_db == 12.0
+    client.post("/api/session/stop")
 
 
 def test_app_shutdown_stops_the_session(root_config, no_leaked_threads) -> None:

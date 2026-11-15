@@ -400,7 +400,7 @@ def config():
 
 
 AUDIO_THREAD_NAMES = ("soundspy-session", "fake-input-stream", "fake-output-stream",
-                      "soundspy-detector")
+                      "soundspy-detector", "soundspy-runs")
 
 
 @pytest.fixture
@@ -427,13 +427,14 @@ def no_leaked_threads():
 
 @pytest.fixture
 def app_config(config, tmp_path: Path):
-    """Project configuration with the database and ``data/raw`` in a temporary folder.
+    """Project configuration with the database, ``data/raw`` and ``outputs`` in a temporary
+    folder (processing runs are written to ``outputs/processed``).
 
     No detection model (``detection.checkpoint = None``): sessions start without the detector
     and warn, so tests never load a real trained model (use ``stub_experiment`` for one).
     """
     db_url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
-    paths = {**config.paths, "raw": tmp_path / "raw"}
+    paths = {**config.paths, "raw": tmp_path / "raw", "outputs": tmp_path / "outputs"}
     detection = dataclasses.replace(config.detection, checkpoint=None)
     return dataclasses.replace(config, database_url=db_url, paths=paths, detection=detection)
 

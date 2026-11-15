@@ -1,7 +1,8 @@
 // Subscribes to /ws/session for the lifetime of the component and routes every message:
 // status -> store; levels/waveform/spectrogram -> liveFrames (no React re-render);
 // detections -> liveFrames (timeline) + store (latest frame, for the chips);
-// warning/error -> toasts. Also exposes sendTarget() for the class chips.
+// run -> store (an offline processing run changed state); warning/error -> toasts.
+// Also exposes sendTarget() for the class chips and the attenuation slider.
 import { useEffect } from 'react'
 import type { ServerMessage, TargetSpec } from '../api/types.ts'
 import { SessionSocket, sessionSocketUrl } from '../api/ws.ts'
@@ -36,6 +37,12 @@ export function handleServerMessage(message: ServerMessage): void {
     case 'detections':
       liveFrames.pushDetections(message.payload, message.t)
       store.setDetection({ ...message.payload, t: message.t })
+      break
+    case 'run':
+      store.upsertRun(message.payload)
+      if (message.payload.status === 'failed') {
+        store.pushToast('error', `Processing failed: ${message.payload.error ?? 'unknown error'}`)
+      }
       break
     case 'warning':
       store.pushToast('warning', message.payload.message)

@@ -12,6 +12,7 @@ from soundspy import __version__
 from soundspy.cli import (
     check_mic_cmd,
     data_cmd,
+    db_cmd,
     detect_cmd,
     devices_cmd,
     evaluate_cmd,
@@ -33,6 +34,7 @@ COMMAND_MODULES = (
     evaluate_cmd,
     detect_cmd,
     extract_cmd,
+    db_cmd,
 )
 
 

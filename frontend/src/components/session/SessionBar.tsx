@@ -148,6 +148,17 @@ export function SessionBar() {
           ) : (
             <Stat label="Detector" value="off" />
           )}
+          {status?.extraction && (
+            <Stat
+              label="Extraction"
+              value={`${status.extraction.method} · +${status.extraction.latency_ms} ms${
+                status.extraction.method === 'mask_baseline' && !status.extraction.gating
+                  ? ' · no gating'
+                  : ''
+              }${status.bypass ? ' · bypassed' : ''}`}
+              warn={status.extraction.method === 'mask_baseline' && !status.extraction.gating}
+            />
+          )}
         </div>
       )}
     </section>

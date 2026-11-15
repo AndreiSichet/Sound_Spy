@@ -104,7 +104,15 @@ python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_
 soundspy train detection --smoke              # 2-epoch end-to-end check (~2 min)
 soundspy train detection                      # full run (hours); --resume continues
 soundspy evaluate detection --split test      # fine-tuned vs zero-shot
-soundspy detect dataaw\<file>.wav          # per-class timeline of a recording
+soundspy detect data\raw\<file>.wav          # per-class timeline of a recording
+```
+
+### Extraction (step 06)
+
+```powershell
+soundspy extract data\raw\<file>.wav --labels speech   # keep speech, rest -30 dB -> outputs\processed
+soundspy evaluate extraction --method mask_baseline    # 5-system comparison on 500 test mixtures (~4 min)
+soundspy db rebuild                                    # the database is only an index: rebuild it from the sidecars
 ```
 
 The Semantic tab then shows live detections (chips + timeline) once

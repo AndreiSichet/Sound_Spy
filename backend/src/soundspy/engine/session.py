@@ -5,13 +5,18 @@ A session ties together an ``AudioSource``, a ``ProcessorChain``, an optional ou
 thread**::
 
     source.chunks(chunk_frames)  ──►  chain.process(chunk)  ──►  output.write(out)  (if monitoring)
-            │                               │
+            │                               │                        (or chain.dry when bypassed)
             └─► recorder.write(chunk)       └─► events ──► on_event(...)  (levels, waveform, ...)
                (the RAW input chunk)
 
-- **Changes arrive between chunks.** ``set_target`` and ``set_monitor`` only store the request;
-  the worker applies it before processing the next chunk, so a chunk is never processed with a
-  half-changed setting. Recording start/stop take a lock the worker also holds while writing.
+- **Changes arrive between chunks.** ``set_target``, ``set_monitor`` and ``set_bypass`` only
+  store the request; the worker applies it before processing the next chunk, so a chunk is never
+  processed with a half-changed setting. Recording start/stop take a lock the worker also holds
+  while writing.
+- **Bypass (A/B listening).** With bypass on, the speaker gets the chain's *dry* signal (the
+  input after channel reduction, delayed exactly as much as the processing delays the output)
+  instead of the output. Processing keeps running and both signals are time-aligned, so
+  switching is instant and seamless.
 - **Timing.** Every chunk's processing time is measured. The real-time factor (RTF) is processing
   time ÷ chunk duration: 1.0 means the computer only just keeps up. ``status`` reports mean and
   p95 over the last ``engine.rtf_window_s``; a ``WarningEvent`` is emitted when p95 RTF exceeds
@@ -21,12 +26,19 @@ thread**::
   They never propagate to the caller's process.
 - ``stop()`` is idempotent: it closes the source (which unblocks the worker), joins the thread,
   closes the output and finishes an active recording.
+- **Garbage collection.** A full collection scans every long-lived object in the process (the
+  model, PyTorch, the web framework: ~140,000 objects, 45-75 ms on the laptop) and Python stops
+  *all* threads meanwhile, the audio thread included. That is longer than the output queue's
+  cushion, so it caused an occasional underrun. While a session runs, everything allocated
+  before it is therefore **frozen** (``gc.freeze()``: kept out of the collector's scans), which
+  makes a full collection take about a millisecond; ``gc.unfreeze()`` when the session ends.
 
 ``on_event`` is called **on the worker thread**; the API layer hands events to its event loop.
 """
 
 from __future__ import annotations
 
+import gc
 import logging
 import threading
 import time
@@ -79,9 +91,12 @@ class Session:
         self._thread: threading.Thread | None = None
         self._started_at = 0.0
         self._released = False
+        self._frozen = False
 
         self._pending_target: TargetSpec | None = None
         self._pending_monitor: tuple[bool, float, bool] | None = None
+        self._pending_bypass: bool | None = None
+        self.bypass = False
         self.target: TargetSpec | None = None
         self.monitoring = False
         self.gain_db = float(getattr(output, "gain_db", 0.0) or 0.0)
@@ -133,6 +148,9 @@ class Session:
         except Exception:
             source.close()
             raise
+        gc.collect()  # now, before audio flows ...
+        gc.freeze()  # ... and nothing allocated so far is scanned again during the session
+        self._frozen = True
         self._started_at = time.monotonic()
         self._state = "running"
         self._thread = threading.Thread(target=self._run, name="soundspy-session", daemon=True)
@@ -182,6 +200,9 @@ class Session:
             self._chain.close()  # stops the detector's inference thread
         except Exception:  # noqa: BLE001
             logger.exception("closing the processing chain failed")
+        if self._frozen:
+            self._frozen = False
+            gc.unfreeze()  # back to normal collection between sessions
 
     # --- control (any thread) ------------------------------------------------------------------
 
@@ -196,6 +217,13 @@ class Session:
             raise SessionError("no output device is available for monitoring")
         with self._lock:
             self._pending_monitor = (enabled, float(gain_db), muted)
+        if not self.running:
+            self._apply_pending()
+
+    def set_bypass(self, enabled: bool) -> None:
+        """Play the unprocessed (delay-matched) signal instead of the chain output."""
+        with self._lock:
+            self._pending_bypass = bool(enabled)
         if not self.running:
             self._apply_pending()
 
@@ -240,6 +268,9 @@ class Session:
         with self._lock:
             target, self._pending_target = self._pending_target, None
             monitor, self._pending_monitor = self._pending_monitor, None
+            bypass, self._pending_bypass = self._pending_bypass, None
+        if bypass is not None:
+            self.bypass = bypass
         if target is not None:
             self.target = target
             self._chain.set_target(target)
@@ -268,7 +299,8 @@ class Session:
                 self._times.append(time.perf_counter() - started)
                 self.chunks_processed += 1
                 if self.monitoring and self._output is not None:
-                    self._output.write(out)
+                    dry = self._chain.dry if self.bypass else None
+                    self._output.write(dry if dry is not None else out)
                 with self._rec_lock:
                     if self._recorder is not None:
                         self._recorder.write(chunk)  # the raw input, all channels
@@ -334,6 +366,7 @@ class Session:
         if not self._chunk_s:
             return None
         latency = self._source.input_latency_s + self._chunk_s
+        latency += self._chain.latency_samples / self._source.sample_rate  # e.g. the STFT
         if self.monitoring and self._output is not None:
             latency += float(getattr(self._output, "latency_s", 0.0))
         return round(latency * 1000, 1)
@@ -351,6 +384,7 @@ class Session:
         # reply to the request already shows the new setting.
         with self._lock:
             pending = self._pending_monitor
+            pending_bypass = self._pending_bypass
         if pending is not None:
             monitoring = pending[0] and output is not None
             gain_db, muted = pending[1], pending[2]
@@ -384,7 +418,20 @@ class Session:
             dropped_chunks=source.stats.dropped_chunks,
             output_dropped=int(getattr(output, "dropped_chunks", 0)),
             detector=self._detector_info(),
+            bypass=self.bypass if pending_bypass is None else pending_bypass,
+            extraction=self._extraction_info(),
         )
+
+    def _extraction_info(self) -> dict[str, Any] | None:
+        """``{method, latency_ms, gating, target_active}`` of the chain's extractor."""
+        if not self._chain.has("extractor"):
+            return None
+        stage = self._chain.stage("extractor")
+        info = getattr(stage, "status_info", None)
+        if callable(info):
+            return info()
+        return {"method": "passthrough", "latency_ms": 0.0, "gating": False,
+                "target_active": False}
 
     def _detector_info(self) -> dict[str, Any] | None:
         if not self._chain.has("detector"):

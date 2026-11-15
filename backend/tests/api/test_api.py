@@ -39,16 +39,11 @@ def test_config(client: TestClient) -> None:
     assert body["device_profile"] == "laptop"
 
 
-@pytest.mark.parametrize(
-    ("method", "path", "step"),
-    [
-        ("post", "/api/recordings/1/process", "step-06"),
-    ],
-)
-def test_stub_routes_return_501(client: TestClient, method: str, path: str, step: str) -> None:
-    response = getattr(client, method)(path)
-    assert response.status_code == 501
-    assert response.json() == {"detail": f"not implemented ({step})"}
+def test_no_route_is_a_stub_any_more(client: TestClient) -> None:
+    spec = client.get("/openapi.json").json()
+    stubs = [f"{method} {path}" for path, methods in spec["paths"].items()
+             for method, op in methods.items() if "501" in op.get("responses", {})]
+    assert stubs == []
 
 
 def test_openapi_lists_all_routes(client: TestClient) -> None:
@@ -68,6 +63,10 @@ def test_openapi_lists_all_routes(client: TestClient) -> None:
         "/api/recordings/{recording_id}",
         "/api/recordings/{recording_id}/audio",
         "/api/recordings/{recording_id}/process",
+        "/api/recordings/{recording_id}/runs",
+        "/api/runs/{run_id}",
+        "/api/runs/{run_id}/audio",
+        "/api/session/bypass",
     } <= paths
 
 

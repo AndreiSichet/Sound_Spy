@@ -9,7 +9,7 @@ configs are resolved against the **project root** (the folder that contains ``ba
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -278,6 +278,48 @@ class DetectionConfig:
 
 
 BACKBONES = ("efficientat_mn10_as", "stub")
+EXTRACTION_METHODS = ("mask_baseline", "passthrough")
+
+
+@dataclass(frozen=True)
+class MaskBaselineConfig:
+    """``configs/extraction/mask_baseline.yaml``: the detector-gated Wiener filter (step 06)."""
+
+    n_fft: int
+    hop: int
+    open_ms: float
+    hold_ms: float
+    close_ms: float
+    noise_alpha: float
+    noise_guard_s: float
+    noise_max_age_s: float
+    minstat_window_s: float
+    minstat_smoothing: float
+    minstat_bias: float
+    dd_alpha: float
+    gain_smoothing: float
+
+
+@dataclass(frozen=True)
+class ExtractionEvalConfig:
+    n: int
+    seed: int
+    sample_rate: int
+    attenuation_db: float
+    examples: int
+    live_delay_s: float
+
+
+@dataclass(frozen=True)
+class ExtractionConfig:
+    """``configs/extraction/default.yaml`` + the per-method files."""
+
+    method: str  # mask_baseline | passthrough
+    offline_max_seconds: float
+    offline_chunk_frames: int
+    evaluation: ExtractionEvalConfig
+    mask_baseline: MaskBaselineConfig
+    neural_tse: dict[str, Any]  # placeholder until step 07 (not validated)
 
 
 @dataclass(frozen=True)
@@ -295,7 +337,7 @@ class AppConfig:
     database_url: str
     data: DataConfig
     detection: DetectionConfig | None = None
-    extraction: dict[str, dict[str, Any]] = field(default_factory=dict)
+    extraction: ExtractionConfig | None = None
 
 
 class _Section:
@@ -327,7 +369,8 @@ class _Section:
 
     def _fail(self, key: str, rule: str) -> ConfigError:
         value = self.data[key]
-        return ConfigError(f"{self.source}: '{self.name}.{key}' must be {rule}, got {value!r}")
+        path = f"{self.name}.{key}".lstrip(".")  # top-level sections have an empty name
+        return ConfigError(f"{self.source}: '{path}' must be {rule}, got {value!r}")
 
     def boolean(self, key: str) -> bool:
         value = self.data[key]
@@ -603,6 +646,66 @@ def load_detection_config(path: Path, project_root: Path) -> DetectionConfig:
     )
 
 
+def load_mask_baseline_config(path: Path) -> MaskBaselineConfig:
+    """Load and validate ``configs/extraction/mask_baseline.yaml``."""
+    source = f"extraction/{Path(path).name}"
+    keys = ("n_fft", "hop", "open_ms", "hold_ms", "close_ms", "noise_alpha", "noise_guard_s",
+            "noise_max_age_s", "minstat_window_s", "minstat_smoothing", "minstat_bias",
+            "dd_alpha", "gain_smoothing")
+    s = _Section({"root": load_yaml(path)}, "root", keys, source)
+    s.name = ""
+    n_fft, hop = s.integer("n_fft", ge=64), s.integer("hop", ge=1)
+    if n_fft % 2:
+        raise s._fail("n_fft", "an even number")
+    if n_fft % hop or n_fft // hop < 2:
+        raise s._fail("hop", f"a divisor of n_fft ({n_fft}) with n_fft / hop >= 2")
+    return MaskBaselineConfig(
+        n_fft=n_fft,
+        hop=hop,
+        open_ms=s.number("open_ms", ge=0, le=1000),
+        hold_ms=s.number("hold_ms", ge=0, le=5000),
+        close_ms=s.number("close_ms", ge=0, le=5000),
+        noise_alpha=s.number("noise_alpha", ge=0, le=0.9999),
+        noise_guard_s=s.number("noise_guard_s", ge=0, le=5),
+        noise_max_age_s=s.number("noise_max_age_s", gt=0),
+        minstat_window_s=s.number("minstat_window_s", gt=0, le=30),
+        minstat_smoothing=s.number("minstat_smoothing", ge=0, le=0.999),
+        minstat_bias=s.number("minstat_bias", ge=1, le=10),
+        dd_alpha=s.number("dd_alpha", ge=0, le=0.9999),
+        gain_smoothing=s.number("gain_smoothing", ge=0, le=0.999),
+    )
+
+
+def load_extraction_config(directory: Path) -> ExtractionConfig:
+    """Load ``configs/extraction/``: ``default.yaml`` and the per-method files."""
+    directory = Path(directory)
+    source = "extraction/default.yaml"
+    top = _Section({"root": load_yaml(directory / "default.yaml")}, "root",
+                   ("method", "offline", "evaluation"), source)
+    top.name = ""
+    if top.data["method"] not in EXTRACTION_METHODS:
+        raise top._fail("method", f"one of {list(EXTRACTION_METHODS)}")
+    off = _Section(top.data, "offline", ("max_seconds", "chunk_frames"), source)
+    ev = _Section(top.data, "evaluation", ("n", "seed", "sample_rate", "attenuation_db",
+                                           "examples", "live_delay_s"), source)
+    neural = directory / "neural_tse.yaml"
+    return ExtractionConfig(
+        method=str(top.data["method"]),
+        offline_max_seconds=off.number("max_seconds", gt=0),
+        offline_chunk_frames=off.integer("chunk_frames", ge=1),
+        evaluation=ExtractionEvalConfig(
+            n=ev.integer("n", ge=1),
+            seed=ev.integer("seed", ge=0),
+            sample_rate=ev.integer("sample_rate", ge=8000),
+            attenuation_db=ev.number("attenuation_db", ge=0, le=120),
+            examples=ev.integer("examples", ge=0),
+            live_delay_s=ev.number("live_delay_s", ge=0, le=5),
+        ),
+        mask_baseline=load_mask_baseline_config(directory / "mask_baseline.yaml"),
+        neural_tse=load_yaml(neural) if neural.is_file() else {},
+    )
+
+
 CACHE_ENV_VARS: dict[str, str] = {
     "TORCH_HOME": "torch",
     "HF_HOME": "huggingface",
@@ -668,7 +771,6 @@ def load_config(
 
     paths = {key: resolve_path(value, project_root) for key, value in default["paths"].items()}
     api = default.get("api", {})
-    extraction_dir = configs_dir / "extraction"
 
     return AppConfig(
         project_root=project_root,
@@ -691,5 +793,5 @@ def load_config(
         data=load_data_config(configs_dir / "data" / "default.yaml"),
         detection=load_detection_config(configs_dir / "detection" / "default.yaml",
                                         project_root),
-        extraction={p.stem: load_yaml(p) for p in sorted(extraction_dir.glob("*.yaml"))},
+        extraction=load_extraction_config(configs_dir / "extraction"),
     )

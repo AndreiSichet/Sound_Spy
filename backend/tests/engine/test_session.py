@@ -90,6 +90,14 @@ def test_start_stop_emits_every_event_type(config, wav, no_leaked_threads) -> No
     assert status.chunks_processed > 0 and status.rtf_p95 is not None
     assert status.proc_ms_mean is not None and status.chunk_ms == 20.0
     assert status.source == "file" and status.channels == 2 and status.sample_rate == SR
+    # step 06: the output is observed too, and the extractor is reported
+    for kind in (SpectrogramFrame, WaveformFrame, LevelFrame):
+        assert {e.source for e in events.of(kind)} == {"input", "output"}
+    assert status.extraction == {"method": "mask_baseline", "latency_ms": 21.33,
+                                 "gating": False, "target_active": False}
+    assert status.bypass is False
+    codes = [w.code for w in events.of(WarningEvent)]
+    assert "detector_unavailable" in codes and "gating_unavailable" in codes
 
 
 class TargetProbe(Processor):
@@ -222,8 +230,81 @@ def test_monitoring_plays_the_chain_output(
     assert np.abs(played).max() > 0  # the (mono-mixed) chain output reached the speakers
     assert played.shape[1] == 2  # mono upmixed to the stereo output
     assert status.monitoring and status.gain_db == -6.0
-    assert status.latency_ms > 20.0  # chunk + output stream + queue
+    assert status.latency_ms > 20.0 + 21.3  # chunk + the extractor's STFT + output stream
     assert stream.closed
+
+
+class Halver(Processor):
+    """The "processing" of the bypass test: half the level, 480 samples late."""
+
+    latency_samples = 480
+
+    def configure(self, sample_rate: int, num_channels: int) -> int:
+        super().configure(sample_rate, num_channels)
+        self._buffer = np.zeros((480, num_channels), dtype=np.float32)
+        return num_channels
+
+    def process(self, chunk: AudioBuffer) -> AudioBuffer:
+        joined = np.concatenate((self._buffer, chunk.samples * np.float32(0.5)))
+        self._buffer = joined[chunk.num_frames:]
+        return AudioBuffer(np.ascontiguousarray(joined[: chunk.num_frames]), chunk.sample_rate)
+
+
+def test_bypass_sends_the_delay_matched_input_to_the_speakers(
+    config, tmp_path, fake_sounddevice, no_leaked_threads
+) -> None:
+    wav = tmp_path / "level.wav"
+    sf.write(str(wav), np.full((N, 1), 0.4, dtype=np.float32), SR, subtype="FLOAT")
+    tap = Passthrough()
+    chain = ProcessorChain([tap, Halver()], names={"reducer": tap, "extractor": tap},
+                           dry_after="reducer")
+    sink = SpeakerSink(resolve_output(), config.output)
+    session, events = _session(config, wav, chain=chain, output=sink)
+    session.start()
+    session.set_monitor(True, 0.0)
+    stream = fake_sounddevice.output_streams()[-1]
+
+    def level() -> float:
+        played = np.nan_to_num(stream.played_audio())
+        return float(np.abs(played[-2000:]).max()) if played.shape[0] > 4000 else 0.0
+
+    events.wait_for(lambda: abs(level() - 0.2) < 1e-3)  # the processed signal (halved)
+    assert session.status.bypass is False
+    session.set_bypass(True)
+    assert session.status.bypass is True  # reported at once, applied at the next chunk
+    events.wait_for(lambda: abs(level() - 0.4) < 1e-3)  # the unprocessed input
+    assert session.chunks_processed > 0  # processing kept running
+    session.set_bypass(False)
+    events.wait_for(lambda: abs(level() - 0.2) < 1e-3)
+    status = session.status
+    session.stop()
+    assert status.extraction == {"method": "passthrough", "latency_ms": 0.0, "gating": False,
+                                 "target_active": False}
+    assert status.latency_ms > 20.0 + 10.0  # includes the chain's 480 samples (10 ms)
+
+
+def test_long_lived_objects_are_frozen_while_a_session_runs(config, wav) -> None:
+    """A full garbage collection pauses every thread; frozen objects make it short."""
+    import gc
+
+    assert gc.get_freeze_count() == 0
+    session, events = _session(config, wav)
+    session.start()
+    try:
+        assert gc.get_freeze_count() > 10_000  # the interpreter, numpy, the config, ...
+        events.wait_for(lambda: session.chunks_processed > 5)
+        started = time.perf_counter()
+        gc.collect()  # what would otherwise stall the audio thread for tens of milliseconds
+        assert time.perf_counter() - started < 0.02
+    finally:
+        session.stop()
+    assert gc.get_freeze_count() == 0  # normal collection again between sessions
+
+
+def test_bypass_before_start_is_kept(config, wav) -> None:
+    session, _ = _session(config, wav)
+    session.set_bypass(True)
+    assert session.bypass is True and session.status.bypass is True
 
 
 def test_a_session_starts_only_once(config, wav) -> None:

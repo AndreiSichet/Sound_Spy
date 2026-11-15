@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import URL, Engine, create_engine, event
+from sqlalchemy import URL, Engine, MetaData, create_engine, event, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -61,8 +61,47 @@ def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
-def init_db(engine: Engine) -> None:
-    """Create all tables that do not exist yet (no migrations; see docs/decisions.md)."""
-    from soundspy.api.db import models  # noqa: F401  (registers the tables on Base)
+def stored_schema_version(engine: Engine) -> int | None:
+    """The version recorded in the database; ``None`` if it has none (new, or pre-versioning)."""
+    if "meta" not in inspect(engine).get_table_names():
+        return None
+    with engine.connect() as connection:
+        value = connection.execute(
+            text("SELECT value FROM meta WHERE key = 'schema_version'")).scalar()
+    try:
+        return int(value) if value is not None else None
+    except ValueError:
+        return None
 
+
+def rebuild_db(engine: Engine) -> None:
+    """Drop **every** table and create the current schema (empty; re-sync from the sidecars).
+
+    Safe because the database only indexes sidecar files. Tables are found by reflection, so
+    tables of an older schema that the code no longer knows are dropped too.
+    """
+    from soundspy.api.db import models
+
+    old = MetaData()
+    old.reflect(engine)
+    old.drop_all(engine)
     Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        session.add(models.Meta(key="schema_version", value=str(models.SCHEMA_VERSION)))
+        session.commit()
+
+
+def init_db(engine: Engine) -> bool:
+    """Make the database match the code's schema. Returns True if it was (re)built.
+
+    No migrations: an empty database gets the tables; a database whose stored schema version
+    differs from ``SCHEMA_VERSION`` (or that has tables but no version) is dropped and recreated.
+    The caller then re-indexes the sidecars (``services/index.py``).
+    """
+    from soundspy.api.db import models
+
+    if stored_schema_version(engine) == models.SCHEMA_VERSION:
+        Base.metadata.create_all(engine)  # no-op unless a table was removed by hand
+        return False
+    rebuild_db(engine)
+    return True

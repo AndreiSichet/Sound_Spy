@@ -1,8 +1,10 @@
-// Global UI state (Zustand): connection, active tab, backend config, latest status, recordings,
-// toasts, the latest detection (4 per second, for the class chips) and the selected classes.
+// Global UI state (Zustand): connection, active tab, backend config, latest status, recordings
+// and their processing runs, toasts, the latest detection (4 per second, for the class chips),
+// the selected classes and the attenuation of everything else.
 // High-rate visual frames and the detection history are NOT here: they live in
 // components/viz/liveFrames.ts.
 import { create } from 'zustand'
+import { DEFAULT_ATTENUATION_DB } from '../api/target.ts'
 import type { SocketState } from '../api/ws.ts'
 import type {
   ConfigResponse,
@@ -10,6 +12,7 @@ import type {
   EngineStatus,
   Mode,
   Recording,
+  Run,
 } from '../api/types.ts'
 
 export type BackendState = 'unknown' | 'up' | 'down'
@@ -32,6 +35,10 @@ export interface AppState {
   detection: (DetectionFrame & { t: number }) | null
   /** Class IDs the user selected as the target (sent as TargetSpec.labels). */
   selected: string[]
+  /** How much non-target sound is turned down, in dB (TargetSpec.attenuation_db). */
+  attenuation: number
+  /** Processing runs by recording id, newest first. */
+  runs: Record<number, Run[]>
   setBackend: (state: BackendState, version?: string | null) => void
   setWsState: (state: SocketState) => void
   setActiveTab: (tab: Mode) => void
@@ -42,6 +49,10 @@ export interface AppState {
   dismissToast: (id: number) => void
   setDetection: (frame: (DetectionFrame & { t: number }) | null) => void
   setSelected: (labels: string[]) => void
+  setAttenuation: (db: number) => void
+  setRuns: (recordingId: number, runs: Run[]) => void
+  /** Insert or update one run (from a `run` WebSocket message or a request). */
+  upsertRun: (run: Run) => void
 }
 
 export const initialAppState = {
@@ -55,6 +66,8 @@ export const initialAppState = {
   toasts: [] as Toast[],
   detection: null as (DetectionFrame & { t: number }) | null,
   selected: [] as string[],
+  attenuation: DEFAULT_ATTENUATION_DB,
+  runs: {} as Record<number, Run[]>,
 }
 
 const MAX_TOASTS = 4
@@ -78,4 +91,16 @@ export const useAppStore = create<AppState>()((set) => ({
   dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
   setDetection: (detection) => set({ detection }),
   setSelected: (selected) => set({ selected }),
+  setAttenuation: (attenuation) => set({ attenuation }),
+  setRuns: (recordingId, runs) => set((state) => ({ runs: { ...state.runs, [recordingId]: runs } })),
+  upsertRun: (run) =>
+    set((state) => {
+      if (run.recording_id === null) return state
+      const current = state.runs[run.recording_id] ?? []
+      const known = current.some((r) => r.run_id === run.run_id)
+      const next = known
+        ? current.map((r) => (r.run_id === run.run_id ? run : r))
+        : [run, ...current] // newest first
+      return { runs: { ...state.runs, [run.recording_id]: next } }
+    }),
 }))

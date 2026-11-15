@@ -7,8 +7,8 @@
   schedules ``_publish`` on the API's event loop with ``loop.call_soon_threadsafe``; conversion to
   a WebSocket message and fan-out to clients happen on the loop, so the audio thread never waits
   for a network send.
-- Remembers the target and the monitor settings between sessions, and stops the session on app
-  shutdown.
+- Remembers the target, the monitor settings and bypass between sessions, and stops the session
+  on app shutdown.
 
 Routes call these methods from FastAPI's thread pool, so a lock serialises start/stop.
 """
@@ -26,7 +26,8 @@ from sqlalchemy.orm import Session as DbSession
 
 from soundspy.api.db.models import Recording
 from soundspy.api.schemas import SessionStartRequest, SourceRequest, event_message
-from soundspy.api.services.recordings import stored_path, sync_recordings
+from soundspy.api.services.index import sync_all
+from soundspy.api.services.recordings import stored_path
 from soundspy.api.ws import ConnectionManager
 from soundspy.config import AppConfig
 from soundspy.core.events import EngineStatus, Event
@@ -74,6 +75,7 @@ class SessionManager:
         self.session: Session | None = None
         self.target: TargetSpec | None = None
         self.monitor = (False, config.output.default_gain_db, False)
+        self.bypass = False
         self._lock = threading.RLock()
 
     @property
@@ -94,7 +96,8 @@ class SessionManager:
         enabled, gain_db, muted = self.monitor
         if session is not None:  # a stopped/failed session: keep its figures, show the settings
             return dataclasses.replace(
-                session.status, monitoring=enabled, gain_db=gain_db, muted=muted
+                session.status, monitoring=enabled, gain_db=gain_db, muted=muted,
+                bypass=self.bypass,
             )
         return EngineStatus(
             t=0.0,
@@ -103,6 +106,7 @@ class SessionManager:
             monitoring=enabled,
             gain_db=gain_db,
             muted=muted,
+            bypass=self.bypass,
         )
 
     # --- building ------------------------------------------------------------------------------
@@ -154,6 +158,7 @@ class SessionManager:
         )
         if self.target is not None:
             session.set_target(self.target)
+        session.set_bypass(self.bypass)
         session.start()
         return session
 
@@ -214,6 +219,14 @@ class SessionManager:
         if session is not None and session.running:
             session.set_target(target)
 
+    def set_bypass(self, enabled: bool) -> EngineStatus:
+        """A/B listening: play the unprocessed (delay-matched) signal instead of the output."""
+        self.bypass = bool(enabled)
+        session = self.session
+        if session is not None and session.running:
+            session.set_bypass(self.bypass)
+        return self.status()
+
     def set_monitor(self, enabled: bool, gain_db: float, muted: bool) -> EngineStatus:
         session = self.session
         if session is not None and session.running:
@@ -245,7 +258,7 @@ class SessionManager:
         return self._row_for(db, path)
 
     def _sync(self, db: DbSession) -> None:
-        sync_recordings(db, self.config.paths["raw"], self.config.project_root)
+        sync_all(db, self.config)
 
     def _row_for(self, db: DbSession, path: Path) -> Recording:
         self._sync(db)

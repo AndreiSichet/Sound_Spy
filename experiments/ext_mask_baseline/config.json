@@ -1,0 +1,46 @@
+{
+  "method": "mask_baseline",
+  "extraction": {
+    "n_fft": 1024,
+    "hop": 256,
+    "open_ms": 10.0,
+    "hold_ms": 300.0,
+    "close_ms": 200.0,
+    "noise_alpha": 0.95,
+    "noise_guard_s": 0.5,
+    "noise_max_age_s": 5.0,
+    "minstat_window_s": 1.5,
+    "minstat_smoothing": 0.85,
+    "minstat_bias": 1.6,
+    "dd_alpha": 0.98,
+    "gain_smoothing": 0.6
+  },
+  "evaluation": {
+    "n": 500,
+    "seed": 1234,
+    "sample_rate": 48000,
+    "attenuation_db": 30.0,
+    "examples": 10,
+    "live_delay_s": 0.05
+  },
+  "detection": {
+    "checkpoint": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\det_mn10_v1\\checkpoints\\best.pt",
+    "hop_s": 0.25,
+    "ema_alpha": 0.5,
+    "hysteresis": 0.1
+  },
+  "labels": [
+    "speech",
+    "music",
+    "footsteps",
+    "dishes",
+    "chair_scrape",
+    "alarm",
+    "traffic"
+  ],
+  "app_version": "0.1.0",
+  "git": {
+    "commit": "38e5284faedadeec74572c79b94d3dbfa893b2c5",
+    "dirty": true
+  }
+}

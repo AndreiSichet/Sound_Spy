@@ -1,13 +1,15 @@
-// Tab 1: the live session. Session bar, listening, recording, the class chips (live detection
-// + target selection), the detection timeline, the three live visuals and the recordings list.
+// Tab 1: the live session. Session bar, listening + extraction controls, recording, the class
+// chips (live detection + target selection), the detection timeline, the live visuals (the
+// spectrogram can show input, output or both) and the recordings list with processing runs.
 import { ClassChips } from '../components/detection/ClassChips.tsx'
 import { DetectionTimeline } from '../components/detection/DetectionTimeline.tsx'
+import { ExtractionControls } from '../components/session/ExtractionControls.tsx'
 import { MonitorControls } from '../components/session/MonitorControls.tsx'
 import { RecordControls } from '../components/session/RecordControls.tsx'
 import { RecordingsList } from '../components/session/RecordingsList.tsx'
 import { SessionBar } from '../components/session/SessionBar.tsx'
 import { LevelMeters } from '../components/viz/LevelMeters.tsx'
-import { Spectrogram } from '../components/viz/Spectrogram.tsx'
+import { SpectrogramPanel } from '../components/viz/SpectrogramPanel.tsx'
 import { Waveform } from '../components/viz/Waveform.tsx'
 
 export function SemanticTab() {
@@ -24,6 +26,7 @@ export function SemanticTab() {
 
       <div className="flex flex-col gap-3 rounded-md border border-slate-800 p-4">
         <MonitorControls />
+        <ExtractionControls />
         <RecordControls />
       </div>
 
@@ -42,13 +45,10 @@ export function SemanticTab() {
           <figcaption className="text-center text-xs text-slate-500">Input level (dBFS)</figcaption>
         </figure>
         <div className="space-y-3">
-          <figure className="space-y-1">
-            <Spectrogram />
-            <figcaption className="text-xs text-slate-500">Spectrogram (mel scale)</figcaption>
-          </figure>
+          <SpectrogramPanel />
           <figure className="space-y-1">
             <Waveform />
-            <figcaption className="text-xs text-slate-500">Waveform (mono mix)</figcaption>
+            <figcaption className="text-xs text-slate-500">Waveform (input, mono mix)</figcaption>
           </figure>
         </div>
       </div>

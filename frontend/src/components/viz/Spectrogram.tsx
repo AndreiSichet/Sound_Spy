@@ -2,7 +2,9 @@
 // Time runs left to right (newest at the right), frequency bottom to top on the mel scale (the
 // bands are equally spaced in mel, like hearing), brightness = level from the floor up to 0 dB.
 // Columns are painted once into an offscreen canvas that scrolls; each frame only blits it.
+// `source` picks the side of the chain: the input (default) or the extractor's output.
 import { useCallback, useRef } from 'react'
+import type { FrameSource } from '../../api/types.ts'
 import { SPECTROGRAM_SECONDS, liveFrames } from './liveFrames.ts'
 import { COLOUR_LUT, SPECTROGRAM_DB_FLOOR, dbToColourIndex, melFraction } from './scales.ts'
 import { useCanvasLoop } from './useCanvasLoop.ts'
@@ -15,12 +17,18 @@ function formatHz(hz: number): string {
   return hz >= 1000 ? `${hz / 1000} kHz` : `${hz} Hz`
 }
 
-export function Spectrogram() {
+export function Spectrogram({
+  source = 'input',
+  className = 'h-64',
+}: {
+  source?: FrameSource
+  className?: string
+}) {
   const offscreen = useRef<HTMLCanvasElement | null>(null)
   const drawnSeq = useRef(0)
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    const columns = liveFrames.spectrogram
+    const columns = liveFrames.columns(source)
     const latest = columns[columns.length - 1]
     const bands = latest?.magnitudes.length ?? 128
     // One offscreen pixel column per spectrogram column of the visible history (~25 Hz * 10 s).
@@ -83,15 +91,15 @@ export function Spectrogram() {
     ctx.fillText(`-${SPECTROGRAM_SECONDS / 2} s`, AXIS_W + plotW / 2, plotH + 3)
     ctx.textAlign = 'right'
     ctx.fillText('now', w - 2, plotH + 3)
-  }, [])
+  }, [source])
   const ref = useCanvasLoop(draw)
   return (
     <canvas
       ref={ref}
       role="img"
-      aria-label="Spectrogram"
-      className="h-64 w-full rounded"
-      data-testid="spectrogram"
+      aria-label={source === 'output' ? 'Output spectrogram' : 'Spectrogram'}
+      className={`${className} w-full rounded`}
+      data-testid={source === 'output' ? 'spectrogram-output' : 'spectrogram'}
     />
   )
 }

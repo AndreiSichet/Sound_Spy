@@ -56,19 +56,20 @@ more technical documents go deeper: [docs/architecture.md](docs/architecture.md)
 9. [Live session — from microphone to headphones and screen](#9-live-session--from-microphone-to-headphones-and-screen)
 10. [Training data — from public datasets to mixture recipes](#10-training-data--from-public-datasets-to-mixture-recipes)
 11. [Detection — which sounds are present right now](#11-detection--which-sounds-are-present-right-now)
-12. [The backend's web interface — REST and WebSocket](#12-the-backends-web-interface--rest-and-websocket)
-13. [The database](#13-the-database)
-14. [The website](#14-the-website)
-15. [The command line tool](#15-the-command-line-tool)
-16. [Following a request from start to finish](#16-following-a-request-from-start-to-finish)
-17. [What comes next — the plan, step by step](#17-what-comes-next--the-plan-step-by-step)
-18. [Running everything](#18-running-everything)
-19. [Testing everything](#19-testing-everything)
-20. [Problems found and fixed](#20-problems-found-and-fixed)
-21. [Design decisions and why](#21-design-decisions-and-why)
-22. [Known limitations](#22-known-limitations)
-23. [Third-party code](#23-third-party-code)
-24. [Quick reference](#24-quick-reference)
+12. [Extraction (baseline) — keeping the selected sounds](#12-extraction-baseline--keeping-the-selected-sounds)
+13. [The backend's web interface — REST and WebSocket](#13-the-backends-web-interface--rest-and-websocket)
+14. [The database](#14-the-database)
+15. [The website](#15-the-website)
+16. [The command line tool](#16-the-command-line-tool)
+17. [Following a request from start to finish](#17-following-a-request-from-start-to-finish)
+18. [What comes next — the plan, step by step](#18-what-comes-next--the-plan-step-by-step)
+19. [Running everything](#19-running-everything)
+20. [Testing everything](#20-testing-everything)
+21. [Problems found and fixed](#21-problems-found-and-fixed)
+22. [Design decisions and why](#22-design-decisions-and-why)
+23. [Known limitations](#23-known-limitations)
+24. [Third-party code](#24-third-party-code)
+25. [Quick reference](#25-quick-reference)
 
 ---
 
@@ -122,13 +123,13 @@ behind the scenes (back). Keeping both in one repository is called a
 | The folder structure, rules and tools | **done** |
 | The data types every part of the code shares | **done** (Chapter 5) |
 | The skeleton of the processing engine | **done** (Chapter 6) |
-| The backend's web interface: health, configuration, live channel | **done** (Chapter 12) |
-| The database tables | **done** (Chapter 13) |
-| The website: three tabs, connection indicator | **done** (Chapter 14) |
+| The backend's web interface: health, configuration, live channel | **done** (Chapter 13) |
+| The database tables | **done** (Chapter 14) |
+| The website: three tabs, connection indicator | **done** (Chapter 15) |
 | Choosing a microphone, recording it, checking its levels | **done**, step 02 (Chapter 8) |
 | Live session: listening in headphones, live pictures, recording from the page | **done**, step 03 (Chapter 9) |
-| Recognising sound types | planned, step 05 |
-| Keeping the chosen sounds, removing the rest | planned, steps 06–07 |
+| Recognising sound types | **done**, step 05 (Chapter 11) |
+| Keeping the chosen sounds, removing the rest | first method (baseline) **done**, step 06 (Chapter 12); neural method planned, step 07 |
 | Direction and source tracking (tabs 2–3) | planned, modules 3–5 |
 
 So today you can start both programs and open the website. You see the three
@@ -148,12 +149,20 @@ headphones) to hear it, and press Record to save what it hears. Saved recordings
 are listed on the page and play in the browser. Nothing is removed from the sound
 yet (Chapter 9).
 
+*Since step 05:* the page shows, four times a second, which of the seven sound types it hears
+(Chapter 11).
+
+*Since step 06:* selecting sound types changes what you hear: they are kept and everything else
+is turned down by 30 dB (adjustable), live in the headphones and, with the Process button, for
+saved recordings, where an A/B player compares before and after. The method is a simple baseline
+with clear limits; they are measured in Chapter 12.7.
+
 ### Why it exists
 
 It is a university project (Telecommunications, Technical University of
 Cluj-Napoca). The ideas behind the sound-separation part come from published
 research, mainly a project called **SemanticHearing** (Veluri et al., 2023;
-see Chapter 17). Sound Spy borrows its ideas but, so far, none of its code.
+see Chapter 18). Sound Spy borrows its ideas but, so far, none of its code.
 
 ---
 
@@ -361,7 +370,7 @@ server and the website is the client.
 **localhost / 127.0.0.1.** The computer's own address for talking to itself.
 `127.0.0.1` is the numeric version (IPv4). `localhost` is a name that may
 point to `127.0.0.1` or to `::1`, the newer IPv6 version of the same idea.
-This difference caused a real problem (Chapter 20).
+This difference caused a real problem (Chapter 21).
 
 **Port.** A number that tells programs on one computer apart, like the room
 number within a building's address. The backend uses port **8765**, and the
@@ -554,6 +563,46 @@ played again, until it howls. The reason Listen needs headphones.
 **Canvas / requestAnimationFrame.** A `<canvas>` is a drawing surface on a web page. The browser
 calls `requestAnimationFrame` once per screen refresh, which is the right moment to redraw it.
 
+### Extraction (added in step 06)
+
+**Extraction.** Keeping the selected sounds and turning everything else down. The stage that
+does it is the *extractor* (Chapter 12).
+
+**Gate.** A volume control that a program moves by itself: up while a wanted sound is present,
+down otherwise. Sound Spy's gate opens in 10 ms, stays open 300 ms after the sound stops (the
+*hold*) and closes over 200 ms, so nothing clicks and word endings survive.
+
+**Attenuation / floor.** How far "down" is: 30 dB by default, i.e. the unwanted sound keeps
+about 3 % of its amplitude. Nothing is ever muted completely.
+
+**Noise estimate.** The method's idea of what "everything else" sounds like, per frequency:
+learnt while the wanted sound is absent, and subtracted while it is present.
+
+**Minimum statistics.** A way to estimate steady background noise without knowing when the
+wanted sound is present: the quietest level each frequency reached in the last 1.5 s.
+
+**Activity source.** Where the extractor learns *whether* the wanted sound is present: the live
+detector, a timeline computed for a whole file, or (in tests) the truth.
+
+**Oracle.** In an evaluation, a part of the system replaced by the *true answer*, to see how good
+the rest could be at best. *Oracle activity* = the true moments the target sounds; *IRM oracle*
+(ideal ratio mask) = the best possible gain for every time-frequency cell.
+
+**SI-SDRi, SNRi.** The improvement in SI-SDR (or SNR) over the unprocessed mixture. 0 dB = no
+better than doing nothing; negative = worse.
+
+**Suppression.** How much quieter the output is than the input, in dB, when the wanted sound is
+not there at all (the right output is then silence).
+
+**Bypass (A/B).** Hearing the unprocessed sound instead of the processed one, to compare. A and B
+are the two versions; a fair comparison needs both to be equally delayed.
+
+**Processing run.** One offline processing of a recording: a processed WAV plus a JSON sidecar
+in `outputs/processed/`.
+
+**Garbage collection.** Python's periodic clean-up of memory that is no longer used. A full
+clean-up stops every thread of the program for its duration.
+
 ### Testing and tooling
 
 **Test.** A small program that checks a piece of the real program behaves as
@@ -720,7 +769,7 @@ Inside the backend there is a further split:
 
 The API may use the library, but the library must never use the API or its
 web libraries (FastAPI, Starlette, SQLAlchemy). A test enforces this
-(Chapter 19). The benefit is that the sound-processing code can be used,
+(Chapter 20). The benefit is that the sound-processing code can be used,
 tested and studied on its own: from the command line, in a notebook, or in a
 university report, with no server running.
 
@@ -843,7 +892,7 @@ verified in step 04", because the best match in the AudioSet tree is not
 obvious.
 *(Step 04: checked against the real ontology. Every name exists, so nothing had to change
 (Chapter 10.5). What remains is a question of meaning, not spelling: AudioSet's "Vehicle" also
-contains aircraft, boats and trains (Chapter 22).)*
+contains aircraft, boats and trains (Chapter 23).)*
 
 **The order of the list matters.** A class's position in the file is its slot
 in every multi-hot vector. If the file were reordered, a model trained when
@@ -908,7 +957,7 @@ The chain then knows the final output format before any sound flows.
 The chain is careful by design. It refuses to run if it hasn't been
 configured, and it refuses any chunk whose sample rate or channel count
 doesn't match the configuration. This guard has already caught a real mistake
-(Chapter 20).
+(Chapter 21).
 
 ### 6.3 Modes — which stages each tab uses
 
@@ -919,7 +968,7 @@ doesn't match the configuration. This guard has already caught a real mistake
 | **Sources** | spatial filter → extractor | detector, analyser, localiser, tracker | **yes** |
 
 Today only this table exists. Building real chains from it comes later. The
-website already uses it to decide whether a tab is available (Chapter 14).
+website already uses it to decide whether a tab is available (Chapter 15).
 
 ### 6.4 How live processing will run (planned, step 03)
 
@@ -1243,7 +1292,7 @@ like a library catalogue. The catalogue can always be rebuilt by walking the she
 | **peak dBFS** | the loudest single sample; 0 dBFS is the maximum |
 | **noise floor** | the background level: the quietest 10 % of 50 ms windows (room tone, fan, mic hiss) |
 | **clipping** | the share of samples at or above 0.999, which are too loud and distorted |
-| **digital silence** | the share of the recording made of *stretches* (≥ 5 ms) of exact 0.0, which only a gate, suppression or a muted input produces. Isolated zeros are normal (Chapter 20.12) |
+| **digital silence** | the share of the recording made of *stretches* (≥ 5 ms) of exact 0.0, which only a gate, suppression or a muted input produces. Isolated zeros are normal (Chapter 21.12) |
 
 Total silence is reported as −120 dBFS rather than "minus infinity".
 
@@ -1351,7 +1400,7 @@ No level warnings.
     claps flattened at exactly +7.4 dBFS on both channels: that is true clipping, so clap a bit
     softer or further away;
   - quiet sound regularly lands on the converter's "0" step, which produces isolated exact
-    zeros. That is normal (Chapter 20.12).
+    zeros. That is normal (Chapter 21.12).
 
 ### 8.9 The clap test
 
@@ -1401,6 +1450,10 @@ processing chain, can play the result into your headphones, draws it live on the
 record it. Nothing is removed from the sound yet: the stage that will keep only the chosen sounds
 (the *extractor*) is still a stand-in that changes nothing. Step 05 onwards replaces it.
 
+*Corrected after step 06:* the extractor is real now. Selecting sound types on the page keeps
+them and turns everything else down; Chapter 12 describes how. What changed in the session itself
+is noted in the sections below.
+
 ### 9.1 What you see and do
 
 On the Semantic tab:
@@ -1440,6 +1493,24 @@ On the Semantic tab:
 - **What gets recorded is the raw input**, every microphone channel, untouched: exactly what
   `soundspy record` saves. A recording of the processed sound would be worthless once the
   processing improves; the raw sound can always be processed again.
+
+*Since step 06* the chain has three more parts (Chapter 12.5):
+
+```
+ main:       ChannelReducer(mean) ──► extractor (detector-gated Wiener filter) ──► output
+                     │                                                               │
+                     └─► the "dry" signal, delayed like the output (for Bypass)      │
+ side:       Analyzer (input) + Detector ──► DetectionState ──► read by the extractor
+ post_side:  a second Analyzer on the OUTPUT ──► levels / waveform / spectrogram, source "output"
+```
+
+- The **extractor** is no longer a stand-in. The detector tells it, through a shared
+  `DetectionState`, whether the selected sounds are present.
+- **Observers on the output** (`post_side`): the second analyser sees what you hear, so the page
+  can show the output spectrogram next to the input one. Every live picture now says which side
+  it shows (`source: "input"` or `"output"`).
+- **Bypass**: the chain also keeps the unprocessed mono sound, delayed exactly as much as the
+  processing delays the output. With Bypass on, that is what goes to the headphones.
 
 ### 9.3 Threads: who does what
 
@@ -1505,6 +1576,18 @@ test that caused **1 underrun** (a click), while 2 caused none. So 2 is the defa
 The estimate leaves out the converters inside the sound hardware and the Bluetooth link if the
 headphones are wireless (often 100–200 ms more). Wired headphones are best.
 
+*Since step 06* one more part is added, the extractor's STFT (Chapter 12.3):
+
+| Part | On the development laptop |
+|---|---|
+| input stream + one chunk + speaker queue + output stream (as above) | about 84–104 ms |
+| **extractor (STFT, 1,024 samples)** | **21.3 ms** |
+| **total shown** | **about 105–125 ms** (measured over 60 s: between 105 and 125, median 125) |
+
+The 21 ms is there whether or not anything is selected (the sound always passes through the
+STFT, so that selecting a class does not make it jump). The session status reports the
+extractor's share separately, and the session bar shows it as `mask_baseline · +21.33 ms`.
+
 ### 9.6 Is the computer keeping up? The real-time factor
 
 For every chunk the worker measures how long processing took. The **real-time factor (RTF)** is
@@ -1561,6 +1644,17 @@ screen's refresh (`requestAnimationFrame`), only when something changed. If the 
 behind, the server throws away old *picture* messages for that tab (never status or warnings), so
 a slow tab can't build up a backlog.
 
+*Since step 06* there are two sets of pictures: the **input** ones described above, and the same
+three for the chain's **output**. The page uses the output spectrogram: a switch under the
+spectrogram chooses **Input**, **Output** or **Both** (stacked, the default). With a sound type
+selected, what was turned down is bright in the upper picture and dark in the lower one. The
+level meters and the waveform still show the input.
+
+**Smooth audio and Python's memory clean-up (step 06).** While a session runs, the long-lived
+objects of the program are "frozen": kept out of Python's garbage collector. A full clean-up
+otherwise took 45–75 ms, during which every thread stands still, the audio thread included, and
+that was enough for an occasional click (Chapter 21.31).
+
 ### 9.8 Starting from a file
 
 A session can also play a saved WAV file, looped, at normal speed, through exactly the same chain.
@@ -1578,7 +1672,7 @@ test checks that no audio thread is left behind.
 **When devices change (headphones plugged in or out).** The sound library reads the list of
 devices once and keeps using what it found. Plugging headphones into the laptop's jack makes
 Windows reconfigure its audio devices, and afterwards opening the microphone or speakers through
-the old list can fail. Since the owner's first test of step 03 found this (Chapter 20.18), every
+the old list can fail. Since the owner's first test of step 03 found this (Chapter 21.18), every
 **Start** first re-reads the device list. If opening still fails, it re-reads once more and
 retries, and only then reports an error that says what probably happened. If a session starts but
 the output can't be opened, a notice gives the reason and the **Listen** box is disabled with an
@@ -2033,7 +2127,7 @@ Why it fits Sound Spy:
 - **It already knows sounds.** Its 527 categories include all of ours (Speech, Music, Walk/footsteps,
   Dishes, Cutlery, Scrape, Squeak, Alarm, Motor vehicle …). Fine-tuning only has to sharpen that
   knowledge for our seven classes and our mixtures, not teach hearing from scratch.
-- **Permissive licence (MIT)**, so its code could be adapted (Chapter 23).
+- **Permissive licence (MIT)**, so its code could be adapted (Chapter 24).
 
 ### 11.2 From sound to probabilities
 
@@ -2094,7 +2188,7 @@ to end.
 **Data loading on Windows.** Rendering mixtures is the slow part, so 4 worker processes render in
 parallel while the GPU trains. Each worker is a fresh Python process (Windows *spawns* them), and
 each one loads PyTorch (~0.7 GB of memory) and the clip library. Two lessons from step 05
-(Chapter 20.24): every worker is limited to one BLAS/OpenMP thread (otherwise each one reserved
+(Chapter 21.24): every worker is limited to one BLAS/OpenMP thread (otherwise each one reserved
 buffers for all 12 CPU threads, 1.7 GB per worker), and the loaders abort with a clear message if
 no batch arrives within 120 s instead of hanging silently.
 
@@ -2181,7 +2275,7 @@ The `Detector` is a side-observer in the `SEMANTIC` chain (next to the Analyzer)
    the current second is handed to an **inference thread**. That thread resamples it to 32 kHz and
    runs the model (on the GPU in half precision if there is one, otherwise on the CPU with one
    thread, `live.cpu_threads`). The thread warms the model up itself before the session starts
-   (Chapter 20.27).
+   (Chapter 21.27).
 3. **The audio path never waits.** If the inference thread is still busy with the previous window,
    the new one is **skipped** and counted. The session status reports the model, device, mean
    inference time and the skipped count; the session bar shows them.
@@ -2208,7 +2302,7 @@ and counts underruns), the trained model:
 | backend CPU use | 21 % of a core | 38 % of a core |
 | session start (model load + warm-up) | ~6 s | ~2.5 s |
 
-Two problems were found and fixed during these measurements (Chapter 20.27 and 20.28): the first
+Two problems were found and fixed during these measurements (Chapter 21.27 and 20.28): the first
 3 s of every GPU session were skipped, and CPU mode kept ~7 cores busy. The numbers above are
 after the fixes.
 
@@ -2235,7 +2329,9 @@ after the fixes.
   light up green while the class is "on".
 - Chips are now **selectable** (several at once). The selection is sent to the backend as the
   target (`set_target`); it changes nothing audible yet: *"Selected sounds will be enhanced from
-  step 06"*.
+  step 06"*. *(Step 06: it is audible now. The hint reads "Keeping N sound type(s); everything
+  else is turned down by 30 dB", or "Select one or more sounds to enhance them" when nothing is
+  selected. Chapter 12.)*
 - A **detection timeline** shows the last 30 s: one lane per class, filled where it was active,
   brighter where more certain, with "now" at the right edge like the spectrogram.
 - The session bar shows the detector's device, inference time and skipped windows.
@@ -2252,7 +2348,7 @@ soundspy detect data\raw\speech_20261114-163256-131.wav [--experiment det_mn10_v
 
 prints, per class, the stretches where it was active with their mean probability, e.g.
 `speech  0.50-5.00 s (p 0.89)`. Stretches of one class that touch or overlap are merged
-(Chapter 20.29).
+(Chapter 21.29).
 
 With the trained model, on the owner's recordings: the 5 s speech test → speech 0.50–5.00 s; the
 62 s UI test (mostly talking) → five speech stretches (2.25–7.75, 9.00–11.25, 21.25–32.75,
@@ -2274,11 +2370,268 @@ recordings → nothing. A 62 s file takes about 10 s including loading the model
 
 ---
 
-## 12. The backend's web interface — REST and WebSocket
+## 12. Extraction (baseline) — keeping the selected sounds
+
+**Exists today** (step 06). Location: `backend/src/soundspy/extraction/` (`mask_baseline.py`,
+`activity.py`, `offline.py`, `metrics.py`, `base.py`), `dsp/stft.py`, `engine/detection_state.py`,
+`io/runs.py`, `training/evaluate_extraction.py`, the CLI commands `extract`, `evaluate extraction`
+and `db rebuild`, and on the Semantic tab: the attenuation slider, Bypass, the input/output
+spectrogram, and the Process button with its A/B player.
+
+Until now selecting a sound type changed nothing you could hear. From this step it does: **the
+selected sounds are kept, everything else is turned down** (by 30 dB unless you move the
+slider). This chapter describes the first method that does it, the *baseline*. It needs no
+training. It is deliberately simple, it is measured honestly, and its limits are the reason for
+the neural extractor of step 07, which will plug into the same places and be compared with it.
+
+### 12.1 The idea in plain words
+
+The baseline cannot hear *which part* of the sound is speech. It only knows, from the detector
+(Chapter 11), *whether* speech is present right now. So it works like a careful sound engineer
+with one hand on a volume fader:
+
+1. **A gate.** While none of the selected sounds is present, the fader is down: everything is
+   30 dB quieter. When a selected sound starts, the fader comes up.
+2. **Noise reduction while the fader is up.** During the quiet stretches the method *listens to
+   what "everything else" sounds like* (the hum, the hiss, the room). While the selected sound
+   plays, it removes that learnt background from the sound, frequency by frequency, and keeps
+   what stands out above it.
+
+What it **cannot** do: separate two things that sound at the same moment in the same
+frequencies. If you select speech while music plays, the gate opens for the speech and the music
+comes through with it. The noise reduction only removes what is *steady* or what it has heard
+during the pauses; a song changes all the time. This limit is measured in section 12.7, not
+hidden.
+
+### 12.2 The picture
+
+```
+                       detector (Chapter 11)
+                       "speech is active"  ──►  DetectionState  (shared, thread-safe)
+                                                      │
+ microphone ─► mean of the channels ─► STFT ─► for every frame (5.3 ms) and every frequency bin:
+                      │                              │
+                      │                 target inactive ─► gain = floor  (−30 dB)
+                      │                 target active   ─► gain = Wiener gain (keeps what is
+                      │                                    above the learnt background)
+                      │                 in between      ─► smooth ramps (open 10 ms, hold
+                      │                                    300 ms, close 200 ms)
+                      │                              │
+                      │                      inverse STFT ─► output ─► headphones
+                      │                                         │
+                      └─► same delay, no processing ─► "dry" ───┘ (played instead when Bypass is on)
+```
+
+### 12.3 The STFT: working on frequencies, frame by frame
+
+The method changes loudness *per frequency*, so the sound is first split into frequencies. The
+**short-time Fourier transform** (STFT) does that for short overlapping pieces (*frames*):
+1,024 samples each (21 ms at 48 kHz), a new one every 256 samples (5.3 ms). Each frame becomes
+513 numbers, one per frequency band (*bin*). After the gains are applied, the inverse transform
+turns the frames back into sound and overlaps them again.
+
+`dsp/stft.py` is built so that **doing nothing gives the input back exactly**: with a square-root
+Hann window before and after, the overlapping frames add up to exactly 1. A test checks this for
+blocks of 1, 100, 960 and 4,096 samples: the output equals the input to within 0.00001, delayed by
+a fixed **1,024 samples (21.3 ms)**. That delay is the price of the method (a sample can only be
+finished once every frame that contains it has arrived) and it is added to the listening delay
+(Chapter 9.5).
+
+### 12.4 The three parts in detail
+
+**1. Is the target active?** One question per frame, answered by an *activity source*
+(`extraction/activity.py`):
+
+| Source | Used for | What it knows |
+|---|---|---|
+| `LiveDetectorActivity` | the live session | the detector's current decision. It lags: on about 0.3 s after a sound starts, off 0.6–1 s after it ends |
+| `TimelineActivity` | offline processing (Process, `soundspy extract`) | decisions for the whole file, worked out beforehand with windows **centred** on each moment, so there is no lag |
+| `OracleActivity` | evaluation only | the truth, from the mixture recipe |
+
+Live, the detector and the extractor share one small object, the `DetectionState`: the detector
+writes its newest decision into it, the extractor reads it. It is created per session by
+`engine/factory.py` and handed to both (no global variable).
+
+**2. The gate.** Its position moves smoothly between closed (floor gain,
+`10^(−attenuation/20)`; 30 dB → 0.032) and open: it **opens in 10 ms**, **holds for 300 ms**
+after the target stops (so word endings are not chopped), then **closes over 200 ms**. The
+movement is linear in dB and spread over overlapping frames, so there are no clicks (a test
+checks that the output never jumps more than the input does).
+
+**3. The Wiener gain while the gate is open.**
+
+- *Noise estimate.* While the target is **inactive**, the power in each frequency bin is averaged
+  (`noise_alpha` 0.95): this is what "not the target" sounds like. Live, the detector is late, so
+  a frame only counts as noise once the target has stayed inactive for another 0.5 s after it
+  (`noise_guard_s`); otherwise the first 0.3 s of every word would be learnt as noise and removed.
+- *Fallback: minimum statistics.* If no inactive frame has been seen for 5 s (or there is no
+  detector at all), the estimate is the minimum of the smoothed power over the last 1.5 s. It
+  follows whatever stays steady. For exactly that reason it is only the fallback: measured in
+  step 06, it treats a **steady target** (a held note, a continuous alarm, road noise) as noise
+  and removes it (Chapter 21.30).
+- *The gain.* From the noise estimate comes the signal-to-noise ratio per bin (smoothed over time
+  with the "decision-directed" rule of Ephraim and Malah, `dd_alpha` 0.98), and from it the Wiener
+  gain `snr / (1 + snr)`: near 1 where the sound is far above the background, near 0 where it is
+  not. It never goes below the floor gain.
+
+All numbers are in `configs/extraction/mask_baseline.yaml` and are checked when the app starts.
+
+**Special cases**
+
+- **Nothing selected** → pass-through. The sound still goes through the STFT with gain 1, so the
+  delay stays the same and selecting a class does not make the sound jump; the change is ramped.
+- **No detection model** → no gating. The gate stays open and only the minimum-statistics noise
+  reduction works; the page shows a warning that selecting sounds cannot switch the rest off.
+- `extraction.method: passthrough` in `configs/extraction/default.yaml` removes the extractor
+  (and its 21 ms) altogether.
+
+### 12.5 Live: what changed in the session
+
+- **Selecting chips is audible.** The target (`labels` + `attenuation_db` from the new slider,
+  0–40 dB) reaches the extractor between two chunks.
+- **Bypass (A/B).** With Bypass on, the headphones get the unprocessed sound instead, *delayed by
+  the same 21 ms*, so switching back and forth is instant and nothing shifts in time. Processing
+  keeps running in the background.
+- **Two spectrograms.** A second analyser watches the chain's *output*. The page can show input,
+  output or both stacked: what was removed is visible in the upper picture and missing in the
+  lower one.
+- **Measured on the laptop** (60 s, laptop microphone, speech selected, Listen on but muted, GPU):
+
+| | |
+|---|---|
+| processing time per 20 ms chunk | 1.6 ms mean, 3.3 ms p95 → **RTF p95 0.17** |
+| listening delay | 105–125 ms (median 125), of which **21.3 ms** is the STFT |
+| underruns / overflows / dropped / skipped windows | 0 / 0 / 0 / 0 |
+| backend CPU | 24 % of one core |
+| quiet room, speech selected | output 30.8 dB below the input |
+
+  With a test loop (6 s: speech from 3.7 to 5.4 s over steady noise): speech selected → the output
+  is 3.8 dB below the input while the speech sounds and 29 dB below elsewhere; an absent class
+  selected → 30 dB below throughout; nothing selected → unchanged (−0.1 dB).
+
+  Two problems surfaced during these measurements and were fixed: garbage-collection pauses
+  that caused an occasional underrun (Chapter 21.31) and uneven pacing of file playback
+  (Chapter 21.32).
+
+### 12.6 Offline: Process, A/B, `soundspy extract`
+
+- **On the page:** select one or more chips, set the attenuation, press **Process** on a
+  recording. A *run* appears under it: *waiting…* → *processing…* → *done*. A finished run has an
+  **A/B player**: one play button and one position; the **Original / Processed** switch changes
+  what you hear without changing the moment you are at. There is also a download link.
+- **On the command line:**
+
+```powershell
+soundspy extract data\raw\speech_20261114-163256-131.wav --labels speech [--attenuation-db 30] [--out out.wav]
+```
+
+- **How it works.** The detector runs over the whole file first, with windows centred on each
+  moment; the extractor then uses that timeline (no lag, unlike live). The result is one channel,
+  exactly as long as the recording and aligned with it, which is what makes A/B meaningful.
+- **Runs are files.** Each run is `outputs/processed/<run_id>.wav` plus `<run_id>.json` (the
+  recording, the classes, method and settings, status, error, timing). As for recordings, the
+  JSON sidecar is the truth and the database only indexes it (Chapter 14). Only **one job runs at
+  a time**; others wait in order. State changes are pushed to the page over the WebSocket. A
+  recording longer than 5 minutes is refused on the page (use the CLI).
+- **Measured:** the 61.9 s UI recording was processed in **6.5 s** through the API (model already
+  loaded); inside the detected speech the level changed by −0.2 dB, outside it by −30.0 dB.
+  `soundspy extract` on the 5 s speech recording took 5.7 s, almost all of it loading the model.
+
+### 12.7 Measuring it: SI-SDR, the five systems, and what the numbers say
+
+**The metrics** (`extraction/metrics.py`). Test mixtures are built from recipes, so the correct
+answer (the target alone) is known exactly.
+
+- **SI-SDR** (scale-invariant signal-to-distortion ratio, dB): how much of the output is the
+  wanted sound, however loud the output is. Higher is better. **SI-SDRi** is the improvement over
+  doing nothing: 0 dB = no better than the unprocessed mixture, negative = worse.
+- **SNRi**: the same idea but loudness counts too. SI-SDR does not notice an output that is
+  "right but everything 30 dB too quiet"; SNR does.
+- **Suppression** (dB): for mixtures where the selected class is *absent*, the correct output is
+  silence, so the output level relative to the input is reported. −30 dB is the best this method
+  can do (its floor).
+- **Target missed**: the share of mixtures whose whole output sits at the floor, i.e. the gate
+  never opened although the target was there. SI-SDRi scores that as exactly 0, which looks
+  harmless, so it is counted separately.
+
+**The five systems**, on the same 500 test mixtures (fixed, seeded; 48 kHz; attenuation 30 dB;
+`soundspy evaluate extraction --method mask_baseline --split test --n 500`, 3 min 56 s):
+
+| System | SI-SDRi mean | SI-SDRi median | SNRi | Target missed | Suppression, target absent |
+|---|---|---|---|---|---|
+| mixture (no processing) | 0.00 | 0.00 | 0.00 | 0 % | 0.0 |
+| baseline + **timeline** (offline detector) | **+2.19** | 0.00 | +4.17 | 28 % | −26.6 |
+| baseline + **live** (detector lag reproduced) | **−4.85** | −0.96 | +0.80 | 32 % | −28.7 |
+| baseline + **oracle** (true activity) | **+8.09** | +7.25 | +8.77 | 0 % | −30.0 |
+| **IRM oracle** (best any masking method could do) | **+24.52** | +18.24 | +24.66 | 0 % | −100 |
+
+(483 mixtures with a target, 17 with the target class absent. Full tables:
+`experiments/ext_mask_baseline/metrics.md`; listening examples:
+`outputs/eval/ext_mask_baseline/`, described in its `index.md`.)
+
+**Reading the table**
+
+- **The ceiling is far away.** A perfect mask in the same STFT would gain 24.5 dB. Even with
+  perfect knowledge of *when* the target sounds, the baseline gains 8.1 dB. The 16 dB between
+  them is what "cannot separate overlapping sounds" costs: the gap a neural extractor can close.
+- **The detector costs most of the rest.** Oracle − timeline = 5.9 dB: the detector's mistakes.
+  In 28 % of the mixtures it never notices the target, so nothing is let through at all.
+- **Live is worse than doing nothing on these mixtures (−4.9 dB).** Oracle − live = 12.9 dB. The
+  extra 7 dB against the timeline is pure *lag*: the gate opens ~0.3 s after the sound starts and
+  stays open ~1 s after it ends. For a short sound (a clink, a single word) that means the gate
+  is shut during the sound and open after it, which is worse than not gating. The test mixtures
+  are 6 s long with short events, the hardest case for a lagging gate; in a continuous
+  conversation the same lag matters much less.
+- **When the target is absent, the method does its job:** −27 to −29 dB with the real detector,
+  the full −30 dB with the truth.
+
+**Breakdowns** (SI-SDRi, dB)
+
+| | timeline | live | oracle | IRM |
+|---|---|---|---|---|
+| target sounds < 1 s (196) | +5.4 | −5.6 | +11.5 | +32.6 |
+| target sounds 1–3 s (203) | +1.1 | −4.3 | +7.5 | +20.7 |
+| target sounds ≥ 3 s (84) | −2.7 | −4.6 | **+1.5** | +15.0 |
+| target 5 dB or more below the rest (118) | +3.1 | −4.1 | +8.9 | +24.3 |
+| target 5 dB or more above the rest (112) | +0.9 | −6.9 | +6.6 | +24.8 |
+| 1 foreground source (165) | +3.8 | −4.4 | +9.8 | +29.3 |
+| 3 foreground sources (151) | +0.8 | −5.9 | +7.0 | +20.7 |
+
+- **The longer the target sounds, the less a gate can do.** A target that fills most of the
+  mixture leaves the gate open all the time; with the truth as guide the gain shrinks from +11.5
+  to +1.5 dB. This is the overlap limit in numbers: while the target sounds, almost everything
+  else comes through with it.
+- **More sources, less gain,** for every system.
+- **By class** (oracle +6.1 to +8.6, timeline −0.4 to +3.8): speech, dishes and alarm do best
+  with the real detector (+3.5 to +3.8); chair scraping and traffic, the detector's weakest
+  classes, gain nothing (−0.3, −0.4).
+
+**What each part contributes** (an extra check on 120 mixtures, true activity): the gate alone
+gives +6.5 dB; gate + Wiener gain +7.9 dB; minimum statistics alone, without any gating, +0.3 dB.
+So the gating does most of the work, the noise reduction adds about 1.3 dB, and without a detector
+the method is of little use on mixtures like these.
+
+### 12.8 Limitations
+
+- **It does not separate overlapping sounds.** While a selected sound is present, whatever else
+  sounds at the same time is let through (only its steady part is reduced). This is the main
+  limit and the reason for step 07.
+- **It is only as good as the detector,** and live the detector is late: short sounds lose their
+  beginning and are followed by up to a second of everything else. Offline processing (no lag)
+  is clearly better than live (+2.2 vs −4.9 dB on the test mixtures).
+- **A missed sound is silenced.** If the detector does not notice the target, the output is 30 dB
+  down throughout. A lower attenuation makes this less drastic, at the price of less
+  suppression.
+- **21 ms more delay** when listening, with or without a selection.
+- **One channel.** It works on the mono mix; direction is not used (that is module 3).
+
+---
+
+## 13. The backend's web interface — REST and WebSocket
 
 **Exists today**, partly. Location: `backend/src/soundspy/api/`.
 
-### 12.1 The addresses
+### 13.1 The addresses
 
 | Address | What it does | Status |
 |---|---|---|
@@ -2287,14 +2640,17 @@ recordings → nothing. A 62 s file takes about 10 s including loading the model
 | `GET /api/devices` | list microphones and speakers, and which one the active profile resolves to | **works** (since step 02) |
 | `GET /api/session` | the current session status (idle if none) | **works** (step 03) |
 | `POST /api/session/start` / `stop` | start or stop the live session; body: mode, source (`mic`, or a `file` path inside the project, looped), optional `monitor` | **works** (step 03): 409 if already running, 400 for a bad mode or source, 503 if the sound library is unavailable; stop can be repeated safely |
-| `PUT /api/session/target` | change what to listen to (a `TargetSpec`); checked against the class list, stored, passed to the session | **works** (step 03), no audible effect until step 05; unknown class → 422. *(Step 05: the class chips send it over the WebSocket as `set_target`; still no audible effect until step 06.)* |
+| `PUT /api/session/target` | change what to listen to (a `TargetSpec`); checked against the class list, stored, passed to the session | **works** (step 03), no audible effect until step 05; unknown class → 422. *(Step 05: the class chips send it over the WebSocket as `set_target`; still no audible effect until step 06.)* *(Step 06: audible. `attenuation_db` comes from the new slider.)* |
+| `PUT /api/session/bypass` | `{"enabled": true}`: play the unprocessed sound (same delay) instead of the output, for A/B listening | **works** (step 06); remembered between sessions |
 | `PUT /api/session/monitor` | Listen on/off, volume (−40…+12 dB), mute | **works** (step 03) |
 | `POST /api/session/record/start` / `stop` | record what the session hears; stop returns the new recording | **works** (step 03); 409 without a session, or when (not) recording |
 | `GET /api/recordings` | list recordings, newest first (re-reads `data/raw` first, Chapter 8.6) | **works** (since step 02) |
 | `GET /api/recordings/{id}`, `/{id}/audio` | view one recording; download its sound as `audio/wav` (the page's Play button) | **works** (step 03); 404 if missing |
 | `POST /api/recordings/{id}/detect` | offline detection of a recording: probabilities over time and the active segments per class (Chapter 11.8) | **works** (step 05); 413 over 2 minutes, 503 without a trained model |
-| `POST /api/recordings/{id}/process` | clean up a saved recording | 501, step 06 |
-| `WS /ws/session` | the live channel (below) | **works**: status, live pictures, warnings, errors; accepts `set_target`. *Step 05:* also `detections` (4 per second: every class's probability + the active ones), and the status carries a `detector` block (model, device, hop, inference time, skipped windows) |
+| `POST /api/recordings/{id}/process` | extract sound types from a saved recording: `{labels, attenuation_db?, method?}`. Answers at once (202) with a *run* in state `pending`; a background worker processes it, one job at a time | **works** (step 06): 404 file gone, 413 over 5 minutes, 422 no or unknown classes, 503 without a detection model |
+| `GET /api/recordings/{id}/runs` | the processing runs of a recording, newest first | **works** (step 06) |
+| `GET /api/runs/{run_id}`, `/{run_id}/audio` | one run (status, timing, where the target was found); its processed sound as `audio/wav` | **works** (step 06): 404 unknown, 409 audio of an unfinished or failed run |
+| `WS /ws/session` | the live channel (below) | **works**: status, live pictures, warnings, errors; accepts `set_target`. *Step 05:* also `detections` (4 per second: every class's probability + the active ones), and the status carries a `detector` block (model, device, hop, inference time, skipped windows). *Step 06:* live pictures carry `source` (`input` / `output`); the status carries `bypass` and an `extraction` block (method, its delay, whether gating works, whether the target is active now); `run` messages report every state change of a processing run; the page may send `set_bypass` |
 
 **Why have addresses that only say "not implemented"?** Because the complete
 shape of the interface is then visible from day one. The automatic
@@ -2302,6 +2658,7 @@ documentation page at http://127.0.0.1:8765/docs lists every address, the
 website can be written against the real shape, and each later step fills in
 an address that already exists. The 501 reply says *which* step will
 implement it: `{"detail": "not implemented (step-03)"}`.
+*(Since step 06 no address answers 501 any more: the last placeholder, `process`, is real.)*
 
 **`GET /api/devices` in detail.** It answers with the active profile's name, every input and
 output device (index, name, host API, channel count, native rate, whether it is the system
@@ -2311,7 +2668,7 @@ still **200**, with `resolved_input: null` and an `error` sentence saying why, s
 the reason instead of a generic failure. Only when the sound library itself can't be loaded does
 it answer **503**.
 
-### 12.2 The live channel: `/ws/session`
+### 13.2 The live channel: `/ws/session`
 
 When the website connects:
 
@@ -2343,7 +2700,7 @@ Each browser connection has its **own queue** of at most 64 messages. If a tab c
 oldest `levels` / `waveform` / `spectrogram` messages for that tab are thrown away; `status`,
 `warning` and `error` are never thrown away.
 
-### 12.3 One envelope for every message
+### 13.3 One envelope for every message
 
 Every message, in both directions, has the same three parts:
 
@@ -2366,17 +2723,17 @@ With a single envelope, the website can sort every incoming message by its
 simply ignores types it doesn't know yet, with a warning in the browser's
 console.
 
-### 12.4 Who may talk to it
+### 13.4 Who may talk to it
 
 - The backend listens on **127.0.0.1**, so only programs on this same laptop
   can reach it. It is a desktop app, not a public website.
 - **CORS** allows exactly one other web address, the development website at
   `http://localhost:5173`. Tests check that a different address is refused.
-- There are no passwords and no rate limiting yet (see Chapter 22).
+- There are no passwords and no rate limiting yet (see Chapter 23).
 
 ---
 
-## 13. The database
+## 14. The database
 
 **Exists today** (the tables are created, nothing writes to them yet).
 Location: `backend/src/soundspy/api/db/`. File: `data/soundspy.db`.
@@ -2386,7 +2743,20 @@ Location: `backend/src/soundspy/api/db/`. File: `data/soundspy.db`.
 every `GET /api/recordings` (Chapter 8.6). `processing_runs` stays empty until
 step 06.
 
-### 13.1 What it stores, and what it doesn't
+*Rewritten in step 06: the database is a disposable index.* Everything the database knows is
+also written in a small JSON file next to the audio it describes: a recording's sidecar in
+`data/raw/`, a processing run's sidecar in `outputs/processed/`. The rule, now in `CLAUDE.md`:
+**never store information only in the database.** Consequences:
+
+- The database can be deleted or rebuilt at any time without losing anything:
+  `soundspy db rebuild` drops every table, creates them again and re-reads the sidecars.
+- No migration tool is needed. The code carries a **schema version** (currently 2); the database
+  stores the version it was built with. If they differ when the backend starts, it rebuilds the
+  database by itself. This happened on the development laptop at the first start after step 06:
+  the old database was replaced and its 12 recordings re-indexed from their sidecars.
+- The tables below changed accordingly (section 14.2, corrected).
+
+### 14.1 What it stores, and what it doesn't
 
 The database stores **information about** audio, not the audio itself. Sound
 files stay on disk as WAV files. Each one gets a matching **JSON "sidecar"**
@@ -2394,7 +2764,7 @@ file with its details, plus a database row pointing to its path. Databases are
 good at searching and linking records, while sound files are large and are
 better left as plain files.
 
-### 13.2 The two tables
+### 14.2 The two tables
 
 **`recordings`**: one row per raw recording.
 
@@ -2430,7 +2800,33 @@ When a WAV file disappears from disk, its `recordings` row is **deleted** at the
 next sync (decided in step 02; the decision log explains why, and when to revisit
 it). Paths are stored relative to the project root, and times in UTC.
 
-### 13.3 Raw recordings are never changed
+*Corrected in step 06.* The tables as they are now:
+
+- `recordings` has one more column, **`missing`**: true while the recording's sidecar is still
+  there but its WAV file is not. Such a recording stays in the list (greyed on the page, with
+  its runs) but cannot be played or processed; if the file comes back, the mark is cleared.
+  A recording whose **sidecar** is gone too is removed from the index: nothing on disk describes
+  it any more, and keeping the row would be information that exists only in the database.
+- `processing_runs` mirrors the run sidecars (`io/runs.py`):
+
+| Column | Meaning |
+|---|---|
+| `run_id` | the sidecar's name, e.g. `run_20261115-192114-361`; the stable ID used in addresses |
+| `recording_id`, `recording_path` | which recording; the ID is empty if that recording is no longer indexed, the path is always kept |
+| `labels`, `attenuation_db` | what was kept and how far the rest was turned down |
+| `method`, `activity_mode` | `mask_baseline`; `timeline` (how the target was located) |
+| `status` | `pending`, `running`, `done` or `failed` |
+| `error` | what went wrong, if it failed |
+| `output_path`, `duration_s`, `processing_seconds` | the processed WAV, its length, how long processing took |
+| `info` | what the method reports, e.g. the stretches where it found the target |
+
+- A third table, **`meta`**, holds the schema version.
+- Runs **outlive their recording**: they have their own sidecars, so deleting a recording no
+  longer deletes them (the old rule "deleting a recording also deletes its runs" is gone).
+- Runs left *pending* or *running* by a backend that was closed are marked `failed`
+  ("interrupted") at the next start.
+
+### 14.3 Raw recordings are never changed
 
 A recording is saved at its original sample rate with **all** its channels,
 and it is never edited afterwards. Converted copies (resampled, or reduced to
@@ -2438,20 +2834,25 @@ fewer channels) are made fresh when needed, or stored separately in
 `data/processed/`. That way any recording can always be processed again later
 with a better method.
 
-### 13.4 How the database starts up
+### 14.4 How the database starts up
 
 When the backend starts, it creates any missing tables. There is no
 "migration" tool yet, meaning a tool that records step by step how a
 database's structure changes over time. The decision log notes that one
 (Alembic) should be added as soon as the table structure starts changing.
 
+*Corrected in step 06:* the table structure did change, and no migration tool was added, because
+none is needed: a database whose schema version is not the code's is dropped and rebuilt from
+the sidecars at start-up (see the top of this chapter). Start-up order: check the schema version
+(rebuild if needed) → mark interrupted runs → index recordings, then runs.
+
 ---
 
-## 14. The website
+## 15. The website
 
 **Exists today** as a shell. Location: `frontend/`.
 
-### 14.1 What you see
+### 15.1 What you see
 
 - A header with the app name and a **connection light**.
 - Three tabs: **Semantic**, **Spatial**, **Sources**.
@@ -2468,7 +2869,14 @@ label and notes, the level meters, spectrogram and waveform, the class buttons (
 *"Sound selection arrives with detection (step 05)"*) and the recordings list with Play buttons.
 Warnings and errors appear as small notices in the bottom-right corner that can be dismissed.
 
-### 14.2 The connection light
+*Since step 06* (Chapter 12.5–12.6): next to Listen there are an **Attenuation** slider
+(0–40 dB) and a **Bypass (A/B)** button; the session bar shows the extraction method and the
+delay it adds; the spectrogram has an **Input / Output / Both** switch; every recording has a
+**Process** button (active once a sound type is selected), its runs are listed under it with
+their status, and a finished run has an **A/B player** (Original / Processed, one play position)
+and a download link. A recording whose file is gone is shown greyed out with "file missing".
+
+### 15.2 The connection light
 
 It combines two separate checks:
 
@@ -2489,7 +2897,7 @@ retries as soon as a connection succeeds. This is called **exponential
 backoff**. It recovers quickly from a short blip without bombarding a backend
 that is down for longer.
 
-### 14.3 How the code is organised
+### 15.3 How the code is organised
 
 | Folder / file | Job |
 |---|---|
@@ -2510,18 +2918,18 @@ two hand-written copies that must agree. The plan is to generate the
 website's copy automatically from the backend's published description
 (`npm run gen:api` is a placeholder for that).
 
-### 14.4 The development proxy
+### 15.4 The development proxy
 
 During development, the website is served at `localhost:5173` and the backend
 runs at `127.0.0.1:8765`. The website's server **forwards** every `/api/...`
 and `/ws/...` request to the backend. To the browser everything then comes
 from one address, which keeps things simple and avoids CORS problems. The
 forwarding goes to `127.0.0.1` rather than `localhost`, on purpose
-(Chapter 20).
+(Chapter 21).
 
 ---
 
-## 15. The command line tool
+## 16. The command line tool
 
 **Exists today.** The backend also installs a command called `soundspy`, used
 for developer jobs that don't need the website: running the server, recording
@@ -2536,11 +2944,13 @@ test clips, preparing data and training models.
 | `soundspy record-dataset` | guided recording of labelled clips into `data/custom` (Chapter 10.12) | **works** (step 04) |
 | `soundspy data` | `paths`, `download`, `cleanup-archives`, `prepare`, `stats`, `mix`, `preview` (Chapter 10) | **works** (step 04) |
 | `soundspy train` | `train detection [--name] [--epochs] [--smoke] [--resume] [--workers]` (Chapter 11.4) | **works** (step 05) |
-| `soundspy evaluate` | `evaluate detection [--experiment] [--split test]`: fine-tuned vs zero-shot (Chapter 11.5) | **works** (step 05) |
+| `soundspy evaluate` | `evaluate detection [--experiment] [--split test]`: fine-tuned vs zero-shot (Chapter 11.5); `evaluate extraction --method mask_baseline [--split test] [--n 500] [--sample-rate 48000]`: the five-system comparison (Chapter 12.7) | **works** (step 05; extraction: step 06) |
 | `soundspy detect` | per-class timeline of a recording (Chapter 11.9) | **works** (step 05) |
-| `soundspy extract` | clean up a recording | step 06 |
+| `soundspy extract` | `extract <wav> --labels speech [music …] [--attenuation-db 30] [--out out.wav]`: keep the named sound types of a recording, as a processing run in `outputs/processed` (Chapter 12.6) | **works** (step 06) |
+| `soundspy db` | `db rebuild`: drop the database and index the sidecar files again (Chapter 14) | **works** (step 06) |
 
 Placeholder commands print `not implemented yet (step-XX)` and exit normally.
+*(Since step 06 there are no placeholder commands left.)*
 
 All audio commands accept `--profile <name>` and `--device <index or name>`. A
 problem with the setup (no such device, invalid profile, a stalled microphone)
@@ -2549,7 +2959,7 @@ Python error.
 
 ---
 
-## 16. Following a request from start to finish
+## 17. Following a request from start to finish
 
 Here is what actually happens today when you open the website with both
 programs running.
@@ -2590,7 +3000,7 @@ succeeds and the light turns green on its own, with no page reload needed.
 
 ---
 
-## 17. What comes next — the plan, step by step
+## 18. What comes next — the plan, step by step
 
 Everything in this chapter is **planned**, not built. Concepts are explained
 here so the later chapters will make sense when they arrive.
@@ -2601,13 +3011,13 @@ here so the later chapters will make sense when they arrive.
 | 03 | the live engine (threads, queues, playback), live level meters and spectrogram on the website, a record button — **done** (Chapter 9) | 1 |
 | 04 | datasets: AudioSet mapping, downloading ESC-50 and FSD50K, own recordings, splits, synthetic mixtures — **done** (Chapter 10) | – |
 | 05 | sound detection: fine-tuning a pretrained model, live detections on the website — **done** (Chapter 11) | 1 |
-| 06 | first extractor (classical masking) + quality scores; clean up saved recordings and compare before/after | 1 |
+| 06 | first extractor (classical masking) + quality scores; clean up saved recordings and compare before/after — **done** (Chapter 12) | 1 |
 | 07 | neural extractor that runs live | 1 |
 | 08 | full evaluation, robustness, documentation for the university report | 1 |
 | modules 3–4 | simulated array, direction finding, beamforming, Spatial tab | 2 |
 | module 5 | source tracking, Sources tab | 3 |
 
-### 17.1 Recognising sounds (step 05)
+### 18.1 Recognising sounds (step 05)
 
 A **pretrained** audio model already knows a lot about sound in general. It
 will be **fine-tuned** to answer seven yes/no questions at once, one per
@@ -2616,7 +3026,7 @@ output is seven probabilities. Run continuously on the live stream, it
 produces `Detection` events: *"speech, 92%, from 12.0 s to 13.0 s"*. Which
 pretrained model to use has not been decided yet.
 
-### 17.2 Keeping the chosen sounds — two ways (steps 06 and 07)
+### 18.2 Keeping the chosen sounds — two ways (steps 06 and 07)
 
 Both methods sit behind the same `Extractor` interface, so either can be
 plugged into the engine.
@@ -2629,6 +3039,12 @@ nothing drops to unnatural total silence. Multiply, then convert back to
 sound. It is transparent and easy to reason about, and it gives a reference
 score that the neural method has to beat.
 
+*(Built in step 06: Chapter 12 describes how it really works. In short: the detector only says
+*when* the chosen sounds are present, not *which cells* are theirs, so the method is a gate plus
+noise reduction. The reference scores the neural method has to beat, on 500 test mixtures:
+SI-SDRi +2.2 dB offline and −4.9 dB live; with perfect knowledge of the timing +8.1 dB; the
+ceiling for any masking method +24.5 dB.)*
+
 **The neural method (step 07): label-conditioned target sound extraction.**
 A neural network receives two things: the mixed sound, and a multi-hot vector
 saying which classes to keep. It outputs only those classes. The design
@@ -2636,7 +3052,7 @@ follows **SemanticHearing**'s *Waveformer* model, which is built to work in
 small chunks with a memory of what came before, so it can run live with low
 latency.
 
-### 17.3 Training data from mixtures (step 04)
+### 18.3 Training data from mixtures (step 04)
 
 *(Built in step 04: Chapter 10 describes how it really works.)*
 
@@ -2649,7 +3065,7 @@ because every clip's label is translated through the AudioSet ontology into
 the project's seven classes. The data is split carefully, so that no original
 recording ends up in both training and test, which would be leakage.
 
-### 17.4 Measuring quality
+### 18.4 Measuring quality
 
 - **Detection:** how well the probabilities rank "present" above "absent" for
   each class (mean average precision), and how often the yes/no decisions are
@@ -2658,7 +3074,7 @@ recording ends up in both training and test, which would be leakage.
   the clean answer is known. A positive improvement means the output is
   closer to the clean target than the raw mixture was.
 
-### 17.5 Space (modules 3–5)
+### 18.5 Space (modules 3–5)
 
 With the 4-microphone array, the delays between microphones reveal where each
 sound comes from (direction of arrival). **Beamforming** then focuses
@@ -2668,22 +3084,22 @@ persistent sources the user can tap on a map. Until the hardware arrives,
 **simulated** array recordings (made with a room-acoustics library called
 pyroomacoustics) will let this work start without it.
 
-### 17.6 A note on reused code
+### 18.6 A note on reused code
 
 If any code from SemanticHearing (MIT licence) is adapted in future, the
 adapted file keeps its original copyright notice and the reuse gets recorded
 in a third-party notices file. So far none has been adapted.
 
 *Updated in step 02:* there is no separate notices file any more. Adapted code is
-recorded in Chapter 23, "Third-party code".
+recorded in Chapter 24, "Third-party code".
 
 ---
 
-## 18. Running everything
+## 19. Running everything
 
 All commands are for **PowerShell** on Windows 11.
 
-### 18.1 What you need
+### 19.1 What you need
 
 - **Python 3.11.** On this machine, plain `python` is version 3.14, which is
   too new for the project, so the backend is always created with the `py
@@ -2691,7 +3107,7 @@ All commands are for **PowerShell** on Windows 11.
 - **Node.js** (version 22 or newer; this machine has 24) for the website.
 - Ports **8765** and **5173** free.
 
-### 18.2 First-time setup
+### 19.2 First-time setup
 
 ```powershell
 # backend
@@ -2713,7 +3129,7 @@ download site with the matching graphics-card (CUDA) version. Otherwise pip
 installs a version that ignores the graphics card. The README has the exact
 command.
 
-### 18.3 Starting it
+### 19.3 Starting it
 
 ```powershell
 # terminal 1 — the backend
@@ -2728,7 +3144,7 @@ npm run dev               # open http://localhost:5173
 
 Stop either one with **Ctrl+C**.
 
-### 18.4 What you should see
+### 19.4 What you should see
 
 - At http://127.0.0.1:8765/docs, an automatically generated page listing
   every backend address. You can try them out from there.
@@ -2740,7 +3156,7 @@ Stop either one with **Ctrl+C**.
   with the room sound, and the bar shows the latency (about 94 ms here) and RTF (about 0.06).
   Tick **Listen** only with headphones on.
 
-### 18.5 Using the microphone
+### 19.5 Using the microphone
 
 ```powershell
 # in backend/, with the venv active
@@ -2756,24 +3172,24 @@ longer warns about noise suppression.
 
 ---
 
-## 19. Testing everything
+## 20. Testing everything
 
-### 19.1 Running the checks
+### 20.1 Running the checks
 
 ```powershell
 # backend (in backend/, with the venv active)
-pytest              # 387 tests (after step 05; 344 after step 04), about 80 seconds
+pytest              # 482 tests (after step 06; 387 after step 05), about 80 seconds
 ruff check .        # code-quality check
 
 # website (in frontend/)
-npm run test        # 23 tests (after step 05; 18 after step 03); run it from PowerShell,
-                    # not Git Bash (Chapter 20.26)
+npm run test        # 36 tests (after step 06; 23 after step 05); run it from PowerShell,
+                    # not Git Bash (Chapter 21.26)
 npm run lint        # code-quality check
 npm run typecheck   # TypeScript type check
 npm run build       # proves the production build works
 ```
 
-### 19.2 Tests never need hardware
+### 20.2 Tests never need hardware
 
 No test opens a real microphone. Before any test runs, a **fake
 `sounddevice`** replaces the real sound library. It pretends there is one
@@ -2799,9 +3215,9 @@ thread running.
 
 Run one area with, for example, `pytest tests/io`. *(Step 03 removed the empty `__init__.py`
 files from the test folders: with them, starting pytest inside `tests/io` made that folder pose
-as Python's own `io` module, Chapter 20.13.)*
+as Python's own `io` module, Chapter 21.13.)*
 
-### 19.3 What the backend tests cover
+### 20.3 What the backend tests cover
 
 | Area | Examples of what is checked |
 |---|---|
@@ -2841,7 +3257,7 @@ as Python's own `io` module, Chapter 20.13.)*
 | live detector (step 05) | hop times identical for 160/960/4000-sample chunks; windows are exactly the last second; a busy model skips windows while the audio path never waits; stereo mixed down; EMA + hysteresis; missing checkpoint → session starts with a warning |
 | detection API (step 05) | `detections` messages during a file session (stub model), the status's detector block, the no-model warning, `/detect` (200, 404, 413, 503) |
 | loader watchdog (step 05) | a timed-out or dead DataLoader worker becomes a clear error with advice, other errors pass through |
-### 19.4 What the website tests cover
+### 20.4 What the website tests cover
 
 *Step 03 added:* live messages go to the store (status) or to `liveFrames` (pictures), warnings
 and errors become notices without duplicates; history is trimmed to 5 s / 10 s and cleared when
@@ -2863,7 +3279,7 @@ Tests run against a *simulated* browser, which can check what the page says
 but not how it looks. Layout is checked by opening the page in a real
 browser.
 
-### 19.5 A manual check worth repeating
+### 20.5 A manual check worth repeating
 
 With both programs running, stop the backend, wait for the red light, then
 start it again and watch it turn green without reloading the page. This was
@@ -2875,17 +3291,17 @@ website's proxy, with the backend up, stopped, and restarted.
 and a short `soundspy record` on the real laptop. Then start `soundspy serve` and
 confirm the recording appears at `GET /api/recordings`. Tests can only prove the
 code behaves correctly with the *fake* sound card. The two biggest surprises of
-step 02, start-up silence and noise suppression (Chapter 20.8–17.9), only showed
+step 02, start-up silence and noise suppression (Chapter 21.8–17.9), only showed
 up on real hardware.
 
 ---
 
-## 20. Problems found and fixed
+## 21. Problems found and fixed
 
 Each of these was real. Most were silent: nothing crashed, and something was
 simply wrong. They are the most instructive part of this document.
 
-### 20.1 Port 8000 was secretly taken
+### 21.1 Port 8000 was secretly taken
 
 **Symptom:** with our backend stopped, the website should have shown
 "connection refused". Instead, something on port 8000 answered *"Not
@@ -2904,7 +3320,7 @@ the website's proxy points at `127.0.0.1` explicitly rather than at
 
 **Lesson:** "the port is free" is an assumption to check, not a fact.
 
-### 20.2 Windows paths came out scrambled
+### 21.2 Windows paths came out scrambled
 
 **Symptom:** a test checking where the database file goes failed: the path
 came back as `C%3A%5CUsers%5C...`.
@@ -2917,26 +3333,26 @@ Windows path. Those are the codes web addresses use for special characters.
 text. The database file now lands exactly where intended:
 `data/soundspy.db` at the project root.
 
-### 20.3 The newest TypeScript was too new
+### 21.3 The newest TypeScript was too new
 
 TypeScript 7 (a rewrite of the TypeScript compiler) was the latest release,
 but the code-checking tool `typescript-eslint` only supports versions below
 6.1. The project therefore uses **TypeScript 6.0**, a deliberate choice
 recorded in the decision log. Upgrade when the checker catches up.
 
-### 20.4 The installer refused a file outside its folder
+### 21.4 The installer refused a file outside its folder
 
 The backend's package description pointed at `../README.md`, one folder up.
 The Python packaging tool refuses to include files from outside the package's
 own folder, so the first install failed. The reference was removed.
 
-### 20.5 The engine's own guard caught a mistake in a test
+### 21.5 The engine's own guard caught a mistake in a test
 
 A test set up a chain for 48,000 Hz audio, then fed it a 16,000 Hz chunk by
 accident. The chain refused the chunk, as designed (Chapter 6.2). The test
 was wrong, not the code, and the guard proved its worth on day one.
 
-### 20.6 Dataset names were about to reach the user
+### 21.6 Dataset names were about to reach the user
 
 The first version of the website showed AudioSet category names such as
 "Dishes, pots, and pans" as class descriptions. Those are dataset labels, not
@@ -2944,7 +3360,7 @@ friendly text. Each class now has a separate display name and description,
 and the backend **no longer sends** the AudioSet names to the website at all.
 A test makes sure they stay out.
 
-### 20.7 Known and harmless
+### 21.7 Known and harmless
 
 - **One test warning:** the web library (Starlette 1.10) suggests a newer
   testing helper (`httpx2`) instead of the one used (`httpx`). Nothing is
@@ -2956,7 +3372,7 @@ A test makes sure they stay out.
 
 *The entries below were found in step 02, mostly on real hardware.*
 
-### 20.8 Every new recording started with half a second of fake silence
+### 21.8 Every new recording started with half a second of fake silence
 
 **Symptom:** the first real `check-mic` reported a noise floor of −120 dBFS,
 the lowest value the app can display.
@@ -2974,7 +3390,7 @@ the report and gets flagged.
 **Lesson:** a measurement that looks impossibly good deserves suspicion, not
 celebration.
 
-### 20.9 The laptop's sound is being "cleaned" before Sound Spy sees it
+### 21.9 The laptop's sound is being "cleaned" before Sound Spy sees it
 
 **Symptom:** with the start-up silence removed, the noise floor still read
 −120 dBFS. Over a whole 5-second take every 50 ms window stayed below −100 dBFS,
@@ -3003,7 +3419,7 @@ samples). So the "duplicated mono" above was the enhancement processing, not the
 hardware. Two laptop microphones a few centimetres apart can't replace the
 ReSpeaker for real direction finding, but they are no longer "mono".
 
-### 20.10 The same microphone wasn't recognised as itself
+### 21.10 The same microphone wasn't recognised as itself
 
 **Symptom:** in a test, the app chose the MME microphone instead of its WASAPI
 twin.
@@ -3016,7 +3432,7 @@ was 30 characters long and the other 31, and they never matched.
 **Fix:** cut first, then remove spaces. The test fake reproduces exactly this
 name, so the mistake can't come back unnoticed.
 
-### 20.12 A warning that cried wolf: isolated zeros are normal
+### 21.12 A warning that cried wolf: isolated zeros are normal
 
 **Symptom:** after the enhancements were switched off, every `check-mic` still
 warned that 1.4–5 % of samples were "exact digital silence", although the noise
@@ -3038,7 +3454,7 @@ signal with isolated zeros to make sure it stays that way.
 **Lesson:** a check written from one bad recording needs a second, good recording
 before it can be trusted not to fire on healthy input.
 
-### 20.11 Times without a time zone
+### 21.11 Times without a time zone
 
 SQLite stores dates as plain text without a time zone. A recording made at
 16:05 in Romania and one made at 14:30 UTC would sort wrongly if each were stored
@@ -3047,7 +3463,7 @@ API marks them as UTC when it sends them.
 
 *The entries below were found in step 03.*
 
-### 20.13 A test folder pretending to be part of Python
+### 21.13 A test folder pretending to be part of Python
 
 **Symptom:** running only the storage tests (`pytest tests/io/test_storage.py`) failed with
 `cannot import name 'StringIO' from 'io'`, while the full test run passed.
@@ -3064,7 +3480,7 @@ doesn't need them); folders with no tests yet keep a `.gitkeep` so git still tra
 **Lesson:** a test suite has to work the way people actually run it, including one folder at a
 time, not only as a whole.
 
-### 20.14 The channel-reduction guard flagged three innocent lines
+### 21.14 The channel-reduction guard flagged three innocent lines
 
 The scan that enforces "channels are only reduced in `ChannelReducer`" (Chapter 3) found
 `[:, 0]` and `.sum(axis=1)` in three new files. None of them reduced audio channels: one took the
@@ -3073,7 +3489,7 @@ reshaped a gain curve. Rather than weaken the guard, the three lines were rewrit
 (`.ravel()`, `.max(axis=1)`, `.reshape(-1, 1)`). The guard stays strict, so a real violation
 still fails the build.
 
-### 20.15 "Listen" seemed to ignore the volume for a moment
+### 21.15 "Listen" seemed to ignore the volume for a moment
 
 **Symptom:** a test changed the volume and the server's reply still showed the old value.
 
@@ -3083,7 +3499,7 @@ the reply was built before that moment.
 **Fix:** the status now reports the requested setting while it waits to be applied, so the page
 shows what the user just chose.
 
-### 20.16 A test that listened to silence
+### 21.16 A test that listened to silence
 
 The first monitoring test played a file whose two channels were exact opposites (channel 1 =
 −channel 0) and expected to hear something. The chain mixes the channels to one, and opposites
@@ -3091,13 +3507,13 @@ cancel to perfect silence. The code was right; the test file was wrong. Real ste
 rarely cancel, but it's a reminder that a mono mix *can* lose sound when microphones pick it up
 in opposite phase. That's one reason the analyzer and the recordings always keep every channel.
 
-### 20.17 Latency vs clicks: the prebuffer trade-off
+### 21.17 Latency vs clicks: the prebuffer trade-off
 
 Measured on the laptop, 30 seconds each: with a prebuffer of 2 chunks the typical latency is 94 ms
 and there were **no** underruns; with 1 chunk it's 84 ms but there was **one** underrun (a click).
 The default stays at 2. Chapter 9.5 explains the parts of the delay.
 
-### 20.18 Plugging in headphones broke the next session
+### 21.18 Plugging in headphones broke the next session
 
 **Symptom (owner's test):** everything worked, including Listen with headphones. Then a file
 session started without an output device ("no output device is available for monitoring" when
@@ -3127,7 +3543,7 @@ index 9 throughout.
 Tests reproduce the stale-handle failure with the fake sound card; on the real laptop a
 microphone → file → microphone sequence now gets the speakers every time.
 
-### 20.19 The Listen box wouldn't tick while no session was running
+### 21.19 The Listen box wouldn't tick while no session was running
 
 **Symptom (owner's test):** Listen unticked during a session, session stopped, Listen ticked
 again: the box stayed unticked until the next Start (which then did start listening).
@@ -3141,7 +3557,7 @@ the box shows what the user chose and the next session starts with it. A test re
 sequence.
 
 
-### 20.20 A whole test folder was silently skipped
+### 21.20 A whole test folder was silently skipped
 
 **Symptom:** the first run of the new data tests reported *28 skipped*, none run.
 
@@ -3152,7 +3568,7 @@ fills with **folder names**, and the new tests live in `tests/data/`.
 **Fix:** it now looks only at real marks. All 57 data tests run; the skip still works for tests
 that really are marked.
 
-### 20.21 A car horn looked like "traffic plus something else"
+### 21.21 A car horn looked like "traffic plus something else"
 
 **Symptom:** a clip labelled `Vehicle_horn, Car, Vehicle, Alarm` came out as "class mixed with
 other sounds" instead of being reported as an overlap of *alarm* and *traffic*.
@@ -3165,14 +3581,14 @@ not tolerate it.
 rule is applied (Chapter 10.6). The horn is now correctly an alarm + traffic overlap, and every
 other clip gets the same role as before.
 
-### 20.22 7-Zip was missing
+### 21.22 7-Zip was missing
 
 FSD50K's audio comes as a split zip that only 7-Zip can unpack, and the laptop had no 7-Zip. The
 downloader downloads everything first and then stops with the install command; the owner agreed
 to install it (`winget install 7zip.7zip`), after which the same command continued with the
 extraction without downloading anything again.
 
-### 20.23 FSD50K's validation split shared uploaders with training
+### 21.23 FSD50K's validation split shared uploaders with training
 
 **Symptom:** the first real `prepare` stopped with *"926 leakage group(s) span several splits"*.
 
@@ -3184,7 +3600,7 @@ from someone who also uploaded training clips. The leakage check did its job.
 (Chapter 10.8). 2,010 clips change side, the test split is untouched, and `prepare` reports the
 number every time.
 
-### 20.24 The first training run hung: memory-hungry DataLoader workers
+### 21.24 The first training run hung: memory-hungry DataLoader workers
 
 **Symptom (owner):** `soundspy train detection --smoke` started its DataLoader workers and then
 nothing happened: 8 Python worker processes, no `log.csv` after 8 minutes, GPU idle. The log's
@@ -3207,7 +3623,7 @@ frequencies is released before training starts, and every loader has a 120 s wat
 a clear error suggesting fewer workers instead of a silent hang. With 4 workers the smoke run then
 finished normally (first batch after 12 s). A test runs two real spawned workers.
 
-### 20.25 The pretrained model saw "everything" in one-second clips
+### 21.25 The pretrained model saw "everything" in one-second clips
 
 **Symptom:** the first zero-shot check gave AP equal to chance for every class; every probability
 was ~1.0.
@@ -3219,7 +3635,7 @@ saturates. Measured zero-shot mAP: 0.10–0.12 for 1–3 s of input, 0.41 for 5�
 **Fix:** the 1 s window is padded with silence to 10 s before the model (`input_context_s`),
 identically in training and live (Chapter 11.2).
 
-### 20.26 Frontend tests "failed to find the current suite" in Git Bash
+### 21.26 Frontend tests "failed to find the current suite" in Git Bash
 
 **Symptom:** `npm run test` failed in every file at `tests/setup.ts` with *"Vitest failed to find
 the current suite"*, even for untouched tests; it had passed in the morning.
@@ -3228,9 +3644,9 @@ the current suite"*, even for untouched tests; it had passed in the morning.
 (lowercase drive letter) and Vitest ends up loading itself twice under two spellings of the same
 path. From PowerShell (as in the morning) all tests run normally.
 
-**Fix:** run the frontend checks from PowerShell (noted in Chapter 19.1).
+**Fix:** run the frontend checks from PowerShell (noted in Chapter 20.1).
 
-### 20.27 Every GPU session skipped its first 3 seconds of detection
+### 21.27 Every GPU session skipped its first 3 seconds of detection
 
 **Symptom:** each live session on the GPU reported exactly 12 skipped windows, though one window
 takes only ~28 ms and a new one is due every 250 ms.
@@ -3245,7 +3661,7 @@ different thread, so it paid ~3 s on its first real window.
 most 60 s). Afterwards: first window 16 ms, 0 skipped. A test checks that the warm-up runs on the
 `soundspy-detector` thread and is finished when the detector is configured.
 
-### 20.28 Detection on the CPU kept seven cores busy
+### 21.28 Detection on the CPU kept seven cores busy
 
 **Symptom:** with `live.device: cpu`, the backend used **680 % of one core** (about 7 of the 12
 CPU threads), for a model that needs 44 ms every 250 ms.
@@ -3258,7 +3674,7 @@ threads keep spinning ("busy-waiting") so they can react fast. Measured with 12 
 applies only to that thread, so offline `detect` still uses all cores. Afterwards: 71 ms per window
 (28 % of the time between windows), backend CPU 38 % of a core, 0 skipped.
 
-### 20.29 Overlapping stretches in `soundspy detect`
+### 21.29 Overlapping stretches in `soundspy detect`
 
 **Symptom:** `detect` on the 62 s UI recording printed `speech 21.25-26.75 s` and
 `26.25-32.75 s`, overlapping.
@@ -3268,9 +3684,69 @@ applies only to that thread, so offline `detect` still uses all cores. Afterward
 
 **Fix:** stretches of the same class that overlap or touch are merged: `21.25-32.75 s`. Test added.
 
+### 21.30 The noise estimate removed a steady target
+
+**Symptom:** in the first check of the extractor, a constant tone that was the *target* came out
+7 dB *worse* than it went in, although the gate was open.
+
+**Cause:** minimum statistics estimates the background as "whatever each frequency never drops
+below for 1.5 s". A tone that lasts longer than that never drops, so it is taken for background
+and removed. The same would happen to a held note, a continuous alarm or steady road noise,
+exactly the things a user may select. The first version used the larger of the two noise
+estimates (detector-gated average and minimum statistics), so the fallback was always active.
+
+**Fix:** the detector-gated average ("what it sounded like while the target was absent") is used
+whenever it is fresh; minimum statistics only when no target-free moment was seen for 5 s, or
+when there is no detector. With the gated estimate the same tone in noise went from −1.8 dB to
++22.7 dB SI-SDR.
+
+### 21.31 An occasional click: Python's memory clean-up stopped the audio thread
+
+**Symptom:** with extraction on, about one output underrun every few minutes (the step requires
+none in 60 s), although processing a 20 ms chunk takes under 2 ms.
+
+**Diagnosis:** a log of garbage collections in the running backend showed full collections of
+**45–87 ms**. Python stops *every* thread during a collection, and a full one scans all
+long-lived objects: about 140,000 here (PyTorch, the model, the web framework). The output queue
+cushions about 40 ms, so one collection during a session is one underrun. Step 06 doubled the
+number of live messages, and with it the garbage, so it showed up now.
+
+**Fix:** when a session starts, one collection is run on purpose and everything alive is then
+*frozen* (`gc.freeze()`): excluded from later scans. A full collection during a session then
+takes about a millisecond. When the session ends, the freeze is lifted. Afterwards: no long
+collection inside any session, and 0 underruns in 8 consecutive sessions (2 × 60 s microphone,
+6 × 24 s file). A test checks that a collection during a session takes under 20 ms.
+
+### 21.32 File playback arrived in a 30 ms / 10 ms rhythm
+
+**Symptom:** sessions that play a *file* (not the microphone) still had a rare underrun; the log
+showed chunks arriving alternately 30 ms and 10 ms apart instead of every 20 ms.
+
+**Cause:** the file source paced itself with `time.monotonic()`, which on Windows with
+Python 3.11 only advances every ~15.6 ms.
+
+**Fix:** it uses the high-resolution clock (`time.perf_counter()`). Before, 306 of about 7,800
+file-session chunks arrived more than 30 ms after the previous one; afterwards none.
+
+### 21.33 Two threads indexing at once, and a file read while it is replaced
+
+**Symptom:** one test of the processing runs failed about once in three runs of the whole
+suite: asking for a run's status sometimes answered "no such run".
+
+**Cause:** two things that only happen when the background worker and a web request meet.
+(1) Both re-read the run sidecars to update the database; both found the same new sidecar and
+both tried to insert it. (2) On Windows a file cannot be opened in the instant it is being
+replaced. The worker rewrote a run's sidecar exactly while the request read it; the unreadable
+file was treated as "gone" and the run's entry was deleted from the index.
+
+**Fix:** indexing is done by one thread at a time (a lock); sidecar reads and rewrites are
+serialised inside the process and retried briefly if another process holds the file; and an
+index entry is only removed when its sidecar really no longer exists. Three tests cover it
+(six threads indexing at once; one thread rewriting a sidecar 300 times while three read it).
+
 ---
 
-## 21. Design decisions and why
+## 22. Design decisions and why
 
 The full dated list is in [docs/decisions.md](docs/decisions.md). The
 reasoning behind the most important ones:
@@ -3340,6 +3816,34 @@ has no migration tool yet. If the file comes back, the next sync re-adds it.
 This will be revisited once offline processing runs exist (step 06), because
 deleting a recording's row also deletes its runs.
 
+*Revisited in step 06, as planned.* A recording whose WAV is gone is now **marked missing**, not
+deleted, and its runs stay. No migration tool was needed for the new column: the database is
+rebuilt from the sidecars whenever its schema version changes (Chapter 14). One refinement: if
+the recording's *sidecar* is gone as well, the row is removed, because the database must never
+be the only place something is written down. The runs survive in both cases; they have their own
+sidecars.
+
+**Why a gate with noise reduction, and not a mask per frequency for the chosen sound?**
+(step 06) The detector says *when* a class is present, not *which frequencies* are its. Without
+training, timing is the only information available, so the baseline gates in time and removes
+only the background it could learn while the target was absent. Anything smarter needs a model
+that has learnt what the classes sound like: step 07.
+
+**Why does the sound go through the STFT even when nothing is selected?** (step 06) So the
+delay is always the same. If pass-through skipped the STFT, selecting a class would add 21 ms in
+the middle of a sentence: a jump you would hear.
+
+**Why is the bypass signal delayed?** (step 06) For a fair, seamless A/B. Both versions reach
+the headphones equally late, so switching changes only the processing, not the moment you hear.
+
+**Why are processing runs files with sidecars, like recordings?** (step 06) Same reasons: they
+can be copied or backed up as plain files, the database can be rebuilt from them, and the
+command line can create them without any database code.
+
+**Why three "activity sources"?** (step 06) They separate two questions the evaluation must
+answer: how good is the method when it knows exactly when the target sounds (the *oracle*), and
+how much is lost because the detector errs (*timeline*) and lags (*live*)?
+
 **Why 20 ms chunks?** (step 03) Short enough to keep the delay low (one chunk is one of the
 delays you hear), long enough that the computer handles 50 of them a second with almost no
 effort (RTF 0.06). Detection and extraction models of later steps may need longer windows; they
@@ -3395,7 +3899,7 @@ extractor of step 07 running at the same time.
 
 **Why 1 s windows every 0.25 s, padded to 10 s?** One second is long enough to recognise most
 sounds and short enough to follow them; a new answer four times a second feels live. The padding
-is needed because the pretrained network does not work on short inputs (Chapter 20.25).
+is needed because the pretrained network does not work on short inputs (Chapter 21.25).
 
 **Why tune thresholds on val, never on test?** Any choice made by looking at the test set makes
 the test score optimistic. Val decides thresholds and the best epoch; test is scored once.
@@ -3412,7 +3916,7 @@ torchaudio 2.11.0; torchaudio is in maintenance mode and has no builds for newer
 12.x runtime, as the owner asked; the laptop's driver (621.24) runs it.
 ---
 
-## 22. Known limitations
+## 23. Known limitations
 
 These are understood and accepted for now, not oversights.
 
@@ -3423,6 +3927,8 @@ These are understood and accepted for now, not oversights.
    recognised or removed yet. That begins with steps 05–06.)*
    *(After step 05: sounds are recognised live (Chapter 11), but nothing is removed yet; the
    selected classes take effect from step 06.)*
+   *(After step 06: selected sound types are kept and the rest is turned down, live and for
+   saved recordings (Chapter 12), with the limits of items 22–24 below.)*
 2. **Tabs 2 and 3 need hardware that hasn't arrived.** The ReSpeaker array's
    microphone positions are still to be filled in from its datasheet.
 3. **The website's message types are typed by hand.** They must be kept in
@@ -3494,10 +4000,22 @@ These are understood and accepted for now, not oversights.
 21. **Music can also light "alarm" or "speech"** (step 05): classical music sets off "alarm",
     vocals in songs set off "speech". In step 06 this means selecting *speech* will also keep
     the singing in music, and an alarm target may let some orchestral music through.
+22. **The baseline extractor does not separate overlapping sounds** (step 06). While a selected
+    sound is present, whatever else sounds at the same time comes through with it; only steady
+    background is reduced. With perfect timing it gains 8 dB where a perfect mask would gain
+    24 dB (Chapter 12.7). Step 07 addresses this.
+23. **Live extraction lags behind the sound** (step 06). The gate follows the detector, which
+    switches on ~0.3 s late and off ~1 s late: short sounds lose their beginning and are followed
+    by a second of everything else. On the test mixtures live extraction scores *below* doing
+    nothing (−4.9 dB SI-SDRi); offline processing, which has no lag, scores +2.2 dB. A sound the
+    detector misses altogether is turned down like everything else (about 30 % of the test
+    mixtures).
+24. **Extraction adds 21 ms of delay** (step 06), with or without a selection, and works on
+    the mono mix only.
 
 ---
 
-## 23. Third-party code
+## 24. Third-party code
 
 Sound Spy is original code. It uses ordinary libraries installed with `pip` and `npm` (NumPy,
 SciPy, sounddevice, soundfile, FastAPI, React and so on), each under its own licence; those are
@@ -3513,7 +4031,7 @@ table below with where it came from, its licence, and which of our files contain
 
 **Changes we made:** only the `mlp` head is kept; `torchvision`'s `ConvNormActivation` is replaced by an identical local class (same layer order, so the pretrained weights load unchanged); no download or printing inside the model; the front-end uses the non-deprecated STFT call (same numbers, checked by a test) and caches its mel filterbank. **Weights:** `mn10_as_mAP_471.pt` from the project's GitHub release v0.0.1, downloaded to `D:/SoundSpyData/models/efficientat/` and checked against a pinned SHA-256; never committed. **Data file:** `configs/detection/audioset_labels.csv` (the 527 AudioSet labels, from AudioSet, CC BY 4.0, as distributed with EfficientAT).
 
-**Ideas, not code.** The extraction design (Chapter 17) follows the **SemanticHearing** project
+**Ideas, not code.** The extraction design (Chapter 18) follows the **SemanticHearing** project
 (Veluri et al., UIST 2023, https://github.com/vb000/SemanticHearing, MIT licence): the
 label-conditioned Waveformer model, chunked streaming inference, the AudioSet class mapping and
 synthetic training mixtures. No code from it has been adapted. If any is in future, it gets a row
@@ -3525,7 +4043,7 @@ data used for training, not adapted code. Their sources and licences are recorde
 dataset's `SOURCE.json` and described in Chapter 10.3.
 ---
 
-## 24. Quick reference
+## 25. Quick reference
 
 ### Start
 
@@ -3584,13 +4102,19 @@ GET  /api/recordings                    recordings, newest first (re-indexes dat
 GET  /api/recordings/{id}[/audio]       one recording / its WAV (audio/wav)
 GET  /api/session                       current session status
 POST /api/session/start | stop          {mode, source: {type: mic|file, path, loop}, monitor}
-PUT  /api/session/target                TargetSpec (422 unknown class; audible from step 05)
+PUT  /api/session/target                TargetSpec: {labels, attenuation_db} (422 unknown class)
 PUT  /api/session/monitor               {enabled, gain_db -40..12, muted}
+PUT  /api/session/bypass                {enabled}: hear the unprocessed sound (A/B)
 POST /api/session/record/start | stop   {label, notes} / returns the new recording
 POST /api/recordings/{id}/detect        offline detection timeline (413 > 2 min, 503 no model)
-POST /api/recordings/{id}/process       501 until step 06
-WS   /ws/session                        status 1/s, levels 20/s, waveform + spectrogram 25/s,
-                                        warning, error; heartbeat every 2 s when idle
+POST /api/recordings/{id}/process       {labels, attenuation_db?} -> a run, 202 (413 > 5 min,
+                                        422 no/unknown class, 503 no model)
+GET  /api/recordings/{id}/runs          its processing runs, newest first
+GET  /api/runs/{run_id}[/audio]         one run / its processed WAV (409 if not done)
+WS   /ws/session                        status 1/s, levels 20/s, waveform + spectrogram 25/s
+                                        (each for input and output), detections 4/s, run,
+                                        warning, error; heartbeat every 2 s when idle;
+                                        accepts set_target and set_bypass
 ```
 
 ### The numbers worth remembering
@@ -3603,8 +4127,10 @@ WS   /ws/session                        status 1/s, levels 20/s, waveform + spec
 | Sound classes | 7 |
 | Default suppression of unchosen sounds | 30 dB (to about 3% of its size) |
 | Engine chunk | 1,024 frames (~21 ms at 48 kHz); *since step 03:* 20 ms (960 frames at 48 kHz) |
-| Listening delay (laptop, wired) | about 94 ms (22 in + 20 chunk + ~30 queue + 22 out) |
-| Processing load (laptop) | RTF p95 0.06; ~12 % of one CPU core |
+| Listening delay (laptop, wired) | about 94 ms (22 in + 20 chunk + ~30 queue + 22 out); *since step 06:* 105–125 ms (+21.3 ms STFT) |
+| Processing load (laptop) | RTF p95 0.06; ~12 % of one CPU core; *since step 06 (detector on GPU + extractor):* RTF p95 0.17; ~24 % |
+| Extractor (baseline) | STFT 1,024 / 256 at 48 kHz; gate 10 ms open, 300 ms hold, 200 ms close; SI-SDRi on 500 test mixtures: +2.2 dB offline, −4.9 dB live, +8.1 dB with true timing, +24.5 dB ideal mask |
+| Offline processing | 62 s recording in 6.5 s; at most 5 minutes per recording on the page; one job at a time |
 | Speaker cushion / max queue / limiter | 2 chunks / 8 chunks / −1 dBFS ceiling, 50 ms release |
 | Heartbeat / health check | every 2 s / every 5 s |
 | Python / Node | 3.11 / 24 |
@@ -3612,7 +4138,7 @@ WS   /ws/session                        status 1/s, levels 20/s, waveform + spec
 | Honest noise floor (enhancements off) | about −65 dBFS |
 | WASAPI start-up silence (discarded) | 500 ms with enhancements on, none with them off |
 | Mic stall timeout / live chunk queue | 2 s / 32 chunks, oldest dropped first |
-| Backend tests / website tests | 264 / 18 (after step 03); 344 / 18 (after step 04); 387 / 23 (after step 05) |
+| Backend tests / website tests | 264 / 18 (after step 03); 344 / 18 (after step 04); 387 / 23 (after step 05); 482 / 36 (after step 06) |
 | Detector | EfficientAT mn10_as, 4.88 M parameters, 32 kHz, 1 s window padded to 10 s, a result every 0.25 s |
 | Training data | `D:/SoundSpyData/` (external, processed, mixtures, models) |
 | Mixtures | 6 s, 20,000 / 2,000 / 2,000 recipes (train / val / test), seeds 1 / 2 / 3 |

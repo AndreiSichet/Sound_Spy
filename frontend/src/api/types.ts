@@ -69,7 +69,23 @@ export interface EngineStatus {
   output_dropped?: number
   /** Present while a detection model runs in the session (step 05). */
   detector?: DetectorStatus | null
+  /** The speakers get the unprocessed (delay-matched) signal instead of the output (step 06). */
+  bypass?: boolean
+  /** The session's extractor (step 06). */
+  extraction?: ExtractionStatus | null
 }
+
+export interface ExtractionStatus {
+  method: string
+  /** Its algorithmic delay; already part of EngineStatus.latency_ms. */
+  latency_ms: number
+  /** A detector tells it whether the selected sounds are present. */
+  gating: boolean
+  target_active: boolean
+}
+
+/** Which side of the processing chain a visual frame shows. */
+export type FrameSource = 'input' | 'output'
 
 export interface DetectorStatus {
   model: string
@@ -93,17 +109,20 @@ export interface LevelFrame {
   rms_dbfs: number[]
   peak_dbfs: number[]
   clipping: boolean[]
+  source?: FrameSource
 }
 
 export interface WaveformFrame {
   mins: number[]
   maxs: number[]
+  source?: FrameSource
 }
 
 export interface SpectrogramFrame {
   magnitudes_db: number[]
   freq_max_hz: number
   freq_min_hz?: number
+  source?: FrameSource
 }
 
 export interface WarningPayload {
@@ -147,6 +166,32 @@ export interface Recording {
   profile: string
   label: string | null
   notes: string
+  /** The sidecar is there but the WAV file is gone: listed, but not playable. */
+  missing?: boolean
+}
+
+export interface ProcessRequest {
+  labels: string[]
+  attenuation_db?: number
+  method?: 'mask_baseline'
+}
+
+/** One offline processing of a recording (step 06). */
+export interface Run {
+  run_id: string
+  created_at: string
+  recording_id: number | null
+  recording_path: string
+  labels: string[]
+  attenuation_db: number
+  method: string
+  activity_mode?: string
+  status: 'pending' | 'running' | 'done' | 'failed'
+  error: string | null
+  output_path: string | null
+  duration_s: number | null
+  processing_seconds: number | null
+  info?: Record<string, unknown>
 }
 
 export interface Detection {
@@ -195,10 +240,13 @@ export type ServerMessage =
   | Envelope<'spectrogram', SpectrogramFrame>
   | Envelope<'detections', DetectionFrame>
   | Envelope<'sources', { items: SoundSource[] }>
+  | Envelope<'run', Run>
   | Envelope<'warning', WarningPayload>
   | Envelope<'error', ErrorPayload>
 
-export type ClientMessage = Envelope<'set_target', TargetSpec>
+export type ClientMessage =
+  | Envelope<'set_target', TargetSpec>
+  | Envelope<'set_bypass', { enabled: boolean }>
 
 export type ServerMessageType = ServerMessage['type']
 
@@ -209,6 +257,7 @@ export const SERVER_MESSAGE_TYPES: readonly ServerMessageType[] = [
   'spectrogram',
   'detections',
   'sources',
+  'run',
   'warning',
   'error',
 ]

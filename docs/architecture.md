@@ -126,7 +126,7 @@ Every message, in both directions, uses one envelope:
 
 ```json
 {"type": "status" | "levels" | "waveform" | "spectrogram" | "detections" | "sources"
-         | "warning" | "error" | "set_target",
+         | "run" | "warning" | "error" | "set_target" | "set_bypass",
  "t": 12.34,
  "payload": { ... }}
 ```
@@ -142,9 +142,16 @@ Every message, in both directions, uses one envelope:
 | `spectrogram` | server → client | `SpectrogramFrame`: `magnitudes_db[]` (128 mel bands, floor −100), `freq_min_hz`, `freq_max_hz` | 25/s (`analysis.spectrogram_hz`) |
 | `detections` | server → client | `DetectionFrame`: `probabilities` (every class, smoothed) and `active` (class IDs, threshold + hysteresis); `t` = end of the analysed 1 s window | every `detection.live.hop_s` (0.25 s) while a detector runs (step 05) |
 | `sources` | server → client | `{"items": [SoundSource, ...]}` | module 5 |
+| `run` | server → client | `RunModel` (`run_id`, `recording_id`, `labels`, `attenuation_db`, `method`, `status`, `error`, `output_path`, `duration_s`, `processing_seconds`, `info`) | on every state change of an offline processing run (step 06); never dropped |
+| `set_bypass` | client → server | `{"enabled": bool}` | stored, forwarded to the session; replied with `status` (step 06) |
 | `warning` | server → client | `{"code", "message"}` (e.g. `rtf_high`) | when needed, ≤ 1 per `rtf_window_s` |
 | `error` | server → client | `{"message": "..."}` | reply to a bad client message |
 | `set_target` | client → server | `TargetSpec`: `labels[]`, `direction`, `source_id`, `attenuation_db` | validated against `LabelSet`, stored, forwarded; replied with `status` |
+
+Step 06: `levels` / `waveform` / `spectrogram` payloads carry `source`: `"input"` (the input
+`Analyzer`) or `"output"` (the `post_side` analyzer on the chain output), so each exists twice at
+its rate. `status` carries `bypass` and `extraction` (`{method, latency_ms, gating,
+target_active}`); `latency_ms` includes the chain's algorithmic latency.
 
 On connect the server sends a `status` message, then a `status` heartbeat every
 `api.ws_heartbeat_s` seconds (2 s). Unknown or malformed client messages get an `error` reply;
@@ -165,9 +172,13 @@ are produced (`set_target` answers "not implemented (step-03)").
 | `PUT /api/session/monitor` | 03 (implemented): `{enabled, gain_db ∈ [−40, 12], muted}`; 409 no output device |
 | `POST /api/session/record/start`, `/record/stop` | 03 (implemented): 409 no session / (not) recording; stop syncs the index and returns the `Recording` |
 | `GET /api/recordings/{id}`, `GET /api/recordings/{id}/audio` | 03 (implemented): `audio/wav`, 404 if missing |
-| `POST /api/recordings/{id}/process` | 06 |
+| `POST /api/recordings/{id}/detect` | 05 (implemented): offline detection timeline; 413 above `detection.offline.max_seconds`, 503 no model |
+| `PUT /api/session/bypass` | 06 (implemented): `{enabled}`; kept between sessions |
+| `POST /api/recordings/{id}/process` | 06 (implemented): `{labels (>= 1), attenuation_db?, method?}` → 202 + `RunModel` (`pending`), processed by the one-job worker; 404 file gone, 413 above `extraction.offline.max_seconds`, 422 unknown label, 503 no detection model |
+| `GET /api/recordings/{id}/runs` | 06 (implemented): runs of a recording, newest first |
+| `GET /api/runs/{run_id}`, `GET /api/runs/{run_id}/audio` | 06 (implemented): 404 unknown; audio 409 unless `done` |
 
-Unimplemented routes return HTTP 501 `{"detail": "not implemented (step-XX)"}`.
+Unimplemented routes return HTTP 501 `{"detail": "not implemented (step-XX)"}` (none since step 06).
 Interactive docs: http://127.0.0.1:8765/docs.
 
 ## Audio capture: from device to chunks
@@ -210,24 +221,71 @@ channel indices, label, notes, overflows, app version, …). Files are created e
 nothing is ever overwritten.
 
 The database is only an **index** of the sidecars. `api/services/recordings.sync_recordings` runs
-on API startup and on every `GET /api/recordings`: it adds a row for every unindexed sidecar and
-**deletes** rows whose WAV is gone (a later sync re-adds the file if it comes back). The CLI
+on API startup and on every `GET /api/recordings`: it adds a row for every unindexed sidecar,
+marks a row **`missing`** while its WAV is gone but its sidecar remains (step 06; cleared when the
+file returns), and deletes a row whose sidecar is gone (nothing describes it any more). The CLI
 (`soundspy record`) writes files only and never touches the database, which keeps the library free
 of SQLAlchemy and means a database can always be rebuilt from `data/raw/`. Paths are stored
 relative to the project root; times in UTC (SQLite keeps no time zone).
 
 ## Database
 
-SQLite at `data/soundspy.db` (SQLAlchemy 2.x, URL in `configs/default.yaml`), tables created on
-startup by `init_db()`:
+SQLite at `data/soundspy.db` (SQLAlchemy 2.x, URL in `configs/default.yaml`). Since step 06 the
+database is a **disposable index of sidecar files**: nothing is stored only in it.
 
 - `recordings`: id, created_at, path (unique), duration_s, sample_rate, channels, device,
-  profile, label?, notes. An index of the sidecars in `data/raw/` (see above).
-- `processing_runs`: id, created_at, recording_id → recordings, mode, target_json, method
-  (`mask_baseline` | `neural_tse`), output_path?, metrics_json?, status (`pending` | `done` |
-  `failed`), error?.
+  profile, label?, notes, `missing`. Index of the sidecars in `data/raw/`.
+- `processing_runs`: id, `run_id` (unique; the sidecar's stem), created_at, recording_id? →
+  recordings (`SET NULL`), recording_path, labels (JSON), attenuation_db, method, activity_mode,
+  status (`pending` | `running` | `done` | `failed`), error?, output_path?, duration_s?,
+  processing_seconds?, info (JSON). Index of the run sidecars in `outputs/processed/`.
+- `meta`: key/value; holds `schema_version`.
 
-Audio files stay on disk; the database stores paths and metadata. No migrations tool yet.
+**No migrations.** `db/models.SCHEMA_VERSION` (2) is bumped whenever a table changes.
+`init_db()` compares it with the stored version: equal → nothing; different, or tables without a
+version → `rebuild_db()` (reflect + drop every table, create the current schema), after which
+`services/index.sync_all` re-reads the sidecars. `soundspy db rebuild` does the same on demand.
+All indexing holds `INDEX_LOCK` (request threads and the run worker both index).
+
+## Extraction (step 06, `soundspy.extraction`)
+
+`dsp/stft.py`: `StftSpec(n_fft, hop)`, sqrt-Hann analysis + synthesis, frame `k` covers
+`[k*hop - (n_fft - hop), k*hop + hop)`. `StreamingSTFT.push(chunk)` → `(k, channels, bins)`;
+`StreamingISTFT.push(frames)` + `read(n)` returns exactly `n` samples; unity gain = input delayed
+by `StftSpec.latency` = `n_fft` samples for any chunking. Offline `stft` / `istft`: same frames,
+zero delay.
+
+`MaskBaselineExtractor(Processor)` (1 channel; `configs/extraction/mask_baseline.yaml`): per
+frame, `active = ActivitySource.active(labels, centre_s, now_s)`; gate position `o` (open ramp
+`open_ms`, hold `hold_ms`, close ramp `close_ms`); noise `N` = recursive average
+(`noise_alpha`) over frames confirmed inactive (`lag_s` guard) if younger than
+`noise_max_age_s`, else `minstat_bias` × minimum of the smoothed power over `minstat_window_s`;
+decision-directed `xi` (`dd_alpha`), Wiener gain `xi / (1 + xi)` floored at
+`g_min = 10^(-attenuation_db / 20)`, smoothed (`gain_smoothing`); frame gain
+`exp(m * (o * ln G + (1 - o) * ln g_min))`, `m` = ramp into/out of pass-through (empty labels =
+unity gain, still through the STFT). No activity source → gate open, minimum statistics only.
+`latency_samples = n_fft`.
+
+`ActivitySource`: `LiveDetectorActivity(DetectionState)` (current decision; `lag_s` =
+`noise_guard_s`), `TimelineActivity(labels, times, active, clock="centre" | "now")` (step
+function; built by `centred_timeline` = offline, windows centred, zero-phase EMA + hysteresis,
+and `causal_timeline` = the live detector's windows/EMA/hysteresis + `delay_s`),
+`OracleActivity(class_activity, rate_hz)`. `engine/detection_state.DetectionState` is written by
+`Detector._drain` and built per chain by `engine/factory.py`.
+
+Chain (`SEMANTIC`): `main = [reducer, extractor]`, `side = [analyzer(input), detector]`,
+`post_side = [analyzer(output)]`, `dry_after="reducer"`: `chain.dry` is the reducer's output
+delayed by the latency of the later stages (aligned with the output); `Session.set_bypass(True)`
+sends it to the sink instead of the output. `Processor.latency_samples` (default 0) sums to
+`chain.latency_samples`, added to `Session.latency_ms`. While a session runs, long-lived objects
+are frozen for the garbage collector (`gc.freeze()` at start, `gc.unfreeze()` on release).
+
+Offline: `extraction/offline.py` (`run_offline` = block-wise `process` + flush, delay-compensated;
+`extract_file`; `start_run` / `execute_run`), `io/runs.py` (run sidecars, atomic rewrite under a
+lock, retry on a locked file), `api/services/runs.RunManager` (queue + one `soundspy-runs` thread,
+`run` WS messages). Evaluation: `training/evaluate_extraction.py`, five systems (mixture,
+timeline, live, oracle, IRM), outputs in `experiments/ext_<method>/` and
+`outputs/eval/ext_<method>/`.
 
 ## Training data (step 04, `soundspy.data`)
 
@@ -331,6 +389,9 @@ smoothing; overlapping or touching segments of a class merged), `POST /api/recor
 13–17. Git read-only for Claude Code; adapted third-party code keeps its license header and is
 listed in the "Third-party code" section of `project_insights.md`; scope discipline; the step
 report is given in chat; `project_insights.md` is updated every step.
+18. **Large data on D:.** Datasets, indexes and model caches live under the configured `paths`.
+19. **The database is a disposable index of sidecar files.** Nothing is stored only in the DB,
+    so it can be rebuilt at any time and schema changes need no migrations.
 
 ## Step plan (numbers used in `TODO(...)` markers)
 
@@ -341,7 +402,7 @@ report is given in chat; `project_insights.md` is updated every step.
 | 03 | Live session: engine worker, chunker, speaker sink, Analyzer; WS levels + spectrogram; record button; Semantic tab live monitor | 1 |
 | 04 | Data: ontology, collectors (ESC-50, FSD50K, own recordings), splits, foreground/background mixtures; `record-dataset` — **done** (data on D:, recipes in JSONL, `soundspy data …`) | - |
 | 05 | Detection: features, multi-label fine-tuning of a pretrained model, chunked inference, detections over WS — **done** (EfficientAT mn10_as, `detection/`, `training/`) | 1 |
-| 06 | Extraction baseline (detector-guided masking) + SI-SDR metrics; offline processing with A/B playback | 1 |
+| 06 | Extraction baseline (detector-guided masking) + SI-SDR metrics; offline processing with A/B playback — **done** (detector-gated Wiener filter, `extraction/`, run sidecars, rebuildable DB) | 1 |
 | 07 | Neural TSE (Waveformer-style, label-conditioned, streaming); live extraction in the Semantic tab | 1 |
 | 08 | End-to-end evaluation, robustness, polish, documentation for the university report | 1 |
 | module-3/4 | Simulated array (pyroomacoustics), DOA, beamforming, Spatial tab | 2 |

@@ -5,8 +5,10 @@ import type {
   EngineStatus,
   HealthResponse,
   MonitorRequest,
+  ProcessRequest,
   RecordStartRequest,
   Recording,
+  Run,
   SessionStartRequest,
   TargetSpec,
 } from './types.ts'
@@ -52,6 +54,10 @@ export function recordingAudioUrl(id: number): string {
   return `/api/recordings/${id}/audio`
 }
 
+export function runAudioUrl(runId: string): string {
+  return `/api/runs/${encodeURIComponent(runId)}/audio`
+}
+
 export const api = {
   health: () => apiFetch<HealthResponse>('/health'),
   config: () => apiFetch<ConfigResponse>('/config'),
@@ -65,4 +71,9 @@ export const api = {
   recordStop: () => send<Recording>('POST', '/session/record/stop'),
   recordings: () => apiFetch<Recording[]>('/recordings'),
   detectRecording: (id: number) => send<DetectionTimeline>('POST', `/recordings/${id}/detect`),
+  setBypass: (enabled: boolean) => send<EngineStatus>('PUT', '/session/bypass', { enabled }),
+  processRecording: (id: number, body: ProcessRequest) =>
+    send<Run>('POST', `/recordings/${id}/process`, body),
+  recordingRuns: (id: number) => apiFetch<Run[]>(`/recordings/${id}/runs`),
+  run: (runId: string) => apiFetch<Run>(`/runs/${encodeURIComponent(runId)}`),
 }

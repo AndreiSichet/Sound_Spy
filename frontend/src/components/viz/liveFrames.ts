@@ -7,8 +7,14 @@
 //
 // History is trimmed by time (from each message's `t`, seconds since the session started), so the
 // buffers do not depend on the server's frame rates.
+//
+// Since step 06 every visual frame has a `source`: "input" (what the microphone heard) or
+// "output" (after extraction). Input frames fill the buffers the meters, the waveform and the
+// input spectrogram read; output frames fill their own (`spectrogramOut`, `levelsOut`,
+// `waveformOut`).
 import type {
   DetectionFrame,
+  FrameSource,
   LevelFrame,
   SpectrogramFrame,
   WaveformFrame,
@@ -43,6 +49,10 @@ export class LiveFrames {
   waveform: TimedWaveform[] = []
   spectrogram: SpectrogramColumn[] = []
   spectrogramSeq = 0
+  levelsOut: (LevelFrame & { t: number }) | null = null
+  waveformOut: TimedWaveform[] = []
+  spectrogramOut: SpectrogramColumn[] = []
+  spectrogramOutSeq = 0
   detections: TimedDetection[] = []
   freqMinHz = 50
   freqMaxHz = 24000
@@ -55,9 +65,17 @@ export class LiveFrames {
     this.clipAt = []
     this.waveform = []
     this.spectrogram = []
+    this.levelsOut = null
+    this.waveformOut = []
+    this.spectrogramOut = []
     this.detections = []
     this.latestT = 0
     this.version += 1
+  }
+
+  /** The spectrogram columns of one side of the chain. */
+  columns(source: FrameSource): SpectrogramColumn[] {
+    return source === 'output' ? this.spectrogramOut : this.spectrogram
   }
 
   /** A session restarted (time went backwards): drop the old history. */
@@ -68,6 +86,11 @@ export class LiveFrames {
 
   pushLevels(frame: LevelFrame, t: number, now: number = performance.now()): void {
     this.checkTime(t)
+    if (frame.source === 'output') {
+      this.levelsOut = { ...frame, t }
+      this.version += 1
+      return
+    }
     this.levels = { ...frame, t }
     frame.peak_dbfs.forEach((peak, ch) => {
       const held = this.peakHold[ch]
@@ -83,26 +106,23 @@ export class LiveFrames {
 
   pushWaveform(frame: WaveformFrame, t: number): void {
     this.checkTime(t)
-    this.waveform.push({ ...frame, t })
+    const buffer = frame.source === 'output' ? this.waveformOut : this.waveform
+    buffer.push({ ...frame, t })
     const oldest = t - WAVEFORM_SECONDS
-    while (this.waveform.length && (this.waveform[0]?.t ?? t) < oldest) this.waveform.shift()
+    while (buffer.length && (buffer[0]?.t ?? t) < oldest) buffer.shift()
     this.version += 1
   }
 
   pushSpectrogram(frame: SpectrogramFrame, t: number): void {
     this.checkTime(t)
-    this.spectrogramSeq += 1
-    this.spectrogram.push({
-      seq: this.spectrogramSeq,
-      t,
-      magnitudes: Float32Array.from(frame.magnitudes_db),
-    })
+    const output = frame.source === 'output'
+    const buffer = output ? this.spectrogramOut : this.spectrogram
+    const seq = output ? (this.spectrogramOutSeq += 1) : (this.spectrogramSeq += 1)
+    buffer.push({ seq, t, magnitudes: Float32Array.from(frame.magnitudes_db) })
     this.freqMaxHz = frame.freq_max_hz
     if (frame.freq_min_hz !== undefined) this.freqMinHz = frame.freq_min_hz
     const oldest = t - SPECTROGRAM_SECONDS
-    while (this.spectrogram.length && (this.spectrogram[0]?.t ?? t) < oldest) {
-      this.spectrogram.shift()
-    }
+    while (buffer.length && (buffer[0]?.t ?? t) < oldest) buffer.shift()
     this.version += 1
   }
 

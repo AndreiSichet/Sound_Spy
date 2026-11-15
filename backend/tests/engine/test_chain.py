@@ -133,3 +133,99 @@ def test_requires_array() -> None:
     assert not requires_array(Mode.SEMANTIC)
     assert requires_array(Mode.SPATIAL) and requires_array(Mode.SOURCES)
     assert Mode("semantic") is Mode.SEMANTIC
+
+
+class Delay(Processor):
+    """Delays by ``n`` samples and doubles the signal (a stand-in for an STFT stage)."""
+
+    def __init__(self, n: int) -> None:
+        self.n = n
+
+    @property
+    def latency_samples(self) -> int:
+        return self.n
+
+    def configure(self, sample_rate: int, num_channels: int) -> int:
+        super().configure(sample_rate, num_channels)
+        self._buffer = np.zeros((self.n, num_channels), dtype=np.float32)
+        return num_channels
+
+    def process(self, chunk: AudioBuffer) -> AudioBuffer:
+        joined = np.concatenate((self._buffer, chunk.samples * np.float32(2.0)))
+        self._buffer = joined[chunk.num_frames:]
+        return AudioBuffer(np.ascontiguousarray(joined[: chunk.num_frames]), chunk.sample_rate)
+
+
+def test_post_side_processors_observe_the_output() -> None:
+    before, after = CountingSide(), CountingSide()
+    chain = ProcessorChain([HalveChannels(), Gain()], [before], post_side=[after],
+                           names={"out": after})
+    assert chain.configure(16000, 2) == 1
+    assert (after.num_channels, before.num_channels) == (1, 2)  # configured with the output
+    chunk = _chunk()
+    out, events = chain.process(chunk)
+    assert before.seen[0] is chunk and after.seen[0] is out
+    assert len(events) == 2
+    target = TargetSpec(labels={"speech"})
+    chain.set_target(target)
+    chain.reset()
+    assert after.target is target and after.resets == 1
+    assert chain.stage("out") is after
+    replacement = CountingSide()
+    chain.replace("out", replacement)
+    assert chain.post_side == [replacement]
+
+
+def test_latency_is_the_sum_of_the_main_stages() -> None:
+    chain = ProcessorChain([Passthrough(), Delay(100), Delay(28)])
+    chain.configure(16000, 1)
+    assert chain.latency_samples == 128
+    assert ProcessorChain([Passthrough()]).latency_samples == 0
+
+
+@pytest.mark.parametrize("frames", [64, 100, 1000])
+def test_dry_signal_is_aligned_with_the_output(frames: int) -> None:
+    reducer, delay = HalveChannels(), Delay(100)
+    chain = ProcessorChain([reducer, delay], names={"reducer": reducer}, dry_after="reducer")
+    chain.configure(16000, 2)
+    assert chain.dry is None
+    rng = np.random.default_rng(1)
+    outs, dries = [], []
+    for _ in range(8):
+        chunk = AudioBuffer(rng.standard_normal((frames, 2)).astype(np.float32), 16000)
+        out, _ = chain.process(chunk)
+        outs.append(out.samples)
+        dries.append(chain.dry.samples)
+    out, dry = np.concatenate(outs), np.concatenate(dries)
+    assert dry.shape == out.shape
+    np.testing.assert_allclose(out, 2.0 * dry)  # same delay: only the processing differs
+    assert not dry[:100].any() and dry[100:].any()
+    chain.reset()
+    assert chain.dry is None
+
+
+def test_dry_tap_must_be_a_main_stage_with_the_output_channel_count() -> None:
+    side = CountingSide()
+    with pytest.raises(ValueError, match="dry_after"):
+        ProcessorChain([Passthrough()], [side], names={"side": side}, dry_after="side")
+    with pytest.raises(ValueError, match="dry_after"):
+        ProcessorChain([Passthrough()], dry_after="missing")
+    first = Passthrough()
+    chain = ProcessorChain([first, HalveChannels()], names={"first": first}, dry_after="first")
+    with pytest.raises(ValueError, match="must match for bypass"):
+        chain.configure(16000, 2)
+
+
+def test_close_reaches_every_stage() -> None:
+    closed = []
+
+    class Closing(SideProcessor):
+        def observe(self, chunk: AudioBuffer) -> list[Event]:
+            return []
+
+        def close(self) -> None:
+            closed.append(self)
+
+    a, b = Closing(), Closing()
+    ProcessorChain([Passthrough()], [a], post_side=[b]).close()
+    assert closed == [a, b]

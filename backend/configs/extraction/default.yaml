@@ -1,0 +1,17 @@
+# Extraction (step 06): which method the live chain and offline processing use, and how it is
+# evaluated. Method parameters live in their own file (mask_baseline.yaml; neural_tse.yaml: step 07).
+
+method: mask_baseline            # mask_baseline | passthrough   (neural_tse arrives in step 07)
+
+offline:
+  max_seconds: 300               # POST /api/recordings/{id}/process refuses longer files (413)
+  chunk_frames: 4096             # block size when a whole file is fed through the extractor
+
+evaluation:                      # soundspy evaluate extraction
+  n: 500                         # test recipes (a fixed, seeded subset)
+  seed: 1234
+  sample_rate: 48000             # processing rate (the laptop microphone's native rate)
+  attenuation_db: 30             # TargetSpec.attenuation_db used for every system
+  examples: 10                   # recipes rendered to outputs/eval/<experiment>/ for listening
+  live_delay_s: 0.05             # causal simulation: window end -> its result is in use
+                                 # (inference ~30 ms on the GPU + up to one 20 ms chunk)
