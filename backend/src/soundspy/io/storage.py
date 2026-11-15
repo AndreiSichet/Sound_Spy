@@ -47,6 +47,8 @@ class RecordingWriter:
     created exclusively when the writer is constructed, so an existing recording can never be
     overwritten. ``device`` / ``hostapi`` / ``channel_indices`` / ``profile`` are taken from
     ``metadata`` (normally the first chunk's metadata); ``overflows`` can be updated until close.
+    ``stem`` fixes the file name (default: label + timestamp); ``extra`` adds sidecar fields
+    (``record-dataset`` stores ``class`` and ``session_id`` this way).
     """
 
     def __init__(
@@ -59,11 +61,15 @@ class RecordingWriter:
         notes: str = "",
         profile: str | None = None,
         metadata: dict[str, Any] | None = None,
+        stem: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
         self.created = datetime.now().astimezone()
-        self.wav_path = directory / f"{recording_stem(label, self.created)}.wav"
+        self.extra = dict(extra or {})
+        name = stem if stem is not None else recording_stem(label, self.created)
+        self.wav_path = directory / f"{name}.wav"
         self.sidecar_path = self.wav_path.with_suffix(SIDECAR_SUFFIX)
         if self.sidecar_path.exists():
             raise FileExistsError(
@@ -127,6 +133,7 @@ class RecordingWriter:
             "overflows": self.overflows,
             "app_version": __version__,
         }
+        sidecar.update({k: v for k, v in self.extra.items() if k not in sidecar})
         with self.sidecar_path.open("x", encoding="utf-8") as fh:
             json.dump(sidecar, fh, indent=2, ensure_ascii=False)
             fh.write("\n")

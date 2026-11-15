@@ -135,3 +135,76 @@ def test_module_configs_loaded(config) -> None:
     assert len(config.labels) == 7
     assert config.api.cors_origins == ("http://localhost:5173",)
     assert (config.api.host, config.api.port) == ("127.0.0.1", 8765)
+
+
+def test_data_paths_and_data_config_loaded(config) -> None:
+    for key in ("external", "processed", "mixtures", "model_cache", "custom"):
+        assert config.paths[key].is_absolute()
+    data = config.data
+    assert data.enabled == {"esc50": True, "fsd50k": True, "custom": True}
+    assert data.esc50_folds == {"train": (1, 2, 3), "val": (4,), "test": (5,)}
+    assert data.mixtures.counts == {"train": 20000, "val": 2000, "test": 2000}
+    assert data.mixtures.n_foreground == (1, 3)
+    assert data.mixtures.fg_gain_db == (-5.0, 5.0)
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "fragment"),
+    [
+        (("mixtures", "n_foreground"), [3, 1], r"'mixtures.n_foreground' must be \[low, high\]"),
+        (("mixtures", "n_foreground"), [0, 2], "within"),
+        (("mixtures", "peak_limit"), 1.5, "'mixtures.peak_limit' must be <= 1"),
+        (("mixtures", "event_min_s"), 10.0, "event_min_s' must be <= duration_s"),
+        (("mixtures", "counts", "val"), -1, "'mixtures.counts.val' must be an integer >= 0"),
+        (("splits", "esc50", "val"), [3], "fold in more than one split"),
+        (("splits", "custom", "val_fraction"), 0.9, "fractions must be < 1"),
+        (("datasets", "esc50", "enabled"), "yes", "'datasets.esc50.enabled' must be true"),
+        (("activity", "hop_s"), 0, "'activity.hop_s' must be > 0"),
+    ],
+)
+def test_invalid_data_config(tmp_path, configs_dir, path, value, fragment) -> None:
+    import yaml
+
+    from soundspy.config import load_data_config
+
+    data = yaml.safe_load((configs_dir / "data" / "default.yaml").read_text(encoding="utf-8"))
+    node = data
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    target = tmp_path / "default.yaml"
+    target.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ConfigError, match=fragment) as exc:
+        load_data_config(target)
+    assert str(exc.value).startswith("data/default.yaml")
+
+
+def test_unknown_data_key_is_rejected(tmp_path, configs_dir) -> None:
+    import yaml
+
+    from soundspy.config import load_data_config
+
+    data = yaml.safe_load((configs_dir / "data" / "default.yaml").read_text(encoding="utf-8"))
+    data["mixtures"]["reverb"] = True
+    target = tmp_path / "default.yaml"
+    target.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ConfigError, match=r"'mixtures' has unknown key\(s\) \['reverb'\]"):
+        load_data_config(target)
+
+
+def test_cache_env_points_to_model_cache_only_if_unset(config, tmp_path, monkeypatch) -> None:
+    import dataclasses
+
+    from soundspy.config import configure_cache_env
+
+    monkeypatch.setenv("TORCH_HOME", "E:/mine")
+    monkeypatch.delenv("HF_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    cfg = dataclasses.replace(config, paths={**config.paths, "model_cache": tmp_path / "m"})
+    applied = configure_cache_env(cfg)
+    import os
+
+    assert os.environ["TORCH_HOME"] == "E:/mine"  # the user's choice wins
+    assert applied == {"HF_HOME": str(tmp_path / "m" / "huggingface"),
+                       "XDG_CACHE_HOME": str(tmp_path / "m" / "cache")}
+    assert os.environ["HF_HOME"] == str(tmp_path / "m" / "huggingface")

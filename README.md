@@ -41,7 +41,7 @@ Details: [docs/architecture.md](docs/architecture.md) · decisions: [docs/decisi
 # backend
 cd backend
 py -3.11 -m venv .venv; .venv\Scripts\activate
-pip install -e ".[api,dev]"
+pip install -e ".[api,data,dev]"
 soundspy serve            # http://127.0.0.1:8765/docs
 
 # frontend (second terminal)
@@ -68,6 +68,26 @@ Before recording anything you want to keep, switch **off** Windows audio enhance
 Voice Clarity for the microphone (Settings → System → Sound → your microphone → Properties) and
 re-run `check-mic`. [project_insights.md](project_insights.md) ("Audio capture") explains how to
 read the output.
+
+### Training data (step 04)
+
+Large data goes to **drive D:** (`D:/SoundSpyData/`, see `paths` in `backend/configs/default.yaml`).
+FSD50K's audio is a split zip: install 7-Zip first (`winget install 7zip.7zip`).
+
+```powershell
+soundspy data paths                           # resolved folders + free space
+soundspy data download ontology esc50         # ~1 min
+soundspy data download fsd50k                 # 25 GB, resumable: re-run the same command
+soundspy data prepare                         # clip index + activity maps
+soundspy data stats                           # coverage per class / split / dataset
+soundspy data mix --split all                 # mixture recipes (JSONL)
+soundspy data preview --split val --n 5       # listen in outputs/previews/
+soundspy record-dataset --classes speech background --clips 10
+soundspy data cleanup-archives                # delete the downloaded zips when satisfied
+```
+
+ESC-50 is CC BY-NC; FSD50K clips carry per-clip CC licences, some non-commercial. Fine for this
+university project; review before any public or commercial use.
 
 ### Machine-learning extras (from step 05)
 
@@ -106,7 +126,9 @@ npm run build
 - `frontend/` — Vite app (`src/`, `tests/`)
 - `docs/` — architecture, decision log, literature
 - `experiments/` — one folder per training run (config tracked, checkpoints ignored)
-- `data/`, `models/`, `outputs/` — git-ignored working data (`data/soundspy.db` is the app database)
+- `data/`, `models/`, `outputs/` — git-ignored working data (`data/soundspy.db` is the app database;
+  own recordings in `data/raw`, own labelled clips in `data/custom`)
+- `D:/SoundSpyData/` — datasets, clip index, mixture recipes, model caches (outside the repository)
 - `notebooks/` — exploration only
 - `project_insights.md` — how the app works, in plain language (including any adapted
   third-party code, in its "Third-party code" section)

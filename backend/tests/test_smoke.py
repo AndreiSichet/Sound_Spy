@@ -16,10 +16,8 @@ import yaml
 import soundspy
 from soundspy.cli.main import main
 
-IMPLEMENTED_COMMANDS = ["serve", "devices", "check-mic", "record"]
+IMPLEMENTED_COMMANDS = ["serve", "devices", "check-mic", "record", "record-dataset", "data"]
 PLACEHOLDER_COMMANDS = {
-    "record-dataset": "step-04",
-    "data": "step-04",
     "train": "step-05",
     "detect": "step-05",
     "extract": "step-06",
@@ -141,6 +139,8 @@ def test_configs_are_valid_yaml(configs_dir: Path) -> None:
     assert {p.relative_to(configs_dir).as_posix() for p in files} == {
         "default.yaml",
         "classes.yaml",
+        "data/default.yaml",
+        "data/esc50_to_audioset.yaml",
         "devices/laptop.yaml",
         "devices/respeaker_xvf3800.yaml",
         "detection/default.yaml",

@@ -353,7 +353,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             continue
         skip = pytest.mark.skip(reason=f"needs {option}")
         for item in items:
-            if marker in item.keywords:
+            # Real markers only: ``item.keywords`` also contains folder names (tests/data).
+            if item.get_closest_marker(marker) is not None:
                 item.add_marker(skip)
 
 

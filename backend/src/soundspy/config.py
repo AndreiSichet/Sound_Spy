@@ -8,6 +8,7 @@ configs are resolved against the **project root** (the folder that contains ``ba
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -178,6 +179,42 @@ class AnalysisConfig:
     waveform_points: int
 
 
+SPLITS: tuple[str, ...] = ("train", "val", "test")
+DATASETS: tuple[str, ...] = ("esc50", "fsd50k", "custom")
+
+
+@dataclass(frozen=True)
+class MixtureConfig:
+    duration_s: float
+    counts: dict[str, int]
+    seed: dict[str, int]
+    n_foreground: tuple[int, int]
+    n_background: tuple[int, int]
+    target_size: tuple[int, int]
+    empty_target_prob: float
+    event_min_s: float
+    fg_gain_db: tuple[float, float]
+    bg_gain_db: tuple[float, float]
+    target_to_rest_db: tuple[float, float]
+    peak_limit: float
+    reference_rms_dbfs: float
+
+
+@dataclass(frozen=True)
+class DataConfig:
+    """``configs/data/default.yaml``: datasets, roles, activity, splits, mixtures."""
+
+    enabled: dict[str, bool]
+    min_fg_clips_warning: int
+    activity_hop_s: float
+    activity_threshold_db: float
+    esc50_folds: dict[str, tuple[int, ...]]
+    custom_val_fraction: float
+    custom_test_fraction: float
+    custom_seed: int
+    mixtures: MixtureConfig
+
+
 @dataclass(frozen=True)
 class AppConfig:
     project_root: Path
@@ -191,28 +228,78 @@ class AppConfig:
     analysis: AnalysisConfig
     api: ApiConfig
     database_url: str
+    data: DataConfig
     detection: dict[str, Any] = field(default_factory=dict)
     extraction: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class _Section:
-    """Reads one mapping from default.yaml with type and range checks (clear ConfigError)."""
+    """Reads one mapping from a config file with type and range checks (clear ConfigError).
 
-    def __init__(self, data: dict[str, Any], name: str, keys: tuple[str, ...]) -> None:
-        section = data.get(name)
+    ``name`` may be dotted for nested sections (``"mixtures.counts"``); ``source`` names the file.
+    """
+
+    def __init__(
+        self,
+        data: dict[str, Any],
+        name: str,
+        keys: tuple[str, ...],
+        source: str = "default.yaml",
+    ) -> None:
+        section = data.get(name.rsplit(".", 1)[-1])
         if not isinstance(section, dict):
-            raise ConfigError(f"default.yaml: missing section '{name}'")
+            raise ConfigError(f"{source}: missing section '{name}'")
         missing = [k for k in keys if k not in section]
         unknown = sorted(set(section) - set(keys))
         if missing:
-            raise ConfigError(f"default.yaml: '{name}' is missing {missing}")
+            raise ConfigError(f"{source}: '{name}' is missing {missing}")
         if unknown:
-            raise ConfigError(f"default.yaml: '{name}' has unknown key(s) {unknown}")
-        self.data, self.name = section, name
+            raise ConfigError(f"{source}: '{name}' has unknown key(s) {unknown}")
+        self.data, self.name, self.source = section, name, source
+
+    def sub(self, key: str, keys: tuple[str, ...]) -> _Section:
+        return _Section(self.data, f"{self.name}.{key}", keys, self.source)
 
     def _fail(self, key: str, rule: str) -> ConfigError:
         value = self.data[key]
-        return ConfigError(f"default.yaml: '{self.name}.{key}' must be {rule}, got {value!r}")
+        return ConfigError(f"{self.source}: '{self.name}.{key}' must be {rule}, got {value!r}")
+
+    def boolean(self, key: str) -> bool:
+        value = self.data[key]
+        if not isinstance(value, bool):
+            raise self._fail(key, "true or false")
+        return value
+
+    def pair(self, key: str, *, integer: bool = False, ge: float | None = None,
+             le: float | None = None) -> tuple[Any, Any]:
+        """A ``[low, high]`` range with low <= high."""
+        value = self.data[key]
+        kind = "integers" if integer else "numbers"
+        ok = (
+            isinstance(value, list)
+            and len(value) == 2
+            and all(
+                not isinstance(v, bool) and isinstance(v, int if integer else int | float)
+                for v in value
+            )
+        )
+        if not ok or value[0] > value[1]:
+            raise self._fail(key, f"[low, high] with two {kind}, low <= high")
+        if (ge is not None and value[0] < ge) or (le is not None and value[1] > le):
+            raise self._fail(key, f"within [{ge}, {le}]")
+        cast = int if integer else float
+        return cast(value[0]), cast(value[1])
+
+    def int_list(self, key: str, *, ge: int, le: int) -> tuple[int, ...]:
+        value = self.data[key]
+        if (
+            not isinstance(value, list)
+            or not value
+            or not all(isinstance(v, int) and not isinstance(v, bool) and ge <= v <= le
+                       for v in value)
+        ):
+            raise self._fail(key, f"a non-empty list of integers in [{ge}, {le}]")
+        return tuple(value)
 
     def number(self, key: str, *, gt: float | None = None, ge: float | None = None,
                le: float | None = None) -> float:
@@ -293,6 +380,94 @@ def _analysis(data: dict[str, Any]) -> AnalysisConfig:
     )
 
 
+def load_data_config(path: Path) -> DataConfig:
+    """Load and validate ``configs/data/default.yaml``."""
+    source = f"data/{Path(path).name}"
+    root = {"root": load_yaml(path)}
+    top = _Section(root, "root", ("datasets", "roles", "activity", "splits", "mixtures"), source)
+    top.name = ""  # error paths read "datasets.esc50.enabled", not "root.datasets..."
+
+    def section(key: str, keys: tuple[str, ...]) -> _Section:
+        return _Section(top.data, key, keys, source)
+
+    datasets = section("datasets", DATASETS)
+    enabled = {ds: datasets.sub(ds, ("enabled",)).boolean("enabled") for ds in DATASETS}
+    roles = section("roles", ("min_fg_clips_warning",))
+    activity = section("activity", ("hop_s", "threshold_db_below_peak"))
+    splits = section("splits", ("esc50", "custom"))
+    esc = splits.sub("esc50", SPLITS)
+    folds = {split: esc.int_list(split, ge=1, le=5) for split in SPLITS}
+    all_folds = [f for fs in folds.values() for f in fs]
+    if len(all_folds) != len(set(all_folds)):
+        raise ConfigError(f"{source}: 'splits.esc50' uses a fold in more than one split")
+    custom = splits.sub("custom", ("val_fraction", "test_fraction", "seed"))
+    val_fraction = custom.number("val_fraction", ge=0, le=0.9)
+    test_fraction = custom.number("test_fraction", ge=0, le=0.9)
+    if val_fraction + test_fraction >= 1:
+        raise ConfigError(f"{source}: 'splits.custom' val + test fractions must be < 1")
+
+    mix_keys = ("duration_s", "counts", "seed", "n_foreground", "n_background", "target_size",
+                "empty_target_prob", "event_min_s", "fg_gain_db", "bg_gain_db",
+                "target_to_rest_db", "peak_limit", "reference_rms_dbfs")
+    mix = section("mixtures", mix_keys)
+    counts = mix.sub("counts", SPLITS)
+    seeds = mix.sub("seed", SPLITS)
+    duration = mix.number("duration_s", gt=0, le=120)
+    event_min = mix.number("event_min_s", gt=0)
+    if event_min > duration:
+        raise ConfigError(f"{source}: 'mixtures.event_min_s' must be <= duration_s")
+    mixtures = MixtureConfig(
+        duration_s=duration,
+        counts={s: counts.integer(s, ge=0) for s in SPLITS},
+        seed={s: seeds.integer(s, ge=0) for s in SPLITS},
+        n_foreground=mix.pair("n_foreground", integer=True, ge=1),
+        n_background=mix.pair("n_background", integer=True, ge=0),
+        target_size=mix.pair("target_size", integer=True, ge=1),
+        empty_target_prob=mix.number("empty_target_prob", ge=0, le=1),
+        event_min_s=event_min,
+        fg_gain_db=mix.pair("fg_gain_db", ge=-60, le=20),
+        bg_gain_db=mix.pair("bg_gain_db", ge=-60, le=20),
+        target_to_rest_db=mix.pair("target_to_rest_db", ge=-60, le=60),
+        peak_limit=mix.number("peak_limit", gt=0, le=1),
+        reference_rms_dbfs=mix.number("reference_rms_dbfs", ge=-80, le=0),
+    )
+    return DataConfig(
+        enabled=enabled,
+        min_fg_clips_warning=roles.integer("min_fg_clips_warning", ge=0),
+        activity_hop_s=activity.number("hop_s", gt=0, le=1),
+        activity_threshold_db=activity.number("threshold_db_below_peak", gt=0, le=120),
+        esc50_folds=folds,
+        custom_val_fraction=val_fraction,
+        custom_test_fraction=test_fraction,
+        custom_seed=custom.integer("seed", ge=0),
+        mixtures=mixtures,
+    )
+
+
+CACHE_ENV_VARS: dict[str, str] = {
+    "TORCH_HOME": "torch",
+    "HF_HOME": "huggingface",
+    "XDG_CACHE_HOME": "cache",
+}
+
+
+def configure_cache_env(config: AppConfig) -> dict[str, str]:
+    """Point library caches (PyTorch, Hugging Face, generic XDG) at ``paths.model_cache``.
+
+    Only variables the user has not set already are changed; returns the ones that were set.
+    Large pretrained weights then land on D: instead of in the user profile on C:.
+    """
+    cache = config.paths.get("model_cache")
+    if cache is None:
+        return {}
+    applied = {}
+    for var, sub in CACHE_ENV_VARS.items():
+        if not os.environ.get(var):
+            os.environ[var] = str(cache / sub)
+            applied[var] = os.environ[var]
+    return applied
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     with Path(path).open(encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
@@ -354,6 +529,7 @@ def load_config(
             ws_client_queue=int(api.get("ws_client_queue", 64)),
         ),
         database_url=str(default["database"]["url"]),
+        data=load_data_config(configs_dir / "data" / "default.yaml"),
         detection=load_yaml(configs_dir / "detection" / "default.yaml"),
         extraction={p.stem: load_yaml(p) for p in sorted(extraction_dir.glob("*.yaml"))},
     )

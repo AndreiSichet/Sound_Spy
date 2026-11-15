@@ -48,8 +48,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _configure_caches() -> None:
+    """TORCH_HOME / HF_HOME / XDG_CACHE_HOME -> paths.model_cache (only if not set already)."""
+    from soundspy.config import ConfigError, configure_cache_env, load_config
+
+    try:
+        configure_cache_env(load_config())
+    except (ConfigError, OSError):
+        pass  # the command itself reports configuration problems
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    _configure_caches()
     return args.handler(args)
 
 

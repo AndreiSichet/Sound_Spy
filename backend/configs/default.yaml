@@ -2,14 +2,17 @@
 # Relative paths are resolved against the project root (the folder containing backend/ and frontend/).
 
 paths:
-  raw: data/raw              # recordings: native rate, all channels, never modified
-  custom: data/custom        # own labelled recordings
-  external: data/external    # downloaded public datasets
-  processed: data/processed  # derived / cached data
-  mixtures: data/mixtures    # synthetic foreground/background mixtures
-  models: models             # pretrained weights
-  outputs: outputs           # processed audio, plots
-  experiments: experiments   # one folder per training run
+  # Small, personal: inside the project on C:
+  raw: data/raw                                  # own free recordings, never modified
+  custom: data/custom                            # own labelled clips (soundspy record-dataset)
+  # Large data and caches: on D: (absolute paths are allowed; relative = project root)
+  external: "D:/SoundSpyData/external"           # downloaded datasets (+ their archives)
+  processed: "D:/SoundSpyData/processed"         # clip index, activity maps, caches
+  mixtures: "D:/SoundSpyData/mixtures"           # mixture recipes (JSONL)
+  model_cache: "D:/SoundSpyData/models"          # pretrained weights; TORCH_HOME/HF_HOME go here
+  models: models                                 # our own small model files
+  outputs: outputs                               # processed audio, plots, mixture previews
+  experiments: experiments                       # one folder per training run
 
 # Device profile from configs/devices/<name>.yaml
 active_device_profile: laptop

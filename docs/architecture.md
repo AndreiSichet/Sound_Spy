@@ -229,6 +229,58 @@ startup by `init_db()`:
 
 Audio files stay on disk; the database stores paths and metadata. No migrations tool yet.
 
+## Training data (step 04, `soundspy.data`)
+
+Storage (`paths` in `default.yaml`; large data never inside the repository):
+
+| key | default | content |
+|---|---|---|
+| `external` | `D:/SoundSpyData/external` | `<dataset>/` = extracted data + `archives/` + `SOURCE.json` + `.done` |
+| `processed` | `D:/SoundSpyData/processed` | `clip_index.parquet` (+ `.csv`), `activity/<dataset>.npz` |
+| `mixtures` | `D:/SoundSpyData/mixtures` | `<split>.jsonl` recipes |
+| `model_cache` | `D:/SoundSpyData/models` | `TORCH_HOME`/`HF_HOME`/`XDG_CACHE_HOME` sub-folders (set at CLI/API start if unset) |
+| `custom` | `data/custom` | `<class>/<class>_NNNN.wav` + sidecar (`class`, `session_id`) |
+
+Path aliases (`data/aliases.py`): `esc50://` → `<external>/esc50/ESC-50-master`,
+`fsd50k://` → `<external>/fsd50k`, `custom://` → `<custom>`. The index stores only aliases.
+
+Clip index columns: `clip_id, dataset, path, duration_s, sample_rate, channels, mids (list),
+raw_labels (list), role, split, group, license`. `role` ∈ `fg:<class_key>` | `bg` | `excluded`.
+
+Role rule (`data/roles.py`): `F(c)` = descendants of the class mids, `A(c)` = their ancestors.
+`M'` = clip mids minus mids that are ancestors of another mid of the clip. `fg:c` iff
+`M' ⊆ F(c) ∪ A(c)` and `M' ∩ F(c) ≠ ∅` for exactly one `c`; several → `excluded` (overlap);
+`bg` iff no mid of `M` is in any `F(c)`; else `excluded`. Custom clips take the role of their
+recorded class (`background` → `bg`).
+
+Splits (`data/splits.py`): FSD50K eval → test; dev train/val from the proposed split made
+uploader-disjoint (`majority_split`: each uploader to the side with most of its clips; ties →
+train; 2,010 clips moved on the real data); ESC-50 folds from
+`splits.esc50`; custom by session (`split_groups`, seeded). `prepare` fails if a `(dataset, group)`
+spans two splits. Recipes use clips of their own split only.
+
+Activity: RMS envelope in dBFS per `activity.hop_s`; active = `env ≥ peak − threshold` and
+`> −90 dBFS`. Stored per dataset as concatenated `env_db` + `offsets` + `clip_ids` + header facts.
+
+Recipe (one JSON object per line):
+
+```json
+{"id": "train-000001", "duration_s": 6.0,
+ "events": [{"clip_id": "...", "role": "fg|bg", "class": "<key>|null",
+             "clip_offset_s": 0.0, "onset_s": 0.0, "dur_s": 0.0, "gain_db": 0.0}],
+ "present": ["<key>"], "target": ["<key>"], "target_to_rest_db": 0.0}
+```
+
+`render(recipe, sample_rate, library, labels, *, reference_rms_dbfs, peak_limit,
+activity_rate_hz=10) -> RenderedMixture`: segments read + downmixed (`ChannelReducer`) +
+resampled (`dsp/resample.py`, `resample_poly`); each normalised to `reference_rms_dbfs` over its
+active frames, `gain_db` applied, summed into target (fg events of target classes) or rest;
+target scaled to `target_to_rest_db` (RMS over the whole mixture; skipped if either side is
+silent); `mixture = target + rest` in float32; if `peak > peak_limit`, target and rest are scaled
+by the same factor. Returns `mixture`, `target`, `rest` (`AudioBuffer (n, 1)`), `present` /
+`target_hot` multi-hots, `class_activity (frames, classes)`. Deterministic. Spatial rendering:
+`TODO(module-3)` in `render`.
+
 ## Rules, explained
 
 1. **One audio format.** One always-2-D container means mono laptop audio and 4-channel array
@@ -259,7 +311,7 @@ report is given in chat; `project_insights.md` is updated every step.
 | 01 | Architecture restructure + app shell | - |
 | 02 | Audio capture: devices, profiles, sources/sinks, storage, levels, ChannelReducer; CLI `devices`, `check-mic`, `record`; `GET /api/devices` | - |
 | 03 | Live session: engine worker, chunker, speaker sink, Analyzer; WS levels + spectrogram; record button; Semantic tab live monitor | 1 |
-| 04 | Data: ontology, collectors (ESC-50, FSD50K, own recordings), splits, foreground/background mixtures; `record-dataset` | - |
+| 04 | Data: ontology, collectors (ESC-50, FSD50K, own recordings), splits, foreground/background mixtures; `record-dataset` — **done** (data on D:, recipes in JSONL, `soundspy data …`) | - |
 | 05 | Detection: features, multi-label fine-tuning of a pretrained model, chunked inference, detections over WS | 1 |
 | 06 | Extraction baseline (detector-guided masking) + SI-SDR metrics; offline processing with A/B playback | 1 |
 | 07 | Neural TSE (Waveformer-style, label-conditioned, streaming); live extraction in the Semantic tab | 1 |

@@ -1,0 +1,69 @@
+# ESC-50 class -> AudioSet mids (step 04). Written by hand from the AudioSet ontology.
+#
+#   <esc50 category>: [mid, ...]   # AudioSet name(s)
+#   <esc50 category>: null         # no sensible AudioSet class -> every clip is "excluded"
+#
+# The role rule (soundspy.data.roles) only needs to know whether a clip belongs to one of our
+# classes (foreground) or to none of them (background), so one specific mid per class is enough.
+# Every mid is checked against ontology.json when `soundspy data prepare` runs.
+# UNCERTAIN marks mappings the owner should review.
+
+# Animals
+dog: ["/m/0bt9lr"]                  # Dog
+rooster: ["/m/07qn5dc"]             # Crowing, cock-a-doodle-doo
+pig: ["/t/dd00018"]                 # Oink
+cow: ["/m/07rpkh9"]                 # Moo
+frog: ["/m/09ld4"]                  # Frog
+cat: ["/m/07qrkrw"]                 # Meow
+hen: ["/m/07st89h"]                 # Cluck
+insects: ["/m/03vt0"]               # Insect
+sheep: ["/m/07q0h5t"]               # Bleat
+crow: ["/m/07r5c2p"]                # Caw
+
+# Natural soundscapes and water
+rain: ["/m/06mb1"]                  # Rain
+sea_waves: ["/m/034srq"]            # Waves, surf
+crackling_fire: ["/m/07pzfmf"]      # Crackle (child of Fire)
+crickets: ["/m/09xqv"]              # Cricket
+chirping_birds: ["/m/07pggtn"]      # Chirp, tweet
+water_drops: ["/m/07r5v4s"]         # Drip
+wind: ["/m/03m9d0z"]                # Wind
+pouring_water: ["/m/07prgkl"]       # Pour
+toilet_flush: ["/m/01jt3m"]         # Toilet flush
+thunderstorm: ["/m/0jb2l"]          # Thunderstorm
+
+# Human, non-speech
+crying_baby: ["/t/dd00002"]         # Baby cry, infant cry
+sneezing: ["/m/01hsr_"]             # Sneeze
+clapping: ["/m/0l15bq"]             # Clapping
+breathing: ["/m/0lyf6"]             # Breathing
+coughing: ["/m/01b_21"]             # Cough
+footsteps: ["/m/07pbtc8"]           # Walk, footsteps          -> foreground "footsteps"
+laughing: ["/m/01j3sz"]             # Laughter
+brushing_teeth: ["/m/012xff"]       # Toothbrush
+snoring: ["/m/01d3sd"]              # Snoring
+drinking_sipping: null              # UNCERTAIN: no drinking/sipping class in AudioSet
+
+# Interior / domestic
+door_wood_knock: ["/m/07r4wb8"]     # Knock
+mouse_click: ["/m/07qc9xj"]         # Clicking                 UNCERTAIN: generic click
+keyboard_typing: ["/m/01m2v"]       # Computer keyboard
+door_wood_creaks: ["/m/07qh7jl"]    # Creak                    UNCERTAIN: could also be Door
+can_opening: null                   # UNCERTAIN: no can-opening class ("Burst, pop" is an explosion)
+washing_machine: null               # UNCERTAIN: no washing-machine class in the ontology
+vacuum_cleaner: ["/m/0d31p"]        # Vacuum cleaner
+clock_alarm: ["/m/046dlr"]          # Alarm clock              -> foreground "alarm"
+clock_tick: ["/m/07qjznl"]          # Tick-tock
+glass_breaking: ["/m/07rn7sz"]      # Shatter
+
+# Exterior / urban
+helicopter: ["/m/09ct_"]            # Helicopter               -> "traffic" while it uses "Vehicle"
+chainsaw: ["/m/01j4z9"]             # Chainsaw
+siren: ["/m/03kmc9"]                # Siren                    -> foreground "alarm"
+car_horn: ["/m/0912c9"]             # Vehicle horn, car horn, honking  (alarm AND traffic -> excluded)
+engine: ["/m/02mk9"]                # Engine
+train: ["/m/07jdr"]                 # Train                    -> "traffic" while it uses "Vehicle"
+church_bells: ["/m/03w41f"]         # Church bell              UNCERTAIN: under Music in AudioSet
+airplane: ["/m/0cmf2"]              # Fixed-wing aircraft, airplane  -> "traffic" while it uses "Vehicle"
+fireworks: ["/m/0g6b5"]             # Fireworks
+hand_saw: ["/m/01b82r"]             # Sawing

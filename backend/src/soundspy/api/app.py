@@ -23,7 +23,7 @@ from soundspy.api.db.base import init_db, make_engine, make_session_factory
 from soundspy.api.routes import devices, recordings, session, system
 from soundspy.api.services.recordings import sync_recordings
 from soundspy.api.services.session_manager import SessionManager
-from soundspy.config import AppConfig, load_config
+from soundspy.config import AppConfig, configure_cache_env, load_config
 
 logger = logging.getLogger("soundspy.api")
 
@@ -33,6 +33,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        configure_cache_env(config)  # model caches on D: unless the user set them
         engine = make_engine(config.database_url, config.project_root)
         init_db(engine)
         app.state.db_engine = engine

@@ -5,7 +5,7 @@ microphone, works out which kinds of sound are present (speech, music, dishes,
 footsteps…), and makes the sounds you picked clearer while turning everything
 else down.
 
-Written: 14 November 2026, after step 01 · Last updated: 14 November 2026, after step 03
+Written: 14 November 2026, after step 01 · Last updated: 15 November 2026, after step 04
 (live session).
 
 > **Read this with its date in mind.** Sound Spy is built one step at a time.
@@ -54,19 +54,20 @@ more technical documents go deeper: [docs/architecture.md](docs/architecture.md)
 7. [Configuration — settings live in files, not in code](#7-configuration--settings-live-in-files-not-in-code)
 8. [Audio capture — getting sound in from a microphone](#8-audio-capture--getting-sound-in-from-a-microphone)
 9. [Live session — from microphone to headphones and screen](#9-live-session--from-microphone-to-headphones-and-screen)
-10. [The backend's web interface — REST and WebSocket](#10-the-backends-web-interface--rest-and-websocket)
-11. [The database](#11-the-database)
-12. [The website](#12-the-website)
-13. [The command line tool](#13-the-command-line-tool)
-14. [Following a request from start to finish](#14-following-a-request-from-start-to-finish)
-15. [What comes next — the plan, step by step](#15-what-comes-next--the-plan-step-by-step)
-16. [Running everything](#16-running-everything)
-17. [Testing everything](#17-testing-everything)
-18. [Problems found and fixed](#18-problems-found-and-fixed)
-19. [Design decisions and why](#19-design-decisions-and-why)
-20. [Known limitations](#20-known-limitations)
-21. [Third-party code](#21-third-party-code)
-22. [Quick reference](#22-quick-reference)
+10. [Training data — from public datasets to mixture recipes](#10-training-data--from-public-datasets-to-mixture-recipes)
+11. [The backend's web interface — REST and WebSocket](#11-the-backends-web-interface--rest-and-websocket)
+12. [The database](#12-the-database)
+13. [The website](#13-the-website)
+14. [The command line tool](#14-the-command-line-tool)
+15. [Following a request from start to finish](#15-following-a-request-from-start-to-finish)
+16. [What comes next — the plan, step by step](#16-what-comes-next--the-plan-step-by-step)
+17. [Running everything](#17-running-everything)
+18. [Testing everything](#18-testing-everything)
+19. [Problems found and fixed](#19-problems-found-and-fixed)
+20. [Design decisions and why](#20-design-decisions-and-why)
+21. [Known limitations](#21-known-limitations)
+22. [Third-party code](#22-third-party-code)
+23. [Quick reference](#23-quick-reference)
 
 ---
 
@@ -120,9 +121,9 @@ behind the scenes (back). Keeping both in one repository is called a
 | The folder structure, rules and tools | **done** |
 | The data types every part of the code shares | **done** (Chapter 5) |
 | The skeleton of the processing engine | **done** (Chapter 6) |
-| The backend's web interface: health, configuration, live channel | **done** (Chapter 10) |
-| The database tables | **done** (Chapter 11) |
-| The website: three tabs, connection indicator | **done** (Chapter 12) |
+| The backend's web interface: health, configuration, live channel | **done** (Chapter 11) |
+| The database tables | **done** (Chapter 12) |
+| The website: three tabs, connection indicator | **done** (Chapter 13) |
 | Choosing a microphone, recording it, checking its levels | **done**, step 02 (Chapter 8) |
 | Live session: listening in headphones, live pictures, recording from the page | **done**, step 03 (Chapter 9) |
 | Recognising sound types | planned, step 05 |
@@ -151,7 +152,7 @@ yet (Chapter 9).
 It is a university project (Telecommunications, Technical University of
 Cluj-Napoca). The ideas behind the sound-separation part come from published
 research, mainly a project called **SemanticHearing** (Veluri et al., 2023;
-see Chapter 15). Sound Spy borrows its ideas but, so far, none of its code.
+see Chapter 16). Sound Spy borrows its ideas but, so far, none of its code.
 
 ---
 
@@ -311,6 +312,21 @@ real life.
 "target" sound (say, speech) to "background" sounds at a chosen loudness.
 Because we made the mix, we know exactly what the clean answer should be.
 
+*Added in step 04:*
+
+**Mid.** The permanent ID of an AudioSet category, such as `/m/09x0r` for "Speech". Names can be
+spelled differently from dataset to dataset; mids can't, so all translation goes through them.
+
+**Foreground / background / excluded.** The role of a dataset clip (Chapter 10.6): *foreground*
+clips contain exactly one of our classes and can be asked for; *background* clips contain none of
+them; *excluded* clips mix one of our classes with something else and are not used.
+
+**Recipe.** A few lines of JSON describing one synthetic mixture exactly: which clips, which part
+of each, where, how loud, and which classes form the answer. Audio is made from it on demand.
+
+**Activity map.** For each clip, its loudness every 0.1 s, used to place events where something
+actually sounds instead of on silence.
+
 **Target sound extraction (TSE).** Pulling one chosen kind of sound out of a
 mixture. A *label-conditioned* TSE model receives the mixture plus a
 multi-hot vector saying what to keep.
@@ -330,7 +346,7 @@ server and the website is the client.
 **localhost / 127.0.0.1.** The computer's own address for talking to itself.
 `127.0.0.1` is the numeric version (IPv4). `localhost` is a name that may
 point to `127.0.0.1` or to `::1`, the newer IPv6 version of the same idea.
-This difference caused a real problem (Chapter 18).
+This difference caused a real problem (Chapter 19).
 
 **Port.** A number that tells programs on one computer apart, like the room
 number within a building's address. The backend uses port **8765**, and the
@@ -689,7 +705,7 @@ Inside the backend there is a further split:
 
 The API may use the library, but the library must never use the API or its
 web libraries (FastAPI, Starlette, SQLAlchemy). A test enforces this
-(Chapter 17). The benefit is that the sound-processing code can be used,
+(Chapter 18). The benefit is that the sound-processing code can be used,
 tested and studied on its own: from the command line, in a notebook, or in a
 university report, with no server running.
 
@@ -810,6 +826,9 @@ apart is a deliberate design choice:
 Two of the AudioSet mappings (`chair_scrape` and `traffic`) are marked "to be
 verified in step 04", because the best match in the AudioSet tree is not
 obvious.
+*(Step 04: checked against the real ontology. Every name exists, so nothing had to change
+(Chapter 10.5). What remains is a question of meaning, not spelling: AudioSet's "Vehicle" also
+contains aircraft, boats and trains (Chapter 21).)*
 
 **The order of the list matters.** A class's position in the file is its slot
 in every multi-hot vector. If the file were reordered, a model trained when
@@ -874,7 +893,7 @@ The chain then knows the final output format before any sound flows.
 The chain is careful by design. It refuses to run if it hasn't been
 configured, and it refuses any chunk whose sample rate or channel count
 doesn't match the configuration. This guard has already caught a real mistake
-(Chapter 18).
+(Chapter 19).
 
 ### 6.3 Modes — which stages each tab uses
 
@@ -885,7 +904,7 @@ doesn't match the configuration. This guard has already caught a real mistake
 | **Sources** | spatial filter → extractor | detector, analyser, localiser, tracker | **yes** |
 
 Today only this table exists. Building real chains from it comes later. The
-website already uses it to decide whether a tab is available (Chapter 12).
+website already uses it to decide whether a tab is available (Chapter 13).
 
 ### 6.4 How live processing will run (planned, step 03)
 
@@ -936,6 +955,7 @@ only placeholders for now.
 |---|---|
 | `default.yaml` | folder paths, which microphone profile is active, engine chunk size (1,024 frames), backend address and port, allowed website address, heartbeat interval (2 s), database location. *Since step 03:* the chunk is `engine.chunk_ms` = 20 ms, and four new sections hold every live-session setting: `capture` (stall timeout, input queue, start-up silence), `engine` (chunk, RTF warning, status rate), `output` (device, prebuffer, queue, limiter, gain) and `analysis` (rates and sizes of the live pictures). These have **no fallback values in code**: a missing or invalid key stops the app at start-up with a message naming it |
 | `classes.yaml` | the seven classes (Chapter 5.5) |
+| `default.yaml` → `paths` | *Step 04:* the large folders (`external`, `processed`, `mixtures`, `model_cache`) now point to drive D:; absolute paths are allowed (Chapter 10.2) |
 | `devices/laptop.yaml` | the laptop's own microphone: system default device, preferred host API, native sample rate, all channels, no geometry |
 | `devices/respeaker_xvf3800.yaml` | the future 4-mic array: a device name to look for, channels 2–5 (the raw microphones; channels 0–1 are the board's own processed output), geometry to be filled in |
 
@@ -945,6 +965,8 @@ each field.
 | `detection/default.yaml` | the future sound detector (model not yet chosen) |
 | `extraction/mask_baseline.yaml` | the future classical extractor (spectrogram settings, mask type) |
 | `extraction/neural_tse.yaml` | the future neural extractor |
+| `data/default.yaml` | *Step 04:* everything about training data: which datasets are on, the role warning threshold, activity settings, split folds and fractions, and the mixture rules (counts, seeds, ranges, peak limit). Every key is required and checked at start-up |
+| `data/esc50_to_audioset.yaml` | *Step 04:* ESC-50's 50 labels mapped by hand to AudioSet mids (Chapter 10.5) |
 
 ### 7.3 Device profiles — swapping microphones without touching code
 
@@ -977,6 +999,10 @@ Sound_Spy/                 ← project root
 ├── docs/                  architecture, decisions, literature
 └── notebooks/             exploration only
 ```
+
+*Step 04:* downloaded datasets, the clip index and the mixture recipes do **not** go into
+`data/`: they live on drive D: (`D:/SoundSpyData/`, Chapter 10.2). `data/` keeps the database,
+the own recordings (`raw/`) and the own labelled clips (`custom/`).
 
 `data/`, `models/` and `outputs/` are kept out of version control. They hold
 large files that can be rebuilt or downloaded again, and recordings that
@@ -1201,7 +1227,7 @@ like a library catalogue. The catalogue can always be rebuilt by walking the she
 | **peak dBFS** | the loudest single sample; 0 dBFS is the maximum |
 | **noise floor** | the background level: the quietest 10 % of 50 ms windows (room tone, fan, mic hiss) |
 | **clipping** | the share of samples at or above 0.999, which are too loud and distorted |
-| **digital silence** | the share of the recording made of *stretches* (≥ 5 ms) of exact 0.0, which only a gate, suppression or a muted input produces. Isolated zeros are normal (Chapter 18.12) |
+| **digital silence** | the share of the recording made of *stretches* (≥ 5 ms) of exact 0.0, which only a gate, suppression or a muted input produces. Isolated zeros are normal (Chapter 19.12) |
 
 Total silence is reported as −120 dBFS rather than "minus infinity".
 
@@ -1309,7 +1335,7 @@ No level warnings.
     claps flattened at exactly +7.4 dBFS on both channels: that is true clipping, so clap a bit
     softer or further away;
   - quiet sound regularly lands on the converter's "0" step, which produces isolated exact
-    zeros. That is normal (Chapter 18.12).
+    zeros. That is normal (Chapter 19.12).
 
 ### 8.9 The clap test
 
@@ -1536,7 +1562,7 @@ test checks that no audio thread is left behind.
 **When devices change (headphones plugged in or out).** The sound library reads the list of
 devices once and keeps using what it found. Plugging headphones into the laptop's jack makes
 Windows reconfigure its audio devices, and afterwards opening the microphone or speakers through
-the old list can fail. Since the owner's first test of step 03 found this (Chapter 18.18), every
+the old list can fail. Since the owner's first test of step 03 found this (Chapter 19.18), every
 **Start** first re-reads the device list. If opening still fails, it re-reads once more and
 retries, and only then reports an error that says what probably happened. If a session starts but
 the output can't be opened, a notice gives the reason and the **Listen** box is disabled with an
@@ -1544,11 +1570,384 @@ explanation, instead of failing when clicked.
 
 ---
 
-## 10. The backend's web interface — REST and WebSocket
+## 10. Training data — from public datasets to mixture recipes
+
+**Exists today** (step 04). Location: `backend/src/soundspy/data/` (`download.py`,
+`ontology.py`, `roles.py`, `splits.py`, `activity.py`, `collectors/`, `prepare.py`, `stats.py`,
+`mixtures.py`, `aliases.py`), `dsp/resample.py`, `cli/data_cmd.py`, `cli/record_dataset_cmd.py`,
+`backend/configs/data/`.
+
+The models of steps 05–07 learn from examples. This chapter is about where those examples come
+from. No model is trained yet; this step only gets the material ready.
+
+### 10.1 Why the examples are *made*, not found
+
+Two models will be trained:
+
+1. a **detector**: "which of the seven classes can be heard in this second of sound?";
+2. an **extractor**: "here is a mixture and a set of classes; give back only those".
+
+The extractor needs pairs that don't exist in nature: a noisy mixture **and** the exact clean
+version of the wanted part. So, as in SemanticHearing (Veluri et al., UIST 2023), the pairs are
+**built**: take clean clips of the chosen classes (the **foreground**), add other sounds (the
+**background**), and keep the clean foreground as the known answer. Because the computer did the
+mixing, the right answer is known exactly, sample by sample.
+
+The clips come from two public datasets (ESC-50 and FSD50K) and, later, from the owner's own
+recordings.
+
+### 10.2 Where the data lives: C: and D:
+
+The laptop's SSD has two partitions: C: (about 31 GB free) and D: (about 240 GB free). The
+datasets need roughly 60 GB while they are being unpacked, so **everything large goes to D:**.
+The code, the database and the owner's own recordings stay in the project on C:.
+
+| `paths` key (`default.yaml`) | Where | What |
+|---|---|---|
+| `raw` | `data/raw` (C:) | own free recordings (step 02) |
+| `custom` | `data/custom` (C:) | own **labelled** clips (`soundspy record-dataset`) |
+| `external` | `D:/SoundSpyData/external` | downloaded datasets and their archives |
+| `processed` | `D:/SoundSpyData/processed` | clip index, activity maps |
+| `mixtures` | `D:/SoundSpyData/mixtures` | mixture recipes |
+| `model_cache` | `D:/SoundSpyData/models` | pretrained weights (from step 05) |
+
+A path in `default.yaml` can be absolute (`D:/...`) or relative (then it is measured from the
+project root, as before). `soundspy data paths` prints where everything resolves to, with the
+free space of each drive.
+
+**Model caches.** Libraries like PyTorch and Hugging Face download pretrained weights into the
+user profile on C: by default. At start-up (`soundspy ...` and the API) Sound Spy sets
+`TORCH_HOME`, `HF_HOME` and `XDG_CACHE_HOME` to sub-folders of `model_cache`, **but only if they
+are not already set**, so a choice the user made in Windows always wins.
+
+**Aliases instead of full paths.** The clip index never stores `D:\SoundSpyData\...`. It stores
+**aliases** like `fsd50k://FSD50K.dev_audio/64760.wav` or `custom://speech/speech_0001.wav`,
+which are turned into real paths through `paths` when a clip is loaded (`data/aliases.py`).
+Moving the whole data folder to another drive therefore only needs a config change.
+
+### 10.3 The datasets and their licences
+
+| Dataset | What | Size | Licence |
+|---|---|---|---|
+| **AudioSet ontology** | the tree of 632 sound categories (`ontology.json`) | 0.3 MB | CC BY-SA 4.0 |
+| **ESC-50** | 2,000 clips of 5 s, 44.1 kHz, 50 classes (dog, rain, footsteps…), 5 official folds | 0.6 GB | **CC BY-NC 3.0** |
+| **FSD50K** | 51,197 clips (0.3–30 s), 44.1 kHz mono, 200 AudioSet classes, Freesound | 25 GB download, ~34 GB unpacked | per clip: CC0, CC-BY, **CC-BY-NC**, Sampling+ |
+
+"NC" means *non-commercial*. That is fine for a university project, but **it must be looked at
+again before any public or commercial use** of the data or of models trained on it. FSD50K's
+per-clip licence is stored in the clip index (`license` column), so the non-commercial clips can
+be filtered out later if needed.
+
+### 10.4 Downloading (`soundspy data download`)
+
+```powershell
+soundspy data download ontology esc50     # small, a minute
+soundspy data download fsd50k             # 25 GB; asks before starting (--yes to skip)
+soundspy data cleanup-archives            # later, to delete the downloaded zips
+```
+
+What it does, and why:
+
+- **Free space first.** Before anything is fetched it checks the drive (FSD50K: remaining
+  download + ~36 GB unpacked + 2 GB margin) and stops with a clear message if it doesn't fit.
+- **Resumable.** Bytes go to `<name>.part`. If the connection drops, or the command is stopped
+  with Ctrl+C, running the **same command** again asks the server for "the rest from byte N"
+  (an HTTP *Range* request) instead of starting over. Network errors are retried up to 8 times
+  with growing pauses (2, 4, 8 … s).
+- **Checked.** FSD50K's file list, sizes and MD5 checksums are read from the Zenodo record's API
+  (never typed into the code). A file is renamed from `.part` to its real name only after its
+  checksum matched, so a file with its final name is a verified file. For the GitHub downloads
+  (ontology, ESC-50) there is no published checksum; the SHA-256 is computed and recorded.
+- **Unpacked and counted.** ESC-50 and FSD50K's small zips are unpacked by Python (entries that
+  would land outside the target folder are refused). FSD50K's audio is a **split zip**
+  (`.zip` + `.z01` … `.z05`), which only **7-Zip** can unpack; if `7z.exe` is not found (on PATH
+  or in `C:\Program Files\7-Zip`), the command stops with *"Install 7-Zip: `winget install
+  7zip.7zip`"*, after downloading everything. Afterwards the number of WAV files is compared with
+  the CSVs (ESC-50: 2,000; FSD50K: 40,966 dev + 10,231 eval).
+- **Done once.** A `.done` file is written last; with it present, the command does nothing.
+- **Recorded.** `SOURCE.json` in each dataset folder: URL, date, version (Zenodo version or the
+  GitHub commit), licence and every file's size, MD5 and SHA-256.
+- **Archives are kept** until `soundspy data cleanup-archives`, which lists them with sizes and
+  asks before deleting (`--yes` skips the question). Only datasets that are completely unpacked
+  are offered.
+
+Layout on D: afterwards:
+
+```
+D:/SoundSpyData/external/
+├── ontology/   ontology.json, SOURCE.json, .done
+├── esc50/      ESC-50-master/ (audio/, meta/esc50.csv), archives/, SOURCE.json, .done
+└── fsd50k/     FSD50K.dev_audio/, FSD50K.eval_audio/, FSD50K.ground_truth/,
+                FSD50K.metadata/, FSD50K.doc/, archives/, SOURCE.json, .done
+```
+
+### 10.5 From dataset labels to our seven classes
+
+Every dataset names its sounds differently. They are translated through the **AudioSet
+ontology**, a tree in which every category has a permanent ID called a **mid**
+(`/m/09x0r` = "Speech"). Two details matter:
+
+- **A category can have several parents.** "Vehicle horn, car horn, honking" sits under *Car*
+  (→ *Motor vehicle* → *Vehicle*) **and** under *Alarm*. So it's not really a tree but a web
+  without loops, and `ontology.py` walks it with a "visited" list so it can never go round in
+  circles. `descendants(mid)` = the category and everything below it; `ancestors(mid)` =
+  everything above it.
+- **FSD50K writes names differently** (`Walk_and_footsteps` for "Walk, footsteps"). Names are
+  therefore never matched by spelling: FSD50K ships the mid of every label, and the mapping is
+  built from those mids.
+
+**The classes** (`configs/classes.yaml`) each list one or more AudioSet names. All of them were
+checked against the real ontology in this step and **all exist** (`validate_classes` would list
+the closest valid names for any that didn't). So no name had to be changed.
+`soundspy data prepare` refuses to run if a name is ever wrong.
+
+**ESC-50** has its own 50 labels. `configs/data/esc50_to_audioset.yaml` maps each one by hand
+to an AudioSet mid (the AudioSet name is written next to it as a comment), or to `null` when
+nothing fits (drinking/sipping, can opening, washing machine). Every mid is checked when
+`prepare` runs. Mappings marked `UNCERTAIN` in the file are for the owner to review.
+
+### 10.6 Foreground, background or excluded
+
+Each clip gets a **role**, which decides how it may be used in a mixture:
+
+| Role | Meaning | Used as |
+|---|---|---|
+| `fg:<class>` | contains one of our classes and nothing else | a sound the user could ask for |
+| `bg` | contains none of our classes | background noise |
+| `excluded` | contains one of our classes **plus** something else | not used |
+
+The rule, for a class *c*: **F(c)** is the class's AudioSet categories and everything below them;
+**A(c)** is everything above them. A clip is foreground for *c* if all its labels are in F(c) or
+A(c) and at least one is in F(c). Labels from A(c) are tolerated because FSD50K **smears**
+labels upwards: a speech clip is labelled `Speech, Human_voice`, and the `Human_voice` part adds
+nothing.
+
+Examples:
+
+| FSD50K labels | Role | Why |
+|---|---|---|
+| `Speech, Human_voice` | `fg:speech` | Human_voice is just the smeared parent |
+| `Guitar, Plucked_string_instrument, Musical_instrument, Music` | `fg:music` | all under Music |
+| `Dog, Domestic_animals_and_pets, Animal` | `bg` | none of our classes |
+| `Speech, Human_voice, Music` | `excluded` | speech **and** music: as a "speech" example it would teach the extractor to keep music too |
+| `Vehicle_horn…, Car, Vehicle, Alarm` | `excluded` | it is both "alarm" and "traffic" (overlapping classes); counted and reported |
+
+**Why "excluded" matters.** If a clip with speech and music were used as the "speech" target, the
+extractor would be taught that music belongs in a speech answer. Throwing such clips away costs
+quantity but protects the meaning of every class.
+
+**One refinement** (deviation from the spec's literal rule): smearing follows *every* parent, so
+the car horn above also carries `Alarm`, which is not an ancestor of the *traffic* class. The
+literal rule would call that clip "traffic mixed with something else" instead of noticing the
+overlap. So before testing, labels that are ancestors of **another label of the same clip** are
+dropped (they were added by smearing). Everywhere else this gives exactly the spec's result.
+
+**Overlapping classes.** "Alarm" includes car horns, sirens of emergency vehicles and bicycle
+bells; "traffic" (AudioSet *Vehicle*) includes the same horns and sirens, and "Music" includes
+bicycle bells (under *Bell*). Clips of those sounds are foreground for two classes at once and are
+excluded; `prepare` prints how many.
+
+### 10.7 The clip index and activity maps (`soundspy data prepare`)
+
+`prepare` reads every dataset's own metadata (the **collectors**: `collectors/esc50.py`,
+`fsd50k.py`, `custom.py`), opens every audio file once and writes one table,
+`D:/SoundSpyData/processed/clip_index.parquet` (plus `clip_index.csv` to look at in a
+spreadsheet):
+
+| Column | Example |
+|---|---|
+| `clip_id` | `fsd50k:64760`, `esc50:1-100032-A-0`, `custom:speech_0003` |
+| `dataset` | `fsd50k` |
+| `path` | `fsd50k://FSD50K.dev_audio/64760.wav` (alias) |
+| `duration_s`, `sample_rate`, `channels` | from the file itself |
+| `mids`, `raw_labels` | AudioSet mids and the dataset's own labels |
+| `role` | `fg:speech` / `bg` / `excluded` |
+| `split` | `train` / `val` / `test` |
+| `group` | `uploader:<name>` (FSD50K), `1-100032` (ESC-50 source recording), `session:<id>` (own) |
+| `license` | `CC-BY 3.0`, `CC BY-NC 3.0`, `own recording` |
+
+**Activity maps.** Many clips are mostly silence (a dog barks once in 5 s). For every clip,
+`prepare` measures the loudness every 0.1 s (an **RMS envelope**, in dB). A moment counts as
+**active** if it is within 30 dB of the clip's loudest moment (and above −90 dBFS). Mixtures use
+this to put events where something actually sounds. The envelopes (not the yes/no decisions) are
+stored in `processed/activity/<dataset>.npz`, so the 30 dB threshold can change without
+re-reading the audio.
+
+Reading 51,000 files takes a while, so it runs on **all CPU cores in parallel**, shows a progress
+bar, and **remembers** what it already measured: a second `prepare` reads only new clips and
+takes seconds.
+
+`soundspy data stats` prints the **coverage table**: for each class, dataset and split, how many
+clips and how many minutes there are, and warns about classes with fewer than
+`min_fg_clips_warning` (100) training clips.
+
+### 10.8 Splits without leakage
+
+Clips that come from the same recording, or the same person's microphone and room, sound alike. If
+one ended up in training and its sibling in testing, the test would measure memory, not skill.
+That is **leakage**. Every clip therefore has a `group`, and a group always stays in one split:
+
+- **FSD50K:** eval → test, exactly as published (dev and eval share no uploader). For dev,
+  FSD50K only *proposes* a train/val split, and on the real data **926 uploaders appear in both**
+  (57 % of the val clips have a "sibling" in train). So every uploader is moved wholly to the
+  side that already holds most of its dev clips (ties → train). 2,010 of the 40,966 dev clips
+  change side; val keeps 2,660 clips instead of 4,170. FSD50K's README allows a different split
+  as long as it is stated, which is what this paragraph does (deviation from the spec, Chapter
+  19.23).
+- **ESC-50:** official folds 1–3 → train, 4 → val, 5 → test (configurable). A fold holds all the
+  pieces (`-A`, `-B`, …) of one original recording.
+- **Own clips:** whole **recording sessions** are shuffled (fixed seed) and assigned to a split,
+  15 % val and 15 % test.
+
+`prepare` refuses to write the index if any group appears in two splits, and a test checks it.
+Mixtures only combine clips of **their own split**, foreground and background alike.
+
+### 10.9 Mixture recipes (`soundspy data mix`)
+
+Instead of writing tens of thousands of mixed WAV files, Sound Spy writes **recipes**: a few
+lines that say exactly how to build each mixture. One recipe per line in
+`D:/SoundSpyData/mixtures/<split>.jsonl`:
+
+```json
+{"id": "train-000001", "duration_s": 6.0,
+ "events": [
+   {"clip_id": "fsd50k:64760", "role": "fg", "class": "speech",
+    "clip_offset_s": 1.3, "onset_s": 0.4, "dur_s": 3.2, "gain_db": 1.5},
+   {"clip_id": "esc50:2-102414-A-17", "role": "bg", "class": null,
+    "clip_offset_s": 0.0, "onset_s": 0.0, "dur_s": 5.0, "gain_db": -9.0}],
+ "present": ["speech"], "target": ["speech"], "target_to_rest_db": 3.2}
+```
+
+Read it as: *"take 3.2 s of clip 64760 starting at 1.3 s, place it 0.4 s into a 6-second
+mixture, 1.5 dB louder than the reference; add 5 s of the ESC-50 clip as background, 9 dB quieter;
+the user asked for speech; make the speech 3.2 dB louder than everything else together."*
+
+How recipes are drawn (all numbers in `configs/data/default.yaml`, section `mixtures`):
+
+- 1–3 **different** foreground classes and 1–3 background clips per mixture.
+- Classes are drawn **uniformly**, not in proportion to how many clips they have. FSD50K has far
+  more music than footsteps; uniform drawing makes sure footsteps are seen just as often.
+- Every event starts inside an **active** part of its clip and lasts at least 0.5 s; clips shorter
+  than that are used whole. Background events are made as long as possible.
+- The **target** is 1–2 of the classes present. In 5 % of recipes it is a class that is **not**
+  present, so the correct answer is silence. This teaches the extractor not to invent sounds.
+- The whole file is **deterministic**: the same seed (`seed: {train: 1, val: 2, test: 3}`) gives
+  the same recipes on any computer.
+
+Why recipes and not audio files? 24,000 six-second mixtures would be ~25 GB at 44.1 kHz, fixed
+at one sample rate. The recipes are a few MB, can be rendered at whatever sample rate step 05
+chooses, and can be regenerated in seconds.
+
+### 10.10 Rendering a recipe
+
+`render(recipe, sample_rate, …)` in `mixtures.py` turns a recipe into sound:
+
+1. Each event's piece of audio is read from its file (only that piece), mixed down to mono with
+   the `ChannelReducer`, and **resampled** to the requested rate with `dsp/resample.py`
+   (polyphase filtering, `scipy.signal.resample_poly`; 44.1 → 16 kHz is the exact ratio 160/441,
+   so 6 s stay exactly 96,000 samples).
+2. It is brought to a **reference loudness** (`reference_rms_dbfs: -25`, measured only over its
+   active moments, so silence doesn't make it look quiet) and then gets its `gain_db`.
+3. It is added to the **target** sum if its class is in the target, otherwise to the **rest**.
+4. The target is scaled so that target vs. rest is exactly `target_to_rest_db`.
+5. **mixture = target + rest**, exactly, sample for sample.
+6. If the mixture would exceed the **peak limit** (0.99), target and rest are scaled by **the same
+   factor**, so the relationship between input and answer is never broken.
+
+It returns the mixture and target (mono `AudioBuffer`s), the rest, the **present** and
+**target** multi-hot vectors, and a **class-activity** table: for each time frame (10 per second
+by default, configurable), which classes actually sound. The detector of step 05 needs that to
+learn "which classes are active in each second". Rendering the same recipe twice gives identical
+samples.
+
+Spatial rendering (each sound arriving at the 4 microphones from a direction, in a simulated
+room) comes with module 3; the place where it plugs in is marked `TODO(module-3)`.
+
+### 10.11 Listening to previews (`soundspy data preview`)
+
+```powershell
+soundspy data preview --split val --n 5
+```
+
+renders the first five validation recipes at 44.1 kHz into `outputs/previews/`:
+`<id>_mix.wav` (what the microphone would hear), `<id>_target.wav` (what the extractor should
+output) and `<id>.json` (the recipe plus the applied scaling). Listening to a few is the quickest
+way to judge whether the mixtures sound believable.
+
+### 10.12 Recording your own clips (`soundspy record-dataset`)
+
+```powershell
+soundspy record-dataset --classes speech dishes background --clips 10 --seconds 5 --notes "kitchen, laptop mic"
+```
+
+Public datasets are recorded with other microphones in other rooms. A few of the owner's own clips,
+made with the real microphone in real places, help the models later. The command walks through
+the classes one by one:
+
+- `Enter` records one clip after a short countdown; `r` redoes the last take; `d` discards it;
+  `s` skips to the next class; `q` quits.
+- After each take it prints the level report (Chapter 8.8) and warns about clipping or silence.
+- Clips go to `data/custom/<class>/<class>_0001.wav` (+ sidecar), on C:. Numbering continues
+  across runs.
+- `background` is a class too: room tone or cafeteria noise **without** any of the seven classes.
+- Every run is one **session**; its id goes into each sidecar (`session_id`, `class`, `notes`).
+  The split is decided per session, so takes from one sitting never land in both train and test.
+
+The next `soundspy data prepare` picks them up (`custom` collector, role from the chosen class).
+A take is only ever deleted by `r` or `d` right after it was recorded.
+
+### 10.13 The real run on the laptop
+
+15 November 2026, on the development laptop (12 CPU threads, NVMe SSD, home internet).
+
+| Stage | Result | Time |
+|---|---|---|
+| `data download ontology esc50` | 632 categories; ESC-50 2,000 clips verified | 1.2 min |
+| `data download fsd50k` | 11 files, 24.7 GB, every MD5 matched | 36 min (~11 MB/s) |
+| (7-Zip installed, same command again) | dev 40,966 + eval 10,231 WAVs = the CSVs | 7.8 min (incl. re-hashing 25 GB) |
+| `data prepare` (first time) | 53,197 clips indexed, activity maps for all | ~2.2 min |
+| `data prepare` (again) | nothing re-read | 5 s |
+| `data mix --split all` | 20,000 / 2,000 / 2,000 recipes, 15 MB | 3.2 s |
+| `data preview --split val --n 5` | 5 mixtures + targets at 44.1 kHz | 3 s |
+
+**Roles:** 28,351 background, 21,175 foreground, 3,671 excluded (3,296 because a class was
+mixed with other sounds, 146 as alarm + traffic overlaps, 109 as music + alarm + traffic: bicycle
+bells). Among the background clips, 3,146 carry `Human_voice` without `Speech` (shouts,
+whispering, screams…) and 5,183 carry `Domestic_sounds_and_home_sounds` without dishes or
+cutlery (doors, drawers, keys…).
+
+**Coverage** (`soundspy data stats`, clips and minutes per split, all datasets):
+
+| Class | train | val | test |
+|---|---|---|---|
+| speech | 1,268 (79 min) | 45 (3 min) | 218 (20 min) |
+| music | 12,552 (1,071 min) | 638 (77 min) | 1,857 (218 min) |
+| footsteps | 305 (29 min) | 30 (3 min) | 54 (6 min) |
+| dishes | 445 (19 min) | 17 (1 min) | 95 (8 min) |
+| chair_scrape | 254 (15 min) | 19 (2 min) | 57 (6 min) |
+| alarm | 932 (125 min) | 46 (6 min) | 208 (31 min) |
+| traffic | 1,830 (387 min) | 137 (31 min) | 168 (29 min) |
+| background | 20,576 (2,607 min) | 1,847 (279 min) | 5,928 (945 min) |
+| excluded | 1,344 (192 min) | 281 (53 min) | 2,046 (442 min) |
+
+Every class has at least 100 training clips, so no warning fired. The thin spots are in
+**validation**: dishes (17 clips), chair scraping (19) and footsteps (30) have very few distinct
+clips there, and speech only 45. Recipes still draw every class equally often (train: 5,605–5,822
+mixtures per class), but validation will reuse those few clips many times. Own recordings would
+help most here.
+
+**Disk:** C: 30.6 GB free before → 32.7 GB after (nothing large was written to C:; the change is
+other activity). D: 240.1 GB free before → 196.9 GB after. On D:, `fsd50k/` takes 60 GB (25 GB archives,
+removable with `cleanup-archives`, + 35 GB unpacked), `esc50/` 1.6 GB, `processed/` 33 MB
+(index + activity maps) and `mixtures/` 16 MB. The previews in `outputs/previews` are 11 MB.
+
+---
+
+## 11. The backend's web interface — REST and WebSocket
 
 **Exists today**, partly. Location: `backend/src/soundspy/api/`.
 
-### 10.1 The addresses
+### 11.1 The addresses
 
 | Address | What it does | Status |
 |---|---|---|
@@ -1580,7 +1979,7 @@ still **200**, with `resolved_input: null` and an `error` sentence saying why, s
 the reason instead of a generic failure. Only when the sound library itself can't be loaded does
 it answer **503**.
 
-### 10.2 The live channel: `/ws/session`
+### 11.2 The live channel: `/ws/session`
 
 When the website connects:
 
@@ -1612,7 +2011,7 @@ Each browser connection has its **own queue** of at most 64 messages. If a tab c
 oldest `levels` / `waveform` / `spectrogram` messages for that tab are thrown away; `status`,
 `warning` and `error` are never thrown away.
 
-### 10.3 One envelope for every message
+### 11.3 One envelope for every message
 
 Every message, in both directions, has the same three parts:
 
@@ -1635,17 +2034,17 @@ With a single envelope, the website can sort every incoming message by its
 simply ignores types it doesn't know yet, with a warning in the browser's
 console.
 
-### 10.4 Who may talk to it
+### 11.4 Who may talk to it
 
 - The backend listens on **127.0.0.1**, so only programs on this same laptop
   can reach it. It is a desktop app, not a public website.
 - **CORS** allows exactly one other web address, the development website at
   `http://localhost:5173`. Tests check that a different address is refused.
-- There are no passwords and no rate limiting yet (see Chapter 20).
+- There are no passwords and no rate limiting yet (see Chapter 21).
 
 ---
 
-## 11. The database
+## 12. The database
 
 **Exists today** (the tables are created, nothing writes to them yet).
 Location: `backend/src/soundspy/api/db/`. File: `data/soundspy.db`.
@@ -1655,7 +2054,7 @@ Location: `backend/src/soundspy/api/db/`. File: `data/soundspy.db`.
 every `GET /api/recordings` (Chapter 8.6). `processing_runs` stays empty until
 step 06.
 
-### 11.1 What it stores, and what it doesn't
+### 12.1 What it stores, and what it doesn't
 
 The database stores **information about** audio, not the audio itself. Sound
 files stay on disk as WAV files. Each one gets a matching **JSON "sidecar"**
@@ -1663,7 +2062,7 @@ file with its details, plus a database row pointing to its path. Databases are
 good at searching and linking records, while sound files are large and are
 better left as plain files.
 
-### 11.2 The two tables
+### 12.2 The two tables
 
 **`recordings`**: one row per raw recording.
 
@@ -1699,7 +2098,7 @@ When a WAV file disappears from disk, its `recordings` row is **deleted** at the
 next sync (decided in step 02; the decision log explains why, and when to revisit
 it). Paths are stored relative to the project root, and times in UTC.
 
-### 11.3 Raw recordings are never changed
+### 12.3 Raw recordings are never changed
 
 A recording is saved at its original sample rate with **all** its channels,
 and it is never edited afterwards. Converted copies (resampled, or reduced to
@@ -1707,7 +2106,7 @@ fewer channels) are made fresh when needed, or stored separately in
 `data/processed/`. That way any recording can always be processed again later
 with a better method.
 
-### 11.4 How the database starts up
+### 12.4 How the database starts up
 
 When the backend starts, it creates any missing tables. There is no
 "migration" tool yet, meaning a tool that records step by step how a
@@ -1716,11 +2115,11 @@ database's structure changes over time. The decision log notes that one
 
 ---
 
-## 12. The website
+## 13. The website
 
 **Exists today** as a shell. Location: `frontend/`.
 
-### 12.1 What you see
+### 13.1 What you see
 
 - A header with the app name and a **connection light**.
 - Three tabs: **Semantic**, **Spatial**, **Sources**.
@@ -1737,7 +2136,7 @@ label and notes, the level meters, spectrogram and waveform, the class buttons (
 *"Sound selection arrives with detection (step 05)"*) and the recordings list with Play buttons.
 Warnings and errors appear as small notices in the bottom-right corner that can be dismissed.
 
-### 12.2 The connection light
+### 13.2 The connection light
 
 It combines two separate checks:
 
@@ -1758,7 +2157,7 @@ retries as soon as a connection succeeds. This is called **exponential
 backoff**. It recovers quickly from a short blip without bombarding a backend
 that is down for longer.
 
-### 12.3 How the code is organised
+### 13.3 How the code is organised
 
 | Folder / file | Job |
 |---|---|
@@ -1779,18 +2178,18 @@ two hand-written copies that must agree. The plan is to generate the
 website's copy automatically from the backend's published description
 (`npm run gen:api` is a placeholder for that).
 
-### 12.4 The development proxy
+### 13.4 The development proxy
 
 During development, the website is served at `localhost:5173` and the backend
 runs at `127.0.0.1:8765`. The website's server **forwards** every `/api/...`
 and `/ws/...` request to the backend. To the browser everything then comes
 from one address, which keeps things simple and avoids CORS problems. The
 forwarding goes to `127.0.0.1` rather than `localhost`, on purpose
-(Chapter 18).
+(Chapter 19).
 
 ---
 
-## 13. The command line tool
+## 14. The command line tool
 
 **Exists today.** The backend also installs a command called `soundspy`, used
 for developer jobs that don't need the website: running the server, recording
@@ -1802,8 +2201,8 @@ test clips, preparing data and training models.
 | `soundspy devices` | list microphones and speakers, marking the system default (`*`) and the one the profile uses (`>>`); `--json` for machine-readable output | **works** (step 02) |
 | `soundspy check-mic` | record a few seconds and report the levels, channel comparison and warnings (Chapter 8.8); `--meter` for a live level meter | **works** (step 02) |
 | `soundspy record` | record a clip into `data/raw` as WAV + sidecar (`--seconds`, `--label`, `--notes`, `--out`) | **works** (step 02) |
-| `soundspy record-dataset` | guided recording of labelled clips | step 04 |
-| `soundspy data` | download datasets, build mixtures | step 04 |
+| `soundspy record-dataset` | guided recording of labelled clips into `data/custom` (Chapter 10.12) | **works** (step 04) |
+| `soundspy data` | `paths`, `download`, `cleanup-archives`, `prepare`, `stats`, `mix`, `preview` (Chapter 10) | **works** (step 04) |
 | `soundspy train` | train a model | step 05 |
 | `soundspy detect` | find sound types in a recording | step 05 |
 | `soundspy extract` | clean up a recording | step 06 |
@@ -1817,7 +2216,7 @@ Python error.
 
 ---
 
-## 14. Following a request from start to finish
+## 15. Following a request from start to finish
 
 Here is what actually happens today when you open the website with both
 programs running.
@@ -1858,7 +2257,7 @@ succeeds and the light turns green on its own, with no page reload needed.
 
 ---
 
-## 15. What comes next — the plan, step by step
+## 16. What comes next — the plan, step by step
 
 Everything in this chapter is **planned**, not built. Concepts are explained
 here so the later chapters will make sense when they arrive.
@@ -1867,7 +2266,7 @@ here so the later chapters will make sense when they arrive.
 |---|---|---|
 | 02 | microphone capture, device listing, recording to disk, level measurement, `ChannelReducer` — **done** (Chapter 8) | – |
 | 03 | the live engine (threads, queues, playback), live level meters and spectrogram on the website, a record button — **done** (Chapter 9) | 1 |
-| 04 | datasets: AudioSet mapping, downloading ESC-50 and FSD50K, own recordings, splits, synthetic mixtures | – |
+| 04 | datasets: AudioSet mapping, downloading ESC-50 and FSD50K, own recordings, splits, synthetic mixtures — **done** (Chapter 10) | – |
 | 05 | sound detection: fine-tuning a pretrained model, live detections on the website | 1 |
 | 06 | first extractor (classical masking) + quality scores; clean up saved recordings and compare before/after | 1 |
 | 07 | neural extractor that runs live | 1 |
@@ -1875,7 +2274,7 @@ here so the later chapters will make sense when they arrive.
 | modules 3–4 | simulated array, direction finding, beamforming, Spatial tab | 2 |
 | module 5 | source tracking, Sources tab | 3 |
 
-### 15.1 Recognising sounds (step 05)
+### 16.1 Recognising sounds (step 05)
 
 A **pretrained** audio model already knows a lot about sound in general. It
 will be **fine-tuned** to answer seven yes/no questions at once, one per
@@ -1884,7 +2283,7 @@ output is seven probabilities. Run continuously on the live stream, it
 produces `Detection` events: *"speech, 92%, from 12.0 s to 13.0 s"*. Which
 pretrained model to use has not been decided yet.
 
-### 15.2 Keeping the chosen sounds — two ways (steps 06 and 07)
+### 16.2 Keeping the chosen sounds — two ways (steps 06 and 07)
 
 Both methods sit behind the same `Extractor` interface, so either can be
 plugged into the engine.
@@ -1904,7 +2303,9 @@ follows **SemanticHearing**'s *Waveformer* model, which is built to work in
 small chunks with a memory of what came before, so it can run live with low
 latency.
 
-### 15.3 Training data from mixtures (step 04)
+### 16.3 Training data from mixtures (step 04)
+
+*(Built in step 04: Chapter 10 describes how it really works.)*
 
 There is no recording of "cafeteria speech, with the exact speech-only
 version alongside". So training examples are **made**: take a clean clip of
@@ -1915,7 +2316,7 @@ because every clip's label is translated through the AudioSet ontology into
 the project's seven classes. The data is split carefully, so that no original
 recording ends up in both training and test, which would be leakage.
 
-### 15.4 Measuring quality
+### 16.4 Measuring quality
 
 - **Detection:** how well the probabilities rank "present" above "absent" for
   each class (mean average precision), and how often the yes/no decisions are
@@ -1924,7 +2325,7 @@ recording ends up in both training and test, which would be leakage.
   the clean answer is known. A positive improvement means the output is
   closer to the clean target than the raw mixture was.
 
-### 15.5 Space (modules 3–5)
+### 16.5 Space (modules 3–5)
 
 With the 4-microphone array, the delays between microphones reveal where each
 sound comes from (direction of arrival). **Beamforming** then focuses
@@ -1934,22 +2335,22 @@ persistent sources the user can tap on a map. Until the hardware arrives,
 **simulated** array recordings (made with a room-acoustics library called
 pyroomacoustics) will let this work start without it.
 
-### 15.6 A note on reused code
+### 16.6 A note on reused code
 
 If any code from SemanticHearing (MIT licence) is adapted in future, the
 adapted file keeps its original copyright notice and the reuse gets recorded
 in a third-party notices file. So far none has been adapted.
 
 *Updated in step 02:* there is no separate notices file any more. Adapted code is
-recorded in Chapter 21, "Third-party code".
+recorded in Chapter 22, "Third-party code".
 
 ---
 
-## 16. Running everything
+## 17. Running everything
 
 All commands are for **PowerShell** on Windows 11.
 
-### 16.1 What you need
+### 17.1 What you need
 
 - **Python 3.11.** On this machine, plain `python` is version 3.14, which is
   too new for the project, so the backend is always created with the `py
@@ -1957,7 +2358,7 @@ All commands are for **PowerShell** on Windows 11.
 - **Node.js** (version 22 or newer; this machine has 24) for the website.
 - Ports **8765** and **5173** free.
 
-### 16.2 First-time setup
+### 17.2 First-time setup
 
 ```powershell
 # backend
@@ -1979,7 +2380,7 @@ download site with the matching graphics-card (CUDA) version. Otherwise pip
 installs a version that ignores the graphics card. The README has the exact
 command.
 
-### 16.3 Starting it
+### 17.3 Starting it
 
 ```powershell
 # terminal 1 — the backend
@@ -1994,7 +2395,7 @@ npm run dev               # open http://localhost:5173
 
 Stop either one with **Ctrl+C**.
 
-### 16.4 What you should see
+### 17.4 What you should see
 
 - At http://127.0.0.1:8765/docs, an automatically generated page listing
   every backend address. You can try them out from there.
@@ -2006,7 +2407,7 @@ Stop either one with **Ctrl+C**.
   with the room sound, and the bar shows the latency (about 94 ms here) and RTF (about 0.06).
   Tick **Listen** only with headphones on.
 
-### 16.5 Using the microphone
+### 17.5 Using the microphone
 
 ```powershell
 # in backend/, with the venv active
@@ -2022,13 +2423,13 @@ longer warns about noise suppression.
 
 ---
 
-## 17. Testing everything
+## 18. Testing everything
 
-### 17.1 Running the checks
+### 18.1 Running the checks
 
 ```powershell
 # backend (in backend/, with the venv active)
-pytest              # 264 tests (after step 03), about 15 seconds
+pytest              # 344 tests (after step 04; 264 after step 03), about 40 seconds
 ruff check .        # code-quality check
 
 # website (in frontend/)
@@ -2038,7 +2439,7 @@ npm run typecheck   # TypeScript type check
 npm run build       # proves the production build works
 ```
 
-### 17.2 Tests never need hardware
+### 18.2 Tests never need hardware
 
 No test opens a real microphone. Before any test runs, a **fake
 `sounddevice`** replaces the real sound library. It pretends there is one
@@ -2064,9 +2465,9 @@ thread running.
 
 Run one area with, for example, `pytest tests/io`. *(Step 03 removed the empty `__init__.py`
 files from the test folders: with them, starting pytest inside `tests/io` made that folder pose
-as Python's own `io` module, Chapter 18.13.)*
+as Python's own `io` module, Chapter 19.13.)*
 
-### 17.3 What the backend tests cover
+### 18.3 What the backend tests cover
 
 | Area | Examples of what is checked |
 |---|---|
@@ -2094,7 +2495,11 @@ as Python's own `io` module, Chapter 18.13.)*
 | channel rule (step 02) | a scan of the source code fails if channels are indexed (`[:, …]`) or averaged anywhere except the four allowed files; proven by planting a violation and watching it fail |
 | audio commands (step 02) | `devices --json` and the table markers; `check-mic` report, meter and warnings; `record` writes WAV + sidecar |
 
-### 17.4 What the website tests cover
+| training data (step 04) | built on a tiny fake ontology (with a two-parent node), fake ESC-50 and FSD50K trees with smeared labels, and generated WAVs: graph walks never loop; FSD50K names map through mids; unknown class names come with candidates; every role case (pure, smeared, mixed, foreground + background, overlap); official splits, sessions, no group in two splits; silent head and tail found; a second `prepare` reads no audio; recipes are repeatable and keep every rule; uniform class drawing; ~configured rate of empty targets; mixture = target + rest exactly; target vs. rest within 0.1 dB; one shared peak factor; empty target is silence; resampling keeps durations exact; previews written |
+| downloads (step 04) | a local web server that drops the connection mid-file: the download resumes with a Range request; a wrong checksum is an error and leaves nothing behind; not enough space stops before any request; `.done` makes a second run do nothing; split zips without 7-Zip stop with the install hint; counts are compared with the CSVs; unsafe zip entries are refused |
+| record-dataset (step 04) | with the fake microphone: keys (record, redo, discard, skip, quit), sidecars with `class` and `session_id`, numbering continues across runs |
+| no PyTorch (step 04) | importing the whole data pipeline loads no `torch` |
+### 18.4 What the website tests cover
 
 *Step 03 added:* live messages go to the store (status) or to `liveFrames` (pictures), warnings
 and errors become notices without duplicates; history is trimmed to 5 s / 10 s and cleared when
@@ -2116,7 +2521,7 @@ Tests run against a *simulated* browser, which can check what the page says
 but not how it looks. Layout is checked by opening the page in a real
 browser.
 
-### 17.5 A manual check worth repeating
+### 18.5 A manual check worth repeating
 
 With both programs running, stop the backend, wait for the red light, then
 start it again and watch it turn green without reloading the page. This was
@@ -2128,17 +2533,17 @@ website's proxy, with the backend up, stopped, and restarted.
 and a short `soundspy record` on the real laptop. Then start `soundspy serve` and
 confirm the recording appears at `GET /api/recordings`. Tests can only prove the
 code behaves correctly with the *fake* sound card. The two biggest surprises of
-step 02, start-up silence and noise suppression (Chapter 18.8–17.9), only showed
+step 02, start-up silence and noise suppression (Chapter 19.8–17.9), only showed
 up on real hardware.
 
 ---
 
-## 18. Problems found and fixed
+## 19. Problems found and fixed
 
 Each of these was real. Most were silent: nothing crashed, and something was
 simply wrong. They are the most instructive part of this document.
 
-### 18.1 Port 8000 was secretly taken
+### 19.1 Port 8000 was secretly taken
 
 **Symptom:** with our backend stopped, the website should have shown
 "connection refused". Instead, something on port 8000 answered *"Not
@@ -2157,7 +2562,7 @@ the website's proxy points at `127.0.0.1` explicitly rather than at
 
 **Lesson:** "the port is free" is an assumption to check, not a fact.
 
-### 18.2 Windows paths came out scrambled
+### 19.2 Windows paths came out scrambled
 
 **Symptom:** a test checking where the database file goes failed: the path
 came back as `C%3A%5CUsers%5C...`.
@@ -2170,26 +2575,26 @@ Windows path. Those are the codes web addresses use for special characters.
 text. The database file now lands exactly where intended:
 `data/soundspy.db` at the project root.
 
-### 18.3 The newest TypeScript was too new
+### 19.3 The newest TypeScript was too new
 
 TypeScript 7 (a rewrite of the TypeScript compiler) was the latest release,
 but the code-checking tool `typescript-eslint` only supports versions below
 6.1. The project therefore uses **TypeScript 6.0**, a deliberate choice
 recorded in the decision log. Upgrade when the checker catches up.
 
-### 18.4 The installer refused a file outside its folder
+### 19.4 The installer refused a file outside its folder
 
 The backend's package description pointed at `../README.md`, one folder up.
 The Python packaging tool refuses to include files from outside the package's
 own folder, so the first install failed. The reference was removed.
 
-### 18.5 The engine's own guard caught a mistake in a test
+### 19.5 The engine's own guard caught a mistake in a test
 
 A test set up a chain for 48,000 Hz audio, then fed it a 16,000 Hz chunk by
 accident. The chain refused the chunk, as designed (Chapter 6.2). The test
 was wrong, not the code, and the guard proved its worth on day one.
 
-### 18.6 Dataset names were about to reach the user
+### 19.6 Dataset names were about to reach the user
 
 The first version of the website showed AudioSet category names such as
 "Dishes, pots, and pans" as class descriptions. Those are dataset labels, not
@@ -2197,7 +2602,7 @@ friendly text. Each class now has a separate display name and description,
 and the backend **no longer sends** the AudioSet names to the website at all.
 A test makes sure they stay out.
 
-### 18.7 Known and harmless
+### 19.7 Known and harmless
 
 - **One test warning:** the web library (Starlette 1.10) suggests a newer
   testing helper (`httpx2`) instead of the one used (`httpx`). Nothing is
@@ -2209,7 +2614,7 @@ A test makes sure they stay out.
 
 *The entries below were found in step 02, mostly on real hardware.*
 
-### 18.8 Every new recording started with half a second of fake silence
+### 19.8 Every new recording started with half a second of fake silence
 
 **Symptom:** the first real `check-mic` reported a noise floor of −120 dBFS,
 the lowest value the app can display.
@@ -2227,7 +2632,7 @@ the report and gets flagged.
 **Lesson:** a measurement that looks impossibly good deserves suspicion, not
 celebration.
 
-### 18.9 The laptop's sound is being "cleaned" before Sound Spy sees it
+### 19.9 The laptop's sound is being "cleaned" before Sound Spy sees it
 
 **Symptom:** with the start-up silence removed, the noise floor still read
 −120 dBFS. Over a whole 5-second take every 50 ms window stayed below −100 dBFS,
@@ -2256,7 +2661,7 @@ samples). So the "duplicated mono" above was the enhancement processing, not the
 hardware. Two laptop microphones a few centimetres apart can't replace the
 ReSpeaker for real direction finding, but they are no longer "mono".
 
-### 18.10 The same microphone wasn't recognised as itself
+### 19.10 The same microphone wasn't recognised as itself
 
 **Symptom:** in a test, the app chose the MME microphone instead of its WASAPI
 twin.
@@ -2269,7 +2674,7 @@ was 30 characters long and the other 31, and they never matched.
 **Fix:** cut first, then remove spaces. The test fake reproduces exactly this
 name, so the mistake can't come back unnoticed.
 
-### 18.12 A warning that cried wolf: isolated zeros are normal
+### 19.12 A warning that cried wolf: isolated zeros are normal
 
 **Symptom:** after the enhancements were switched off, every `check-mic` still
 warned that 1.4–5 % of samples were "exact digital silence", although the noise
@@ -2291,7 +2696,7 @@ signal with isolated zeros to make sure it stays that way.
 **Lesson:** a check written from one bad recording needs a second, good recording
 before it can be trusted not to fire on healthy input.
 
-### 18.11 Times without a time zone
+### 19.11 Times without a time zone
 
 SQLite stores dates as plain text without a time zone. A recording made at
 16:05 in Romania and one made at 14:30 UTC would sort wrongly if each were stored
@@ -2300,7 +2705,7 @@ API marks them as UTC when it sends them.
 
 *The entries below were found in step 03.*
 
-### 18.13 A test folder pretending to be part of Python
+### 19.13 A test folder pretending to be part of Python
 
 **Symptom:** running only the storage tests (`pytest tests/io/test_storage.py`) failed with
 `cannot import name 'StringIO' from 'io'`, while the full test run passed.
@@ -2317,7 +2722,7 @@ doesn't need them); folders with no tests yet keep a `.gitkeep` so git still tra
 **Lesson:** a test suite has to work the way people actually run it, including one folder at a
 time, not only as a whole.
 
-### 18.14 The channel-reduction guard flagged three innocent lines
+### 19.14 The channel-reduction guard flagged three innocent lines
 
 The scan that enforces "channels are only reduced in `ChannelReducer`" (Chapter 3) found
 `[:, 0]` and `.sum(axis=1)` in three new files. None of them reduced audio channels: one took the
@@ -2326,7 +2731,7 @@ reshaped a gain curve. Rather than weaken the guard, the three lines were rewrit
 (`.ravel()`, `.max(axis=1)`, `.reshape(-1, 1)`). The guard stays strict, so a real violation
 still fails the build.
 
-### 18.15 "Listen" seemed to ignore the volume for a moment
+### 19.15 "Listen" seemed to ignore the volume for a moment
 
 **Symptom:** a test changed the volume and the server's reply still showed the old value.
 
@@ -2336,7 +2741,7 @@ the reply was built before that moment.
 **Fix:** the status now reports the requested setting while it waits to be applied, so the page
 shows what the user just chose.
 
-### 18.16 A test that listened to silence
+### 19.16 A test that listened to silence
 
 The first monitoring test played a file whose two channels were exact opposites (channel 1 =
 −channel 0) and expected to hear something. The chain mixes the channels to one, and opposites
@@ -2344,13 +2749,13 @@ cancel to perfect silence. The code was right; the test file was wrong. Real ste
 rarely cancel, but it's a reminder that a mono mix *can* lose sound when microphones pick it up
 in opposite phase. That's one reason the analyzer and the recordings always keep every channel.
 
-### 18.17 Latency vs clicks: the prebuffer trade-off
+### 19.17 Latency vs clicks: the prebuffer trade-off
 
 Measured on the laptop, 30 seconds each: with a prebuffer of 2 chunks the typical latency is 94 ms
 and there were **no** underruns; with 1 chunk it's 84 ms but there was **one** underrun (a click).
 The default stays at 2. Chapter 9.5 explains the parts of the delay.
 
-### 18.18 Plugging in headphones broke the next session
+### 19.18 Plugging in headphones broke the next session
 
 **Symptom (owner's test):** everything worked, including Listen with headphones. Then a file
 session started without an output device ("no output device is available for monitoring" when
@@ -2380,7 +2785,7 @@ index 9 throughout.
 Tests reproduce the stale-handle failure with the fake sound card; on the real laptop a
 microphone → file → microphone sequence now gets the speakers every time.
 
-### 18.19 The Listen box wouldn't tick while no session was running
+### 19.19 The Listen box wouldn't tick while no session was running
 
 **Symptom (owner's test):** Listen unticked during a session, session stopped, Listen ticked
 again: the box stayed unticked until the next Start (which then did start listening).
@@ -2393,9 +2798,52 @@ showed that answer.
 the box shows what the user chose and the next session starts with it. A test replays the exact
 sequence.
 
+
+### 19.20 A whole test folder was silently skipped
+
+**Symptom:** the first run of the new data tests reported *28 skipped*, none run.
+
+**Cause:** the test setup skips tests marked `data` (those that need downloaded datasets) unless
+`--run-data` is given. It recognised the mark by looking in a list of *keywords* that pytest also
+fills with **folder names**, and the new tests live in `tests/data/`.
+
+**Fix:** it now looks only at real marks. All 57 data tests run; the skip still works for tests
+that really are marked.
+
+### 19.21 A car horn looked like "traffic plus something else"
+
+**Symptom:** a clip labelled `Vehicle_horn, Car, Vehicle, Alarm` came out as "class mixed with
+other sounds" instead of being reported as an overlap of *alarm* and *traffic*.
+
+**Cause:** FSD50K adds every parent of a label, and the horn has **two** parent chains (under
+*Car* and under *Alarm*). `Alarm` is not an ancestor of the traffic class, so the spec's rule did
+not tolerate it.
+
+**Fix:** labels that are ancestors of another label *of the same clip* are ignored before the
+rule is applied (Chapter 10.6). The horn is now correctly an alarm + traffic overlap, and every
+other clip gets the same role as before.
+
+### 19.22 7-Zip was missing
+
+FSD50K's audio comes as a split zip that only 7-Zip can unpack, and the laptop had no 7-Zip. The
+downloader downloads everything first and then stops with the install command; the owner agreed
+to install it (`winget install 7zip.7zip`), after which the same command continued with the
+extraction without downloading anything again.
+
+### 19.23 FSD50K's validation split shared uploaders with training
+
+**Symptom:** the first real `prepare` stopped with *"926 leakage group(s) span several splits"*.
+
+**Cause:** FSD50K guarantees that dev and eval have no uploader in common, but its train/val
+split inside dev is only a proposal and does share uploaders: 2,379 of the 4,170 val clips come
+from someone who also uploaded training clips. The leakage check did its job.
+
+**Fix:** each uploader is moved wholly to the side that already has most of their dev clips
+(Chapter 10.8). 2,010 clips change side, the test split is untouched, and `prepare` reports the
+number every time.
 ---
 
-## 19. Design decisions and why
+## 20. Design decisions and why
 
 The full dated list is in [docs/decisions.md](docs/decisions.md). The
 reasoning behind the most important ones:
@@ -2488,9 +2936,31 @@ processing improves; the raw input can always be processed again by a better met
 exactly what `soundspy record` saves, so recordings from the page and from the command line are
 interchangeable.
 
+
+**Why is the big data on D: and not in the project?** C: has about 31 GB free, and unpacking
+FSD50K needs about 60 GB for a while. Both are partitions of the same fast SSD, so nothing is lost
+by using D:. The project folder stays small and backed-up-able; the datasets can always be
+downloaded again.
+
+**Why recipes instead of rendered mixtures?** A recipe is a few hundred bytes, exactly repeatable,
+and can be rendered at any sample rate. Rendered audio would be ~25 GB fixed at one rate, and the
+model's sample rate is only chosen in step 05.
+
+**Why tolerate ancestor labels but exclude everything else?** FSD50K labels every clip with all
+parents of its true label, so parents carry no new information. Anything else on the clip is a
+real second sound, and a "speech" example that also contains music would teach the extractor the
+wrong answer.
+
+**Why draw classes uniformly?** FSD50K has many times more music than footsteps. Drawing clips at
+random would let the common classes dominate; drawing the class first makes every class equally
+frequent in the mixtures.
+
+**Why no resampling cache yet?** Resampling only the needed piece of each clip on the fly is
+fast enough for previews and costs no disk space. A cache can be added once step 05 fixes the
+sample rate and training speed is measured.
 ---
 
-## 20. Known limitations
+## 21. Known limitations
 
 These are understood and accepted for now, not oversights.
 
@@ -2510,6 +2980,9 @@ These are understood and accepted for now, not oversights.
    when their structure starts changing.
 6. **Two of the AudioSet mappings are provisional** (chair scraping and
    traffic) until they are checked against the real ontology in step 04.
+   *(Step 04: all names exist. Open question for the owner: "traffic" uses AudioSet's
+   "Vehicle", which also contains aircraft, boats and trains; "Motor vehicle (road)" would
+   match the description "road traffic" more closely. See item 15.)*
 7. **Nothing on the website has been checked for appearance in a real
    browser** beyond a quick look. Automated tests can't see layout.
 8. **Laptop microphones on Windows may have "audio enhancements" switched
@@ -2543,9 +3016,24 @@ These are understood and accepted for now, not oversights.
 13. **Only one session at a time, one output device**, and the page can't choose
     between microphones yet (step 03).
 
+14. **Some training data is licensed for non-commercial use only** (step 04): all of ESC-50 and
+    part of FSD50K. Fine for the university project; must be reviewed before any public or
+    commercial use (the per-clip licence is in the clip index).
+15. **Class definitions overlap** (step 04): car horns and emergency sirens are both "alarm" and
+    "traffic"; bicycle bells are also "music". Such clips are excluded, so these sounds are
+    under-represented in both classes. ESC-50's church bells count as music (AudioSet puts bells
+    under Music), and airplanes, helicopters and trains count as traffic while "traffic" uses
+    "Vehicle".
+16. **Several classes have few foreground clips** (step 04): see the coverage table in
+    Chapter 10.13. Own recordings (`record-dataset`) are the way to add more.
+17. **Mixtures are mono** (step 04). Spatial mixtures for the array come with module 3.
+18. **Validation is thin for some classes** (step 04): after making FSD50K's val split
+    uploader-disjoint, dishes has 17 validation clips, chair scraping 19, footsteps 30 and speech
+    45. Validation scores for those classes will be noisy.
+
 ---
 
-## 21. Third-party code
+## 22. Third-party code
 
 Sound Spy is original code. It uses ordinary libraries installed with `pip` and `npm` (NumPy,
 SciPy, sounddevice, soundfile, FastAPI, React and so on), each under its own licence; those are
@@ -2559,15 +3047,19 @@ table below with where it came from, its licence, and which of our files contain
 |---|---|---|---|
 | *(none so far)* | | | |
 
-**Ideas, not code.** The extraction design (Chapter 15) follows the **SemanticHearing** project
+**Ideas, not code.** The extraction design (Chapter 16) follows the **SemanticHearing** project
 (Veluri et al., UIST 2023, https://github.com/vb000/SemanticHearing, MIT licence): the
 label-conditioned Waveformer model, chunked streaming inference, the AudioSet class mapping and
 synthetic training mixtures. No code from it has been adapted. If any is in future, it gets a row
 above.
 
+
+**Data, not code.** The datasets downloaded in step 04 (AudioSet ontology, ESC-50, FSD50K) are
+data used for training, not adapted code. Their sources and licences are recorded in each
+dataset's `SOURCE.json` and described in Chapter 10.3.
 ---
 
-## 22. Quick reference
+## 23. Quick reference
 
 ### Start
 
@@ -2590,6 +3082,19 @@ soundspy devices [--json]                      # devices; >> = the one the profi
 soundspy check-mic [--seconds 5] [--meter]     # level report / live meter
 soundspy record --seconds 10 --label speech    # data/raw/speech_<time>.wav + .json
 #   every audio command: --profile <name>  --device <index or name>
+```
+
+### Training data (step 04)
+
+```powershell
+soundspy data paths                              # where everything lives (C: / D:)
+soundspy data download ontology esc50            # then: soundspy data download fsd50k
+soundspy data prepare                            # clip index + activity maps (parallel)
+soundspy data stats                              # coverage table and warnings
+soundspy data mix --split all                    # recipes -> D:/SoundSpyData/mixtures/*.jsonl
+soundspy data preview --split val --n 5          # listen: outputs/previews/
+soundspy data cleanup-archives                   # delete the zips once satisfied
+soundspy record-dataset --classes speech background --clips 10 --seconds 5
 ```
 
 ### Addresses
@@ -2629,7 +3134,9 @@ WS   /ws/session                        status 1/s, levels 20/s, waveform + spec
 | Honest noise floor (enhancements off) | about −65 dBFS |
 | WASAPI start-up silence (discarded) | 500 ms with enhancements on, none with them off |
 | Mic stall timeout / live chunk queue | 2 s / 32 chunks, oldest dropped first |
-| Backend tests / website tests | 264 / 18 (after step 03) |
+| Backend tests / website tests | 264 / 18 (after step 03); 344 / 18 (after step 04) |
+| Training data | `D:/SoundSpyData/` (external, processed, mixtures, models) |
+| Mixtures | 6 s, 20,000 / 2,000 / 2,000 recipes (train / val / test), seeds 1 / 2 / 3 |
 
 ### Files that matter most
 
@@ -2654,5 +3161,10 @@ WS   /ws/session                        status 1/s, levels 20/s, waveform + spec
 | `frontend/src/App.tsx` | the website's layout and tabs |
 | `frontend/src/api/ws.ts` | the self-reconnecting live connection |
 | `frontend/vite.config.ts` | the development proxy (must point at the backend's port) |
+| `backend/configs/data/default.yaml` | every training-data setting (splits, mixture rules) |
+| `backend/configs/data/esc50_to_audioset.yaml` | ESC-50 labels → AudioSet mids |
+| `backend/src/soundspy/data/roles.py` | the foreground / background / excluded rule |
+| `backend/src/soundspy/data/mixtures.py` | recipes and rendering |
+| `backend/src/soundspy/data/download.py` | resumable, checked downloads |
 | `docs/architecture.md` | the exact technical rules and message formats |
 | `docs/decisions.md` | every important decision, dated, with its reason |

@@ -7,7 +7,8 @@
 #
 # The order of the keys defines the index in multi-hot label vectors: append new classes at the
 # end, never reorder, or trained models will no longer match.
-# AudioSet names must be verified against the ontology in step-04.
+# Every AudioSet name was checked against the real ontology in step 04 (all exist);
+# `soundspy data prepare` refuses to run if a name is ever invalid.
 
 speech:
   display_name: "Speech"
@@ -32,7 +33,7 @@ dishes:
 chair_scrape:
   display_name: "Chair scraping"
   description: "Chairs and furniture dragged or squeaking on the floor"
-  audioset: ["Scrape", "Squeak"]           # TODO(step-04): verify best AudioSet match
+  audioset: ["Scrape", "Squeak"]           # verified in step 04 (Squeak sits under Door and Brief tone)
 
 alarm:
   display_name: "Alarms"
@@ -42,4 +43,4 @@ alarm:
 traffic:
   display_name: "Traffic"
   description: "Road traffic and passing vehicles"
-  audioset: ["Traffic noise, roadway noise", "Vehicle"]  # TODO(step-04): verify
+  audioset: ["Traffic noise, roadway noise", "Vehicle"]  # verified in step 04; "Vehicle" also covers aircraft, boats, trains (open question)
