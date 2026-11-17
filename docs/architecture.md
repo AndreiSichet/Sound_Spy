@@ -42,7 +42,8 @@ The library never imports `soundspy.api`, FastAPI, Starlette or SQLAlchemy
 - `AudioBuffer(samples, sample_rate, metadata)`: float32 `(frames, channels)`, always 2-D,
   validated on construction; `num_frames`, `num_channels`, `duration_s`. No channel reduction.
 - `Direction(azimuth_deg, width_deg)`: azimuth normalized to [0, 360), width in (0, 360].
-- `TargetSpec(labels, direction, source_id, attenuation_db=30)`: one spec for all three tabs —
+- `TargetSpec(labels, direction, source_id, attenuation_db=30)` (the API fills in
+  `extraction.default_attenuation_db` = 15 when a client sends none): one spec for all three tabs —
   Semantic sets `labels` (empty = pass everything), Spatial adds `direction`, Sources sets
   `source_id`. `validate(label_set)` rejects unknown labels.
 - Events (all carry `t`, seconds since session start): `Detection`, `SoundSource`,
@@ -126,7 +127,7 @@ Every message, in both directions, uses one envelope:
 
 ```json
 {"type": "status" | "levels" | "waveform" | "spectrogram" | "detections" | "sources"
-         | "run" | "warning" | "error" | "set_target" | "set_bypass",
+         | "run" | "warning" | "error" | "set_target" | "set_bypass" | "set_method",
  "t": 12.34,
  "payload": { ... }}
 ```
@@ -144,6 +145,7 @@ Every message, in both directions, uses one envelope:
 | `sources` | server → client | `{"items": [SoundSource, ...]}` | module 5 |
 | `run` | server → client | `RunModel` (`run_id`, `recording_id`, `labels`, `attenuation_db`, `method`, `status`, `error`, `output_path`, `duration_s`, `processing_seconds`, `info`) | on every state change of an offline processing run (step 06); never dropped |
 | `set_bypass` | client → server | `{"enabled": bool}` | stored, forwarded to the session; replied with `status` (step 06) |
+| `set_method` | client → server | `{"method": "neural_tse" \| "mask_baseline"}` | the extraction method of the **next** session; replied with `status`, or `error` while a session runs (step 07) |
 | `warning` | server → client | `{"code", "message"}` (e.g. `rtf_high`) | when needed, ≤ 1 per `rtf_window_s` |
 | `error` | server → client | `{"message": "..."}` | reply to a bad client message |
 | `set_target` | client → server | `TargetSpec`: `labels[]`, `direction`, `source_id`, `attenuation_db` | validated against `LabelSet`, stored, forwarded; replied with `status` |
@@ -152,6 +154,14 @@ Step 06: `levels` / `waveform` / `spectrogram` payloads carry `source`: `"input"
 `Analyzer`) or `"output"` (the `post_side` analyzer on the chain output), so each exists twice at
 its rate. `status` carries `bypass` and `extraction` (`{method, latency_ms, gating,
 target_active}`); `latency_ms` includes the chain's algorithmic latency.
+
+Step 07: the output analyzer no longer produces `waveform` (output = `levels` + `spectrogram`).
+`status` carries `extraction_method` (the method chosen for sessions) next to
+`extraction.method` (what really runs: after a fallback they differ), and for the neural method
+`extraction` also has `device`, `model`, `model_ms`, `model_ms_p95` (time of one model call)
+and `compiled`.
+`warning` code `extraction_fallback`: neural was chosen but its model is unavailable, the
+baseline runs. `set_target` without `attenuation_db` uses `extraction.default_attenuation_db`.
 
 On connect the server sends a `status` message, then a `status` heartbeat every
 `api.ws_heartbeat_s` seconds (2 s). Unknown or malformed client messages get an `error` reply;
@@ -162,19 +172,20 @@ are produced (`set_target` answers "not implemented (step-03)").
 
 | Route | Step |
 |---|---|
-| `GET /api/health`, `GET /api/config` | 01 (implemented) |
+| `GET /api/health`, `GET /api/config` | 01 (implemented); step 07: config also returns `extraction_methods` (`[{name, display_name, available, reason}]`), `default_method` (after the fallback) and `default_attenuation_db` |
 | `GET /api/devices` | 02 (implemented): 200 with `resolved_input: null` + `error` if the profile does not resolve; 503 if PortAudio is unavailable |
 | `GET /api/recordings` | 02 (implemented): re-indexes `data/raw`, newest first |
 | `GET /api/session` | 03 (implemented): status, idle if none |
-| `POST /api/session/start` | 03 (implemented): `{mode, source: {type: mic\|file, path, loop}, monitor}`; 409 running, 400 bad mode/source (file paths must be inside the project root), 503 no audio backend |
+| `POST /api/session/start` | 03 (implemented): `{mode, source: {type: mic\|file, path, loop}, monitor, method?}`; 409 running, 400 bad mode/source (file paths must be inside the project root), 503 no audio backend. `method` (step 07) applies to this session only |
 | `POST /api/session/stop` | 03 (implemented): idempotent |
-| `PUT /api/session/target` | 03 (implemented): `TargetSpec`, 422 unknown label |
+| `PUT /api/session/target` | 03 (implemented): `TargetSpec`, 422 unknown label; `attenuation_db` optional (default 15, echoed back) |
 | `PUT /api/session/monitor` | 03 (implemented): `{enabled, gain_db ∈ [−40, 12], muted}`; 409 no output device |
 | `POST /api/session/record/start`, `/record/stop` | 03 (implemented): 409 no session / (not) recording; stop syncs the index and returns the `Recording` |
 | `GET /api/recordings/{id}`, `GET /api/recordings/{id}/audio` | 03 (implemented): `audio/wav`, 404 if missing |
 | `POST /api/recordings/{id}/detect` | 05 (implemented): offline detection timeline; 413 above `detection.offline.max_seconds`, 503 no model |
 | `PUT /api/session/bypass` | 06 (implemented): `{enabled}`; kept between sessions |
-| `POST /api/recordings/{id}/process` | 06 (implemented): `{labels (>= 1), attenuation_db?, method?}` → 202 + `RunModel` (`pending`), processed by the one-job worker; 404 file gone, 413 above `extraction.offline.max_seconds`, 422 unknown label, 503 no detection model |
+| `PUT /api/session/method` | 07 (implemented): `{method: neural_tse \| mask_baseline}`; kept between sessions; 409 while a session runs |
+| `POST /api/recordings/{id}/process` | 06 (implemented): `{labels (>= 1), attenuation_db?, method?}` → 202 + `RunModel` (`pending`), processed by the one-job worker; 404 file gone, 413 above `extraction.offline.max_seconds`, 422 unknown label, 503 the method's model is missing (neural checkpoint, or the detection model for the baseline). Step 07: `method` = `neural_tse` \| `mask_baseline`, default = the configured method if it can run, else the baseline |
 | `GET /api/recordings/{id}/runs` | 06 (implemented): runs of a recording, newest first |
 | `GET /api/runs/{run_id}`, `GET /api/runs/{run_id}/audio` | 06 (implemented): 404 unknown; audio 409 unless `done` |
 
@@ -286,6 +297,83 @@ lock, retry on a locked file), `api/services/runs.RunManager` (queue + one `soun
 `run` WS messages). Evaluation: `training/evaluate_extraction.py`, five systems (mixture,
 timeline, live, oracle, IRM), outputs in `experiments/ext_<method>/` and
 `outputs/eval/ext_<method>/`.
+
+## Neural extraction (step 07)
+
+**Model** (`extraction/models/waveformer/model.py`, adapted from Waveformer's `dcc_tf.py`, MIT):
+`Net(label_len, L=32, enc_dim=512, num_enc_layers=10, dec_dim=256, num_dec_layers=1,
+dec_buf_len=13, dec_chunk_size=13, out_buf_len=4)`, 44.1 kHz, mono in / mono out. Input conv
+(kernel `3L`, stride `L`, lookahead `L`) → 10 dilated causal depthwise-separable conv layers
+(dilation 1 … 512, state = their context) → × label embedding
+(`Linear(label_len, 512) → LN → ReLU → Linear(512, enc_dim) → LN → ReLU`) → causal transformer
+decoder over chunks of 13 latent frames (context: the previous 13) → mask × encoder output →
+transposed conv with overlap buffer → `tanh`. `Net.stream_sizes = (hop 416, context 32,
+lookahead 32)` samples; `Net.stream_step(x, label, buffers)` consumes
+`context + k·hop + lookahead` samples and returns `k·hop`; `init_buffers` gives the three state
+buffers. `extraction/neural_model.py`: `ensure_pretrained` (download, SHA-256),
+`adapt_label_layer` (41 → 7 inputs from `label_init`), `build_finetune_model`,
+`parameter_groups` (backbone / label), `save_checkpoint` / `load_checkpoint`
+(`{version, model, labels, state, extra}`, `weights_only`).
+
+**`NeuralTSEExtractor(Extractor)`** (`extraction/neural_tse.py`, 1 channel): `dry` FIFO
+(latency) ‖ `StreamingResampler` session → model rate → input FIFO → every `block_chunks`
+whole steps one `NeuralCore.step` (lock, `inference_mode`) → `StreamingResampler` back →
+estimate FIFO primed with zeros. `y = dry + w · (1 − g) · (est − dry)`, `g = 10^(−dB/20)`, `w` =
+0 … 1 fade (`ramp_ms`) between pass-through (empty labels: model not run, state reset) and
+extraction. `latency_samples = ceil((lookahead + block − 1) · sr / model_sr) + filter delay`
+(48 kHz: 487 + 22 = 509). `on_target_change`: `keep` | `reset` the model state. `start()` =
+warm-up on the audio thread; with `live.compile` it first traces the step for calls of
+`block_chunks … block_chunks + 2` steps (`NeuralCore.compile_steps`: `torch.jit.trace` +
+`freeze`, checked against the plain step, run under `torch.jit.optimized_execution(False)`;
+other step counts run untraced). `NeuralCore` is cached per `(checkpoint, mtime, device)`;
+`extract_whole` = the same maths over a whole signal without streaming (evaluation).
+`dsp/resample.StreamingResampler(source_rate, target_rate, channels, taps)`:
+`y[m] = Σ_j h[(m·down) mod up + j·up] · x[(m·down) div up − j]`, `ceil(n·up/down)` outputs after
+`n` inputs, delay `(taps − 1) / (2·down)` output samples; `taps_for_whole_delay` picks the second
+filter's length.
+
+**Method selection** (`extraction/offline.py`): `resolve_method(config, requested)` →
+`(method, warning)`: `neural_tse` without a checkpoint file → `mask_baseline` + warning;
+`build_extractor(config, activity, method=)` builds exactly that method; `engine/factory.
+build_chain(..., method=)` adds the `extraction_fallback` warning (also when the checkpoint
+cannot be loaded) and `gating_unavailable` only for the baseline. The neural extractor is
+built before the detector: `factory.detector_device` returns `"cpu"` for the detector when
+the extractor's core is on CUDA, `live.detector_on_cpu` is true and `detection.live.device`
+is `auto` (one model per GPU in a live session). `Processor.start()` /
+`ProcessorChain.start()`: called by the session worker on the audio thread before the first
+chunk. Run sidecars store `method`, `parameters` (neural: checkpoint path + modification time,
+model config, `block_chunks`) and `activity_mode` (`none` for neural).
+
+**Training data** (`data/cache.py`, `data/reverb.py`): `soundspy data cache --task extraction`
+renders every recipe once at the model rate into
+`<processed>/cache/extraction_<rate>/<split>/shard_NNN.npy` (`(n, 2, samples)` float16: mixture,
+target) + `shard_NNN.meta.npz` (`target_hot`, `present_hot`, `empty`, `reverb`, `target_start`,
+`target_end`) + `index.json` (signature, `shards_done`). Shards are written as `.part` and
+renamed; reruns render only missing shards; another signature is refused without `--force`;
+free space is checked first. `recipe_rirs(recipe_id, n_events, rate, cfg, seed)`: with
+probability `reverb.prob` a shoebox room (`sample_room`) and one unit-energy RIR per event
+(`simulate_rirs`, pyroomacoustics); `mixtures.render(..., rirs=)` convolves each event before
+summing, so `mixture == target + rest` holds and the target is reverberant.
+`ExtractionCache.pair(i)` → memory-mapped `(2, samples)` view.
+
+**Training** (`training/extraction_data.py`, `training/train_extraction.py`): crops of
+`train_crop_s` addressed by `(index, epoch)` (placed on the target's stretch with probability
+`crop_target_prob`), gain and noise augmentation, `RotatingSampler` (`epoch_recipes` crops per
+epoch, every recipe once per `train_recipes / epoch_recipes` epochs). Loss per example:
+`−(snr_weight · SNR + si_snr_weight · SI-SNR)` if the target sounds, else
+`empty_weight · max(10·log10(|est|² / |mix|²), empty_floor_db)`. AdamW (two learning rates),
+warm-up + cosine per update, AMP, gradient clipping, batch size found by measuring peak memory,
+accumulation to `effective_batch_size`. Validation on fixed whole examples, on the system output
+at the evaluation attenuation; `best.pt` by SI-SDRi; early stopping; `--resume` from `last.pt`.
+Result (`experiments/tse_waveformer_v1`): best epoch 16 of 26, val SI-SDRi +3.72 dB; test
++3.28 dB (streaming = offline), +2.92 dB on the reverberant copy.
+
+**Evaluation** (`training/evaluate_extraction.py`, `--method neural_tse`): the five step-06
+systems + `neural_offline` (`extract_whole`), `neural_stream` (the live extractor in 20 ms
+chunks) and `neural_live_db` (the stream output re-mixed to the live attenuation), on the same
+recipes; breakdowns as in step 06 plus one / several target classes; a second pass on the
+**reverberant copy** of the same recipes (rooms from `evaluation.reverb_seed`). Outputs in
+`experiments/ext_neural_tse/` and `outputs/eval/ext_neural_tse/`.
 
 ## Training data (step 04, `soundspy.data`)
 
@@ -403,7 +491,7 @@ report is given in chat; `project_insights.md` is updated every step.
 | 04 | Data: ontology, collectors (ESC-50, FSD50K, own recordings), splits, foreground/background mixtures; `record-dataset` — **done** (data on D:, recipes in JSONL, `soundspy data …`) | - |
 | 05 | Detection: features, multi-label fine-tuning of a pretrained model, chunked inference, detections over WS — **done** (EfficientAT mn10_as, `detection/`, `training/`) | 1 |
 | 06 | Extraction baseline (detector-guided masking) + SI-SDR metrics; offline processing with A/B playback — **done** (detector-gated Wiener filter, `extraction/`, run sidecars, rebuildable DB) | 1 |
-| 07 | Neural TSE (Waveformer-style, label-conditioned, streaming); live extraction in the Semantic tab | 1 |
+| 07 | Neural TSE (Waveformer fine-tuned, label-conditioned, streaming); live extraction in the Semantic tab — **done** (`extraction/neural_tse.py`, cache + reverb, method selector) | 1 |
 | 08 | End-to-end evaluation, robustness, polish, documentation for the university report | 1 |
 | module-3/4 | Simulated array (pyroomacoustics), DOA, beamforming, Spatial tab | 2 |
 | module-5 | Source tracking + detection fusion, Sources tab | 3 |

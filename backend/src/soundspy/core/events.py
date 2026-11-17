@@ -143,5 +143,9 @@ class EngineStatus(Event):
     detector: dict[str, Any] | None = None
     # step 06: the speaker gets the unprocessed (delay-matched) signal instead of the output
     bypass: bool = False
-    # {method, latency_ms, gating, target_active} of the chain's extractor, else None (step 06)
+    # {method, latency_ms, gating, target_active} of the chain's extractor, else None (step 06);
+    # the neural extractor adds {device, model, model_ms, model_ms_p95} (step 07)
     extraction: dict[str, Any] | None = None
+    # the method chosen for sessions (the next one, when idle); `extraction.method` is what the
+    # running session really uses, which differs after a fallback (step 07)
+    extraction_method: str | None = None

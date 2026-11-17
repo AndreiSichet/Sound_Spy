@@ -168,11 +168,13 @@ def test_websocket_streams_live_data(client: TestClient) -> None:
             if message["type"] in ("levels", "waveform", "spectrogram"):
                 seen.add(f"{message['type']}:{message['payload']['source']}")
             if {"status", "spectrogram:input", "spectrogram:output", "levels:output",
-                    "waveform:output", "levels:input", "waveform:input"} <= seen:
+                    "levels:input", "waveform:input"} <= seen and len(seen) > 40:
                 break
         client.post("/api/session/stop")
     assert {"status", "levels", "waveform", "spectrogram"} <= seen
-    assert {"spectrogram:input", "spectrogram:output", "levels:output", "waveform:output"} <= seen
+    assert {"spectrogram:input", "spectrogram:output", "levels:output"} <= seen
+    # step 07: the output is shown as level meters + spectrogram; its waveform is not sent
+    assert "waveform:input" in seen and "waveform:output" not in seen
 
 
 def test_bypass_over_rest_and_websocket(client: TestClient, no_leaked_threads) -> None:

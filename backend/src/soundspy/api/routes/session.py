@@ -8,6 +8,7 @@
 | PUT  | /api/session/target | the stored target; 422 unknown label |
 | PUT  | /api/session/monitor | status; gain_db in [-40, +12]; 409 no output device |
 | PUT  | /api/session/bypass | status; ``{"enabled": bool}``: hear the unprocessed signal (A/B) |
+| PUT  | /api/session/method | status; ``{"method"}``: neural_tse or mask_baseline; 409 running |
 | POST | /api/session/record/start | status; 409 no session / already recording |
 | POST | /api/session/record/stop | the new Recording; 409 not recording |
 """
@@ -20,6 +21,7 @@ from soundspy.api.deps import DbDep
 from soundspy.api.schemas import (
     BypassRequest,
     EngineStatusModel,
+    MethodRequest,
     MonitorRequest,
     RecordingModel,
     RecordStartRequest,
@@ -86,13 +88,13 @@ def stop_session(request: Request, db: DbDep) -> EngineStatusModel:
 )
 def set_target(body: TargetSpecModel, request: Request) -> TargetSpecModel:
     sessions = _sessions(request)
-    target = body.to_core()
+    target = body.to_core(sessions.config.extraction.default_attenuation_db)
     try:
         target.validate(sessions.labels)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     sessions.set_target(target)
-    return body
+    return body.model_copy(update={"attenuation_db": target.attenuation_db})
 
 
 @router.put("/monitor", response_model=EngineStatusModel, responses=ERRORS)
@@ -109,6 +111,16 @@ def set_monitor(body: MonitorRequest, request: Request) -> EngineStatusModel:
 def set_bypass(body: BypassRequest, request: Request) -> EngineStatusModel:
     sessions = _sessions(request)
     sessions.set_bypass(body.enabled)
+    return _status(sessions)
+
+
+@router.put("/method", response_model=EngineStatusModel, responses=ERRORS)
+def set_method(body: MethodRequest, request: Request) -> EngineStatusModel:
+    sessions = _sessions(request)
+    try:
+        sessions.set_method(body.method)
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _status(sessions)
 
 

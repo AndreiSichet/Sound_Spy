@@ -5,8 +5,9 @@
   ``status`` every ``engine.status_interval_s`` plus ``levels`` / ``waveform`` / ``spectrogram``
   at their analysis rates, and ``warning`` when something needs attention.
 - Client -> server: ``set_target`` (validated against the class list, then stored and forwarded
-  to the session) and ``set_bypass`` (``{"enabled": bool}``; A/B listening). Both are answered
-  with the new ``status``; malformed or unknown messages with ``error``.
+  to the session), ``set_bypass`` (``{"enabled": bool}``; A/B listening) and ``set_method``
+  (the extraction method of the next session; refused with ``error`` while one runs). They are
+  answered with the new ``status``; malformed or unknown messages with ``error``.
 - ``run`` messages (an offline processing run changed state) come from the ``RunManager``.
 
 **Slow clients.** Every connection has its own bounded queue and a sender task. When the queue
@@ -34,6 +35,7 @@ from soundspy.api.schemas import (
     CLIENT_MESSAGE_TYPES,
     DROPPABLE_TYPES,
     BypassRequest,
+    MethodRequest,
     TargetSpecModel,
     WsMessage,
     error_message,
@@ -139,7 +141,14 @@ def handle_client_message(raw: str, sessions: SessionManager) -> WsMessage:
         if msg_type == "set_bypass":
             sessions.set_bypass(BypassRequest.model_validate(message.payload).enabled)
             return status_message(sessions.status())
-        target = TargetSpecModel.model_validate(message.payload).to_core()
+        if msg_type == "set_method":
+            try:
+                sessions.set_method(MethodRequest.model_validate(message.payload).method)
+            except RuntimeError as exc:  # ConflictError: a session is running
+                return error_message(f"set_method: {exc}")
+            return status_message(sessions.status())
+        target = TargetSpecModel.model_validate(message.payload).to_core(
+            sessions.config.extraction.default_attenuation_db)
         target.validate(sessions.labels)
     except ValidationError as exc:
         return error_message(f"invalid {msg_type} message: {exc.errors()[0]['msg']}")

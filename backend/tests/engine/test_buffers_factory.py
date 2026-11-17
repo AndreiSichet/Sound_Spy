@@ -118,3 +118,29 @@ def test_named_stage_can_be_replaced(config) -> None:
         chain.replace("extractor", Analyzer(config.analysis))
     with pytest.raises(KeyError):
         chain.stage("detector")
+
+
+def test_detector_leaves_the_graphics_card_to_the_neural_extractor(config) -> None:
+    """Step 07: with the neural extractor on the GPU and ``detection.live.device: auto`` the
+    detector is built on the CPU (two models on one small card make the audio path wait)."""
+    import dataclasses
+    from types import SimpleNamespace
+
+    from soundspy.engine.factory import detector_device
+
+    on = lambda kind: SimpleNamespace(core=SimpleNamespace(device=SimpleNamespace(type=kind)))  # noqa: E731
+    assert config.detection.live.device == "auto"
+    assert config.extraction.neural_tse.live.detector_on_cpu is True
+    assert detector_device(config, on("cuda")) == "cpu"
+    assert detector_device(config, on("cpu")) is None  # nothing to share
+    assert detector_device(config, None) is None  # the baseline: no model in the audio path
+    assert detector_device(config, object()) is None
+
+    explicit = dataclasses.replace(config, detection=dataclasses.replace(
+        config.detection, live=dataclasses.replace(config.detection.live, device="cuda")))
+    assert detector_device(explicit, on("cuda")) is None  # an explicit choice is respected
+    neural = config.extraction.neural_tse
+    sharing = dataclasses.replace(config, extraction=dataclasses.replace(
+        config.extraction, neural_tse=dataclasses.replace(neural, live=dataclasses.replace(
+            neural.live, detector_on_cpu=False))))
+    assert detector_device(sharing, on("cuda")) is None

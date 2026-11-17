@@ -3,7 +3,7 @@
 WebSocket message envelope (both directions)::
 
     {"type": "status" | "levels" | "waveform" | "spectrogram" | "detections" | "sources"
-             | "run" | "warning" | "error" | "set_target" | "set_bypass",
+             | "run" | "warning" | "error" | "set_target" | "set_bypass" | "set_method",
      "t": float,          # seconds since session start (0.0 when idle)
      "payload": {...}}
 
@@ -13,7 +13,8 @@ envelope). ``levels`` / ``waveform`` / ``spectrogram`` carry ``source``: ``"inpu
 ``probabilities`` per class and the ``active`` classes, at the detector's hop rate); ``sources``
 carries ``{"items": [...]}``; ``run`` carries a ``RunModel`` whenever an offline processing run
 changes state (step 06). Client -> server: ``set_target`` with a ``TargetSpecModel`` payload,
-``set_bypass`` with ``{"enabled": bool}``.
+``set_bypass`` with ``{"enabled": bool}``, ``set_method`` with ``{"method": "neural_tse" |
+"mask_baseline"}`` (step 07; only while no session runs).
 """
 
 from __future__ import annotations
@@ -39,9 +40,10 @@ MessageType = Literal[
     "error",
     "set_target",
     "set_bypass",
+    "set_method",
 ]
 MESSAGE_TYPES: tuple[str, ...] = MessageType.__args__  # type: ignore[attr-defined]
-CLIENT_MESSAGE_TYPES: tuple[str, ...] = ("set_target", "set_bypass")
+CLIENT_MESSAGE_TYPES: tuple[str, ...] = ("set_target", "set_bypass", "set_method")
 # High-rate visual messages a slow client may lose (oldest first); everything else is kept.
 DROPPABLE_TYPES: frozenset[str] = frozenset({"levels", "waveform", "spectrogram"})
 
@@ -65,14 +67,17 @@ class TargetSpecModel(_FromCore):
     labels: list[str] = Field(default_factory=list)
     direction: DirectionModel | None = None
     source_id: str | None = None
-    attenuation_db: float = Field(default=30.0, ge=0.0)
+    # None = the configured default (extraction.default_attenuation_db, 15 dB)
+    attenuation_db: float | None = Field(default=None, ge=0.0)
 
-    def to_core(self) -> TargetSpec:
+    def to_core(self, default_attenuation_db: float = 30.0) -> TargetSpec:
+        attenuation = (default_attenuation_db if self.attenuation_db is None
+                       else self.attenuation_db)
         return TargetSpec(
             labels=frozenset(self.labels),
             direction=self.direction.to_core() if self.direction else None,
             source_id=self.source_id,
-            attenuation_db=self.attenuation_db,
+            attenuation_db=attenuation,
         )
 
 
@@ -146,6 +151,12 @@ class ExtractionStatusModel(BaseModel):
     latency_ms: float = 0.0  # its algorithmic delay (part of ``latency_ms`` of the status)
     gating: bool = False  # True when a detector tells it whether the selected sounds are present
     target_active: bool = False  # the selected sounds are currently considered present
+    # neural extractor only (step 07)
+    device: str | None = None
+    model: str | None = None
+    model_ms: float | None = None  # mean time of one model call (one per chunk)
+    model_ms_p95: float | None = None
+    compiled: bool | None = None  # the streaming step runs as a traced (TorchScript) module
 
 
 class WarningModel(_FromCore):
@@ -180,6 +191,7 @@ class EngineStatusModel(_FromCore):
     detector: DetectorStatusModel | None = None
     bypass: bool = False
     extraction: ExtractionStatusModel | None = None
+    extraction_method: str | None = None  # the method chosen for sessions
 
 
 class ErrorPayload(BaseModel):
@@ -235,10 +247,19 @@ class SourceRequest(BaseModel):
     loop: bool = True
 
 
+SessionMethod = Literal["neural_tse", "mask_baseline", "passthrough"]
+RunMethod = Literal["neural_tse", "mask_baseline"]
+
+
 class SessionStartRequest(BaseModel):
     mode: str = "semantic"
     source: SourceRequest = Field(default_factory=SourceRequest)
     monitor: bool = False
+    method: SessionMethod | None = None  # None = the chosen one (PUT /api/session/method)
+
+
+class MethodRequest(BaseModel):
+    method: SessionMethod
 
 
 class MonitorRequest(BaseModel):
@@ -260,8 +281,9 @@ class ProcessRequest(BaseModel):
     """``POST /api/recordings/{id}/process``: extract ``labels`` from the recording."""
 
     labels: list[str] = Field(min_length=1)
-    attenuation_db: float = Field(default=30.0, ge=0.0, le=60.0)
-    method: Literal["mask_baseline"] | None = None  # default: extraction.method
+    # None = extraction.default_attenuation_db
+    attenuation_db: float | None = Field(default=None, ge=0.0, le=60.0)
+    method: RunMethod | None = None  # None = the default method that can run
 
 
 # --- REST --------------------------------------------------------------------------------------
@@ -286,10 +308,22 @@ class ModeInfo(BaseModel):
     reason: str | None = None
 
 
+class MethodInfo(BaseModel):
+    """An extraction method the page can offer."""
+
+    name: str  # neural_tse | mask_baseline
+    display_name: str
+    available: bool
+    reason: str | None = None  # why not, when unavailable
+
+
 class ConfigResponse(BaseModel):
     classes: list[ClassInfo]
     modes: list[ModeInfo]
     device_profile: str
+    extraction_methods: list[MethodInfo] = Field(default_factory=list)
+    default_method: str = "mask_baseline"  # what a session uses when nothing was chosen
+    default_attenuation_db: float = 15.0
 
 
 class NotImplementedResponse(BaseModel):

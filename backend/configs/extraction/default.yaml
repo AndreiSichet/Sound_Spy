@@ -1,7 +1,14 @@
-# Extraction (step 06): which method the live chain and offline processing use, and how it is
-# evaluated. Method parameters live in their own file (mask_baseline.yaml; neural_tse.yaml: step 07).
+# Extraction: which method a new session and offline processing use by default, and how the
+# methods are evaluated. Method parameters live in their own files (neural_tse.yaml,
+# mask_baseline.yaml).
 
-method: mask_baseline            # mask_baseline | passthrough   (neural_tse arrives in step 07)
+method: neural_tse               # neural_tse | mask_baseline | passthrough
+                                 # neural_tse needs its checkpoint (neural_tse.yaml); without it
+                                 # the session falls back to mask_baseline and says so
+
+default_attenuation_db: 15       # how far non-target sound is turned down when nothing else is
+                                 # asked for: the page's slider, a session, offline runs.
+                                 # (The evaluation below uses its own value.)
 
 offline:
   max_seconds: 300               # POST /api/recordings/{id}/process refuses longer files (413)
@@ -11,7 +18,9 @@ evaluation:                      # soundspy evaluate extraction
   n: 500                         # test recipes (a fixed, seeded subset)
   seed: 1234
   sample_rate: 48000             # processing rate (the laptop microphone's native rate)
-  attenuation_db: 30             # TargetSpec.attenuation_db used for every system
+  attenuation_db: 30             # every system is compared at 30 dB (as in step 06)
   examples: 10                   # recipes rendered to outputs/eval/<experiment>/ for listening
-  live_delay_s: 0.05             # causal simulation: window end -> its result is in use
+  example_ids: [test-000036, test-000030]   # always among them (the step-06 extremes)
+  live_delay_s: 0.05             # baseline, causal simulation: window end -> its result is in use
                                  # (inference ~30 ms on the GPU + up to one 20 ms chunk)
+  reverb_seed: 4242              # rooms of the reverberant copy of the test subset

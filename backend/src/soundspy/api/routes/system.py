@@ -6,8 +6,15 @@ from fastapi import APIRouter
 
 from soundspy import __version__
 from soundspy.api.deps import ConfigDep
-from soundspy.api.schemas import ClassInfo, ConfigResponse, HealthResponse, ModeInfo
+from soundspy.api.schemas import (
+    ClassInfo,
+    ConfigResponse,
+    HealthResponse,
+    MethodInfo,
+    ModeInfo,
+)
 from soundspy.engine.modes import Mode, requires_array
+from soundspy.extraction.offline import neural_available, resolve_method
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -29,4 +36,13 @@ def app_config(config: ConfigDep) -> ConfigResponse:
         available = not requires_array(mode) or profile.has_geometry
         reason = None if available else "requires a microphone array (device profile geometry)"
         modes.append(ModeInfo(mode=mode, available=available, reason=reason))
-    return ConfigResponse(classes=classes, modes=modes, device_profile=profile.name)
+    reason = neural_available(config)
+    methods = [
+        MethodInfo(name="neural_tse", display_name="Neural", available=reason is None,
+                   reason=reason),
+        MethodInfo(name="mask_baseline", display_name="Baseline", available=True),
+    ]
+    return ConfigResponse(
+        classes=classes, modes=modes, device_profile=profile.name,
+        extraction_methods=methods, default_method=resolve_method(config)[0],
+        default_attenuation_db=config.extraction.default_attenuation_db)

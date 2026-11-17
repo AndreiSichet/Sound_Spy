@@ -1,10 +1,109 @@
-# Label-conditioned neural target sound extraction (Waveformer-style). All values are placeholders.
+# Neural target sound extraction (step 07): Waveformer (Veluri et al., ICASSP 2023; MIT),
+# fine-tuned from its public checkpoint on our mixtures. The model gets the audio and the selected
+# classes and outputs only those classes, chunk by chunk, without the detector.
 
-sample_rate: 16000        # TODO(step-07): set by the model / training data
-chunk_ms: 8               # TODO(step-07): streaming chunk length
-lookahead_ms: 0           # TODO(step-07)
-checkpoint: null          # TODO(step-07): experiments/<name>/checkpoints/<file>
+model:                           # the published "default" configuration (E512 / D256)
+  sample_rate: 44100             # the checkpoint's rate; other rates are bridged by resampling
+  L: 32                          # samples per latent step (0.73 ms)
+  enc_dim: 512
+  num_enc_layers: 10             # dilated causal convolutions (context ~1.5 s)
+  dec_dim: 256
+  num_dec_layers: 1
+  dec_buf_len: 13                # decoder context: 13 latents
+  dec_chunk_size: 13             # one streaming step = 13 latents = 416 samples = 9.4 ms
+  out_buf_len: 4
+  use_pos_enc: true
 
-model:                    # TODO(step-07): architecture hyperparameters
-  encoder_channels: 256
-  decoder_layers: 1
+pretrained:                      # downloaded once to <model_cache>/waveformer/, hash-checked
+  file: waveformer_default_ckpt.pt
+  url: https://targetsound.cs.washington.edu/files/default_ckpt.pt
+  sha256: e21e7db0f5667f6f8d7e6492500f11930ac53702248765ed428c33334c39bba6
+
+# First layer of the label network: 41 FSDKaggle2018 inputs -> our classes. A class starts from
+# the mean of the listed pretrained columns; an empty list = the mean of all 41.
+label_init:
+  speech: []                     # no speech class in FSDKaggle2018
+  music: [Acoustic_guitar, Bass_drum, Cello, Clarinet, Double_bass, Electric_piano, Flute,
+          Glockenspiel, Harmonica, Hi-hat, Oboe, Saxophone, Snare_drum, Tambourine, Trumpet,
+          Violin_or_fiddle]
+  footsteps: [Knock]             # closest: short dull impacts
+  dishes: [Keys_jangling, Chime, Shatter]   # metallic / glassy clinks
+  chair_scrape: [Squeak, Drawer_open_or_close]
+  alarm: [Telephone, Microwave_oven]        # ringing and beeps
+  traffic: [Bus]
+
+checkpoint: experiments/tse_waveformer_v1/checkpoints/best.pt   # used live and by `extract`
+
+live:
+  device: auto                   # auto | cuda | cpu
+  cpu_threads: 4                 # PyTorch threads of the audio thread when on the CPU
+  block_chunks: 1                # wait for this many model steps before running (latency +9.4 ms each)
+  on_target_change: keep         # keep | reset the model's context when the selection changes
+  ramp_ms: 20                    # fade between pass-through and extraction
+  compile: true                  # trace the streaming step with TorchScript at session start:
+                                 # identical output, ~30 % less time per call on the GPU
+                                 # (8.4 -> 6.0 ms), ~17 % on the CPU
+  detector_on_cpu: true          # when this model runs on the graphics card in a live session,
+                                 # the detector (detection.live.device: auto) runs on the CPU.
+                                 # Measured with both on the 3050 Ti: an extractor call that
+                                 # meets a 25 ms detector inference waits for it -> 5 underruns
+                                 # in 60 s; apart: none. The detector needs ~80 ms per window on
+                                 # one CPU thread, well inside its 250 ms hop.
+
+data:                            # soundspy data cache --task extraction
+  shard_size: 256                # recipes per shard file (~270 MB at 6 s, 44.1 kHz, float16)
+  seed: 7                        # reverberation: which recipes, which rooms
+  min_free_gb: 10                # keep at least this much free on the cache drive
+  reverb:
+    prob: 0.5                    # share of recipes rendered in a simulated room
+    rt60_s: [0.2, 0.8]           # reverberation time
+    room_m: [[3.0, 10.0], [3.0, 8.0], [2.4, 4.0]]   # length, width, height ranges
+    wall_margin_m: 0.5           # sources and microphone at least this far from the walls
+    max_order: 40                # image-source reflections: 40 reaches the asked RT60 (133 ms/room)
+
+training:                        # soundspy train extraction
+  name: tse_waveformer_v1
+  epochs: 32
+  train_recipes: 20000           # how many cached training recipes to use
+  epoch_recipes: 10000           # crops per epoch: epochs rotate through the recipes, so two
+                                 # epochs = one pass over all 20,000 (an epoch of 20,000 took
+                                 # ~29 min on the 3050 Ti: 30 of them would not fit 12 hours)
+  train_crop_s: 3.0              # random crop of each 6 s example (fits 4 GB)
+  crop_target_prob: 0.8          # share of crops placed where the target sounds
+  batch_size: 8                  # starting point; the largest that fits is found automatically
+  max_batch_size: 32
+  effective_batch_size: 16       # reached with gradient accumulation
+  num_workers: 2
+  loader_timeout_s: 120
+  lr_backbone: 2.5e-4
+  lr_label: 1.0e-3               # the new first layer of the label network
+  weight_decay: 1.0e-4
+  warmup_epochs: 1
+  grad_clip: 5.0
+  amp: true
+  seed: 42
+  val_examples: 500              # fixed subset of the validation cache, full 6 s
+  patience: 10                   # early stopping: epochs without a better val SI-SDRi.
+                                 # (6 stopped the first run at epoch 9 of 32, while the
+                                 # loss and SNRi still improved: at the high learning
+                                 # rates of the first third the validation mean jumps
+                                 # by +-0.5 dB from epoch to epoch)
+  time_budget_h: 12
+  loss:
+    # -(0.2 SNR + 0.8 SI-SNR) for examples with a target. SI-SNR is what the evaluation
+    # measures; the SNR share only pins the output LEVEL, which SI-SNR ignores and the
+    # attenuation slider (residual mixing) needs. The first full run used the published
+    # checkpoint's 0.9 / 0.1 and stalled at +2.6 dB validation SI-SDRi with ~12 % of the
+    # examples below -5 dB (a wrong sound extracted with full confidence costs almost nothing in
+    # SNR but 20-40 dB in SI-SNR); 0.2 / 0.8 from the same weights gained ~1 dB in 125 updates.
+    snr_weight: 0.2
+    si_snr_weight: 0.8
+    empty_weight: 0.5            # weight of the empty-target term in the batch mean
+    empty_floor_db: -40          # no reward for suppressing below this
+  augment:
+    gain_db: 6                   # same random gain on mixture and target
+    mic_noise_db: [-75, -55]     # white or pink noise added to the mixture only (dBFS)
+  smoke:
+    epochs: 1
+    train_recipes: 256
+    val_examples: 32

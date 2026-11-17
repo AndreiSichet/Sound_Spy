@@ -1,6 +1,7 @@
-// Tab 1: the live session. Session bar, listening + extraction controls, recording, the class
-// chips (live detection + target selection), the detection timeline, the live visuals (the
-// spectrogram can show input, output or both) and the recordings list with processing runs.
+// Tab 1: the live session. Session bar, listening + extraction controls (method, attenuation,
+// bypass), recording, the class chips (live detection + target selection), the detection
+// timeline, the live visuals (input and output level meters side by side; the spectrogram can
+// show input, output or both) and the recordings list with processing runs.
 import { ClassChips } from '../components/detection/ClassChips.tsx'
 import { DetectionTimeline } from '../components/detection/DetectionTimeline.tsx'
 import { ExtractionControls } from '../components/session/ExtractionControls.tsx'
@@ -39,11 +40,17 @@ export function SemanticTab() {
         </figcaption>
       </figure>
 
-      <div className="grid gap-4 md:grid-cols-[8rem_1fr]">
-        <figure className="space-y-1">
-          <LevelMeters />
-          <figcaption className="text-center text-xs text-slate-500">Input level (dBFS)</figcaption>
-        </figure>
+      <div className="grid gap-4 md:grid-cols-[12rem_1fr]">
+        <div className="grid grid-cols-[2fr_1fr] gap-2">
+          <figure className="space-y-1">
+            <LevelMeters />
+            <figcaption className="text-center text-xs text-slate-500">Input (dBFS)</figcaption>
+          </figure>
+          <figure className="space-y-1">
+            <LevelMeters source="output" />
+            <figcaption className="text-center text-xs text-slate-500">Output</figcaption>
+          </figure>
+        </div>
         <div className="space-y-3">
           <SpectrogramPanel />
           <figure className="space-y-1">

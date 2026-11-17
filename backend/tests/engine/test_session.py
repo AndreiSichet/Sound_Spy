@@ -91,8 +91,10 @@ def test_start_stop_emits_every_event_type(config, wav, no_leaked_threads) -> No
     assert status.proc_ms_mean is not None and status.chunk_ms == 20.0
     assert status.source == "file" and status.channels == 2 and status.sample_rate == SR
     # step 06: the output is observed too, and the extractor is reported
-    for kind in (SpectrogramFrame, WaveformFrame, LevelFrame):
+    for kind in (SpectrogramFrame, LevelFrame):
         assert {e.source for e in events.of(kind)} == {"input", "output"}
+    # step 07: no output waveform (the output has level meters and a spectrogram)
+    assert {e.source for e in events.of(WaveformFrame)} == {"input"}
     assert status.extraction == {"method": "mask_baseline", "latency_ms": 21.33,
                                  "gating": False, "target_active": False}
     assert status.bypass is False
@@ -125,6 +127,57 @@ def test_set_target_is_applied_by_the_worker_between_chunks(config, wav) -> None
     session.stop()
     assert probe.calls and probe.calls[0] == (worker, target)  # applied on the worker thread
     assert session.target is target
+
+
+class StartProbe(Processor):
+    """Records where and when the ``start()`` hook and the first chunk happen."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int]] = []
+
+    def start(self) -> None:
+        self.calls.append(("start", threading.get_ident()))
+
+    def process(self, chunk: AudioBuffer) -> AudioBuffer:
+        if len(self.calls) < 3:
+            self.calls.append(("process", threading.get_ident()))
+        return chunk
+
+
+def test_start_hook_runs_once_on_the_worker_before_the_first_chunk(config, wav) -> None:
+    """Step 07: a model in the audio path warms up on the audio thread (CUDA sets itself up
+    per thread), before any chunk is processed."""
+    probe = StartProbe()
+    session, _ = _session(config, wav, chain=ProcessorChain([probe]))
+    session.start()
+    deadline = time.monotonic() + 3
+    while len(probe.calls) < 3 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    worker = session._thread.ident
+    session.stop()
+    assert probe.calls[0] == ("start", worker) and worker != threading.get_ident()
+    assert [kind for kind, _ in probe.calls] == ["start", "process", "process"]
+    assert {ident for _, ident in probe.calls} == {worker}
+
+
+def test_neural_session_runs_and_reports_the_model(tiny_neural, wav, no_leaked_threads) -> None:
+    """A whole session with the (tiny) neural extractor in the audio path."""
+    session, events = _session(tiny_neural, wav)
+    session.set_target(TargetSpec(labels={"speech"}, attenuation_db=15.0))
+    session.start()
+    events.wait_for(lambda: len(events.of(LevelFrame)) > 20)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and not (session.status.extraction or {}).get("model_ms"):
+        time.sleep(0.02)
+    status = session.status
+    session.stop()
+    info = status.extraction
+    assert info["method"] == "neural_tse" and info["device"] == "cpu"
+    assert info["target_active"] is True and info["model_ms"] > 0
+    assert status.latency_ms >= status.chunk_ms + info["latency_ms"]
+    codes = [w.code for w in events.of(WarningEvent)]
+    assert "gating_unavailable" not in codes and "extraction_fallback" not in codes
+    assert {e.source for e in events.of(LevelFrame)} == {"input", "output"}
 
 
 def test_recording_writes_the_raw_input(config, wav, tmp_path) -> None:

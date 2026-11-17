@@ -11,8 +11,10 @@ Step 06, offline extraction:
 
 - ``POST /api/recordings/{id}/process`` with ``{labels, attenuation_db?, method?}`` returns the
   new run (``pending``, HTTP 202); the background worker processes it, one job at a time.
-  404 file gone, 413 longer than ``extraction.offline.max_seconds``, 422 no / unknown labels,
-  503 no detection model.
+  ``method`` is ``neural_tse`` or ``mask_baseline`` (step 07; default: the configured method,
+  or the baseline while the neural model does not exist). 404 file gone, 413 longer than
+  ``extraction.offline.max_seconds``, 422 no / unknown labels, 503 the method's model is missing
+  (the neural checkpoint, or the detection model for the baseline).
 - ``GET /api/recordings/{id}/runs``: the recording's runs, newest first.
 
 Run status and audio: ``routes/runs.py``. State changes are pushed over the WebSocket (``run``).
@@ -29,6 +31,7 @@ from soundspy.api.deps import ConfigDep, DbDep
 from soundspy.api.schemas import DetectionTimelineModel, ProcessRequest, RecordingModel, RunModel
 from soundspy.api.services.index import sync_all
 from soundspy.api.services.recordings import absolute_path
+from soundspy.extraction.offline import neural_available, run_method
 
 router = APIRouter(prefix="/api/recordings", tags=["recordings"])
 
@@ -114,15 +117,23 @@ def process_recording(recording_id: int, body: ProcessRequest, request: Request,
             status_code=413,
             detail=f"recording is {row.duration_s:.0f} s long; processing on the page is limited "
                    f"to {limit:.0f} s (use `soundspy extract`)")
-    detection = config.detection
-    if detection is None or detection.checkpoint is None or not detection.checkpoint.is_file():
-        raise HTTPException(
-            status_code=503,
-            detail="no detection model is available (detection.checkpoint): the extractor needs "
-                   "it to find the selected sounds")
+    method = run_method(config, body.method)
+    if method == "neural_tse":
+        reason = neural_available(config)
+        if reason is not None:
+            raise HTTPException(status_code=503,
+                                detail=f"neural extraction is not available: {reason}")
+    else:
+        detection = config.detection
+        if detection is None or detection.checkpoint is None or \
+                not detection.checkpoint.is_file():
+            raise HTTPException(
+                status_code=503,
+                detail="no detection model is available (detection.checkpoint): the baseline "
+                       "extractor needs it to find the selected sounds")
     try:
         return request.app.state.run_manager.submit(
-            db, row, body.labels, attenuation_db=body.attenuation_db, method=body.method)
+            db, row, body.labels, attenuation_db=body.attenuation_db, method=method)
     except ValueError as exc:  # unknown label
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

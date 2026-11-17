@@ -290,6 +290,9 @@ class Session:
 
     def _run(self) -> None:
         try:
+            # stage hooks that need this thread (a GPU model's warm-up); the source only starts
+            # queueing audio when the loop below asks for the first chunk
+            self._chain.start()
             for chunk in self._source.chunks(self._chunk_frames):
                 if self._stop.is_set():
                     break

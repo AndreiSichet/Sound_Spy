@@ -107,11 +107,21 @@ soundspy evaluate detection --split test      # fine-tuned vs zero-shot
 soundspy detect data\raw\<file>.wav          # per-class timeline of a recording
 ```
 
-### Extraction (step 06)
+### Extraction (steps 06-07)
+
+Two methods: **Neural** (`neural_tse`: a fine-tuned Waveformer, the default once it is trained)
+and **Baseline** (`mask_baseline`: the detector-gated filter of step 06). Without a trained
+neural model the app falls back to the baseline and says so.
 
 ```powershell
-soundspy extract data\raw\<file>.wav --labels speech   # keep speech, rest -30 dB -> outputs\processed
-soundspy evaluate extraction --method mask_baseline    # 5-system comparison on 500 test mixtures (~4 min)
+pip install -e ".[api,data,ml,spatial,dev]"            # spatial = pyroomacoustics (simulated rooms for training)
+soundspy data cache --task extraction --split all      # render the mixtures once to D: (~25 GB, ~18 min)
+soundspy train extraction --smoke                      # 1 short epoch, end-to-end check (~1 min)
+soundspy train extraction                              # full run (hours); --resume continues
+soundspy evaluate extraction --method neural_tse       # neural vs baseline vs oracles on 500 test mixtures
+soundspy evaluate extraction --method mask_baseline    # the step-06 comparison alone (~4 min)
+soundspy extract data\raw\<file>.wav --labels speech   # keep speech, rest -15 dB -> outputs\processed
+soundspy extract data\raw\<file>.wav --labels speech --method mask_baseline --attenuation-db 30
 soundspy db rebuild                                    # the database is only an index: rebuild it from the sidecars
 ```
 

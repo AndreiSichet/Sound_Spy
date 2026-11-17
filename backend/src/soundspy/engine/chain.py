@@ -69,6 +69,11 @@ class ProcessorChain:
     def has(self, name: str) -> bool:
         return name in self._names
 
+    def start(self) -> None:
+        """Run every stage's ``start`` hook; call it on the thread that will call ``process``."""
+        for stage in self._stages():
+            stage.start()
+
     def close(self) -> None:
         """Release every stage's resources (called once when a session ends)."""
         for stage in self._stages():

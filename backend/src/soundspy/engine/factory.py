@@ -2,11 +2,17 @@
 
 ``SEMANTIC``::
 
-    main:       ChannelReducer("mean")  ->  extractor (extraction.method: mask_baseline |
-                                            passthrough; neural_tse arrives in step 07)
+    main:       ChannelReducer("mean")  ->  extractor (neural_tse | mask_baseline | passthrough:
+                                            ``method`` argument, default extraction.method)
     side:       analyzer (input chunk, all channels; source="input")
                 detector (when a trained checkpoint is available)
-    post_side:  output analyzer (the chain's output; source="output")
+    post_side:  output analyzer (the chain's output; source="output"; levels and spectrogram,
+                no waveform: nothing shows it)
+
+**Method** (step 07). ``neural_tse`` needs its checkpoint; without it the chain is built with the
+baseline instead and carries an ``extraction_fallback`` warning. The neural extractor does not
+use the detector; the detector still runs for the chips and the timeline, on the CPU when the
+extractor uses the graphics card (see :func:`detector_device`).
 
 The detector and the extractor share one ``DetectionState``, built here and handed to both: the
 detector writes its newest decision, the extractor reads whether the selected classes are active.
@@ -33,7 +39,7 @@ from soundspy.engine.chain import ProcessorChain
 from soundspy.engine.detection_state import DetectionState
 from soundspy.engine.modes import Mode
 from soundspy.extraction.activity import LiveDetectorActivity
-from soundspy.extraction.offline import build_extractor
+from soundspy.extraction.offline import ExtractionUnavailable, build_extractor, resolve_method
 
 GATING_UNAVAILABLE = (
     "Selecting sounds cannot switch the rest off in this session: without the detection model "
@@ -45,8 +51,26 @@ class ModeUnavailableError(ValueError):
     """The requested mode cannot be built (yet)."""
 
 
+def detector_device(config: AppConfig, extractor) -> str | None:
+    """Where the live detector runs: ``None`` = as configured, ``"cpu"`` when the neural
+    extractor uses the graphics card and ``detection.live.device`` is ``auto``.
+
+    Two models taking turns on one small graphics card make the audio path wait: an extractor
+    call (every 20 ms) that meets a detector inference (25 ms, four times a second) is held
+    up until it is over. Measured on the laptop: 5 output underruns in 60 s with both on the
+    card, none with the detector on the CPU (``extraction.neural_tse.live.detector_on_cpu``).
+    An explicit ``detection.live.device: cuda`` is respected.
+    """
+    core = getattr(extractor, "core", None)
+    device = getattr(getattr(core, "device", None), "type", None)
+    if (device == "cuda" and config.extraction.neural_tse.live.detector_on_cpu
+            and config.detection is not None and config.detection.live.device == "auto"):
+        return "cpu"
+    return None
+
+
 def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
-                with_detector: bool = True) -> ProcessorChain:
+                with_detector: bool = True, method: str | None = None) -> ProcessorChain:
     try:
         mode = Mode(str(mode).lower())
     except ValueError:
@@ -59,17 +83,32 @@ def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
 
     reducer = ChannelReducer("mean")
     analyzer = Analyzer(config.analysis, source="input")
-    output_analyzer = Analyzer(config.analysis, source="output")
+    output_analyzer = Analyzer(config.analysis, source="output", waveform=False)
     side: list = [analyzer]
     names: dict = {"reducer": reducer, "analyzer": analyzer, "output_analyzer": output_analyzer}
     warnings: list[tuple[str, str]] = []
     state = DetectionState()
     activity = None
+
+    # The neural extractor is built first: where it runs decides where the detector may run.
+    method, fallback = resolve_method(config, method)
+    fallbacks = [("extraction_fallback", fallback)] if fallback is not None else []
+    extractor = None
+    if method == "neural_tse":
+        try:
+            extractor = build_extractor(config, None, method=method)
+        except ExtractionUnavailable as exc:  # e.g. the checkpoint cannot be loaded
+            fallbacks.append(("extraction_fallback",
+                              f"Neural extraction is not available: {exc} Using the baseline "
+                              "(detector-gated) method instead."))
+            method = "mask_baseline"
+
     if with_detector and config.detection is not None:
         from soundspy.detection.inference import DetectorUnavailable, build_detector
 
         try:
-            detector = build_detector(config, state=state)
+            detector = build_detector(config, state=state,
+                                      device=detector_device(config, extractor))
         except DetectorUnavailable as exc:
             warnings.append(("detector_unavailable",
                              f"Sound detection is off for this session: {exc}"))
@@ -78,9 +117,11 @@ def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
             names["detector"] = detector
             activity = LiveDetectorActivity(
                 state, lag_s=config.extraction.mask_baseline.noise_guard_s)
-    extractor = build_extractor(config, activity)
+    warnings.extend(fallbacks)
+    if extractor is None:
+        extractor = build_extractor(config, activity, method=method)
     names["extractor"] = extractor
-    if activity is None and config.extraction.method == "mask_baseline":
+    if activity is None and method == "mask_baseline":
         warnings.append(("gating_unavailable", GATING_UNAVAILABLE))
     chain = ProcessorChain([reducer, extractor], side, post_side=[output_analyzer], names=names,
                            dry_after="reducer")

@@ -235,3 +235,86 @@ def test_subset_bins_and_summary_helpers(recipe_env) -> None:
     assert summary["live"] == {"si_sdr": 1.0, "si_sdr_i": -4.0, "si_sdr_i_median": -4.0,
                                "snr_i": 3.0, "missed": 0.5, "suppression_db": -20.0}
     assert summarize([])["live"]["si_sdr_i"] is None
+
+
+# --- step 07: the neural extractor in the same evaluation ---------------------------------------
+
+
+def test_evaluate_neural_extraction_end_to_end(eval_config, neural_kit, tmp_path) -> None:
+    """The five step-06 systems + the neural extractor offline / streaming / at the live
+    attenuation, on the same recipes (tiny random model: the numbers only have to be
+    consistent, not good)."""
+    from soundspy.training.evaluate_extraction import NEURAL_SYSTEMS, systems_for
+
+    config = neural_kit.make(eval_config, tmp_path)
+    assert systems_for("neural_tse") == (*SYSTEMS, *NEURAL_SYSTEMS)
+    assert systems_for("mask_baseline") == SYSTEMS
+    logs: list[str] = []
+    result = evaluate_extraction(config, "neural_tse", "test", n=6, sample_rate=SR,
+                                 device="cpu", examples=2, reverberant=False,
+                                 progress=logs.append)
+    overall = result["overall"]
+    assert result["systems"] == [*SYSTEMS, *NEURAL_SYSTEMS]
+    assert result["extractor"]["model"] == "tse_tiny" and result["extractor"]["device"] == "cpu"
+    assert result["attenuation_db"] == 30.0 and result["live_attenuation_db"] == 15.0
+    assert "reverberant" not in result
+    # streaming (chunk by chunk, with state) gives the same result as the whole file at once
+    assert overall["neural_stream"]["si_sdr_i"] == pytest.approx(
+        overall["neural_offline"]["si_sdr_i"], abs=0.05)
+    # 15 dB of attenuation changes the mixture less than 30 dB does (random model: for the
+    # worse or the better, but by less)
+    assert abs(overall["neural_live_db"]["si_sdr_i"]) <= abs(overall["neural_stream"]
+                                                             ["si_sdr_i"]) + 0.05
+    assert overall["irm"]["si_sdr_i"] > 10.0 and overall["mixture"]["si_sdr_i"] == 0.0
+    assert result["by_target_count"] and sum(
+        g["n"] for g in result["by_target_count"].values()) == overall["n"]
+    assert any("extractor tse_tiny on cpu" in m for m in logs)
+
+    exp = config.paths["experiments"] / "ext_neural_tse"
+    table = (exp / "metrics.md").read_text("utf-8")
+    assert "neural_tse, streaming" in table or "streaming" in table
+    with (exp / "per_recipe.csv").open(encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 6 and "neural_stream_si_sdr_i" in rows[0]
+    saved = json.loads((exp / "config.json").read_text("utf-8"))
+    assert saved["neural_tse"]["model"] == "tse_tiny" and saved["method"] == "neural_tse"
+    examples = config.paths["outputs"] / "eval" / "ext_neural_tse"
+    index = json.loads((examples / "index.json").read_text("utf-8"))
+    first = index["examples"][0]
+    assert set(first["files"]) == {"target", *SYSTEMS, *NEURAL_SYSTEMS}
+    lengths = {sf.info(str(examples / name)).frames for name in first["files"].values()}
+    assert len(lengths) == 1
+    # the baseline's own experiment folder is not touched by the neural evaluation
+    assert not (config.paths["experiments"] / "ext_mask_baseline" / "metrics.json").exists()
+
+    no_model = dataclasses.replace(config, extraction=dataclasses.replace(
+        config.extraction, neural_tse=dataclasses.replace(config.extraction.neural_tse,
+                                                          checkpoint=tmp_path / "none.pt")))
+    with pytest.raises(ExtractionEvalError, match="soundspy train extraction"):
+        evaluate_extraction(no_model, "neural_tse", progress=lambda m: None)
+
+
+def test_reverberant_copy_of_the_evaluation(eval_config, neural_kit, tmp_path) -> None:
+    pytest.importorskip("pyroomacoustics")
+    config = neural_kit.make(eval_config, tmp_path)
+    neural = config.extraction.neural_tse
+    quick = dataclasses.replace(neural.data.reverb, max_order=4)  # fast rooms for the test
+    config = dataclasses.replace(config, extraction=dataclasses.replace(
+        config.extraction, neural_tse=dataclasses.replace(neural, data=dataclasses.replace(
+            neural.data, reverb=quick))))
+    result = evaluate_extraction(config, "neural_tse", "test", n=4, sample_rate=SR,
+                                 device="cpu", examples=0, progress=lambda m: None)
+    reverb = result["reverberant"]
+    assert reverb["seed"] == config.extraction.evaluation.reverb_seed
+    assert reverb["overall"]["n"] + reverb["overall"]["n_empty"] == 4
+    assert reverb["overall"]["mixture"]["si_sdr_i"] == 0.0
+    assert reverb["overall"]["irm"]["si_sdr_i"] > 8.0  # mixture is still target + rest
+    assert reverb["by_target_class"]
+    exp = config.paths["experiments"] / "ext_neural_tse"
+    with (exp / "per_recipe_reverb.csv").open(encoding="utf-8") as fh:
+        assert len(list(csv.DictReader(fh))) == 4
+    assert "everberant" in (exp / "metrics.md").read_text("utf-8")
+    # the same seed -> the same rooms -> the same numbers
+    again = evaluate_extraction(config, "neural_tse", "test", n=4, sample_rate=SR,
+                                device="cpu", examples=0, progress=lambda m: None)
+    assert again["reverberant"]["overall"] == reverb["overall"]

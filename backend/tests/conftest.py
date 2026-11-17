@@ -386,17 +386,61 @@ def configs_dir() -> Path:
 
 @pytest.fixture
 def config():
-    """The real project configuration (laptop profile), without the trained detection model.
+    """The real project configuration (laptop profile), without the trained models.
 
-    ``detection.checkpoint = None``: once ``best.pt`` exists, chains built from the real config
-    would otherwise load it (on the GPU if there is one, against rule 11). Tests that need a
-    model use ``stub_experiment``.
+    ``detection.checkpoint = None`` and ``extraction.neural_tse.checkpoint = None`` with the
+    baseline as the method: once the trained files exist, chains built from the real config
+    would otherwise load them (on the GPU if there is one, against rule 11). Tests that need a
+    model use ``stub_experiment`` (detection) or ``tiny_neural`` (extraction).
     """
     from soundspy.config import load_config
 
     config = load_config()
-    return dataclasses.replace(config, detection=dataclasses.replace(config.detection,
-                                                                     checkpoint=None))
+    extraction = dataclasses.replace(
+        config.extraction, method="mask_baseline",
+        neural_tse=dataclasses.replace(config.extraction.neural_tse, checkpoint=None))
+    return dataclasses.replace(
+        config, extraction=extraction,
+        detection=dataclasses.replace(config.detection, checkpoint=None))
+
+
+TINY_WAVEFORMER = dict(sample_rate=16_000, L=4, enc_dim=16, num_enc_layers=3, dec_dim=8,
+                       num_dec_layers=1, dec_buf_len=3, dec_chunk_size=3, out_buf_len=2,
+                       use_pos_enc=True)
+
+
+def make_tiny_neural(config, folder: Path, *, seed: int = 0, method: str = "neural_tse"):
+    """``config`` with a tiny random Waveformer (CPU, 16 kHz, 12-sample steps) as the neural
+    extractor: its checkpoint is written under ``folder`` and selected as the method."""
+    import torch
+
+    from soundspy.config import WaveformerConfig
+    from soundspy.extraction.neural_model import build_net, save_checkpoint
+
+    model = WaveformerConfig(**TINY_WAVEFORMER)
+    labels = list(config.labels)
+    torch.manual_seed(seed)
+    net = build_net(model, len(labels)).eval()
+    checkpoint = folder / "experiments" / "tse_tiny" / "checkpoints" / "best.pt"
+    save_checkpoint(checkpoint, net, model, labels, {"epoch": 1})
+    neural = config.extraction.neural_tse
+    neural = dataclasses.replace(
+        neural, model=model, checkpoint=checkpoint,
+        live=dataclasses.replace(neural.live, device="cpu", cpu_threads=1, compile=False))
+    extraction = dataclasses.replace(config.extraction, method=method, neural_tse=neural)
+    return dataclasses.replace(config, extraction=extraction)
+
+
+@pytest.fixture
+def tiny_neural(config, tmp_path: Path):
+    """The project configuration with a tiny random neural extractor (see ``make_tiny_neural``)."""
+    return make_tiny_neural(config, tmp_path)
+
+
+@pytest.fixture
+def neural_kit():
+    """Helpers for tests that need a tiny neural extractor on another config."""
+    return types.SimpleNamespace(make=make_tiny_neural, model=dict(TINY_WAVEFORMER))
 
 
 AUDIO_THREAD_NAMES = ("soundspy-session", "fake-input-stream", "fake-output-stream",

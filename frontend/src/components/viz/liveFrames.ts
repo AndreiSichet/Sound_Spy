@@ -9,9 +9,10 @@
 // buffers do not depend on the server's frame rates.
 //
 // Since step 06 every visual frame has a `source`: "input" (what the microphone heard) or
-// "output" (after extraction). Input frames fill the buffers the meters, the waveform and the
-// input spectrogram read; output frames fill their own (`spectrogramOut`, `levelsOut`,
-// `waveformOut`).
+// "output" (after extraction). Input frames fill the buffers the input meters, the waveform and
+// the input spectrogram read; output frames fill their own (`spectrogramOut`, `levelsOut` with
+// its own peak hold and clip memory). Since step 07 the output has level meters instead of a
+// waveform: the backend no longer sends output waveforms, and one that still arrives is ignored.
 import type {
   DetectionFrame,
   FrameSource,
@@ -50,7 +51,9 @@ export class LiveFrames {
   spectrogram: SpectrogramColumn[] = []
   spectrogramSeq = 0
   levelsOut: (LevelFrame & { t: number }) | null = null
-  waveformOut: TimedWaveform[] = []
+  peakHoldOut: number[] = []
+  peakHoldOutAt: number[] = []
+  clipOutAt: number[] = []
   spectrogramOut: SpectrogramColumn[] = []
   spectrogramOutSeq = 0
   detections: TimedDetection[] = []
@@ -66,7 +69,9 @@ export class LiveFrames {
     this.waveform = []
     this.spectrogram = []
     this.levelsOut = null
-    this.waveformOut = []
+    this.peakHoldOut = []
+    this.peakHoldOutAt = []
+    this.clipOutAt = []
     this.spectrogramOut = []
     this.detections = []
     this.latestT = 0
@@ -84,29 +89,40 @@ export class LiveFrames {
     this.latestT = Math.max(this.latestT, t)
   }
 
+  /** The latest level frame of one side of the chain. */
+  levelsOf(source: FrameSource): (LevelFrame & { t: number }) | null {
+    return source === 'output' ? this.levelsOut : this.levels
+  }
+
+  /** The held peaks (about 1 s) of one side of the chain, per channel. */
+  peakHoldOf(source: FrameSource): number[] {
+    return source === 'output' ? this.peakHoldOut : this.peakHold
+  }
+
   pushLevels(frame: LevelFrame, t: number, now: number = performance.now()): void {
     this.checkTime(t)
-    if (frame.source === 'output') {
-      this.levelsOut = { ...frame, t }
-      this.version += 1
-      return
-    }
-    this.levels = { ...frame, t }
+    const output = frame.source === 'output'
+    if (output) this.levelsOut = { ...frame, t }
+    else this.levels = { ...frame, t }
+    const hold = output ? this.peakHoldOut : this.peakHold
+    const holdAt = output ? this.peakHoldOutAt : this.peakHoldAt
+    const clipAt = output ? this.clipOutAt : this.clipAt
     frame.peak_dbfs.forEach((peak, ch) => {
-      const held = this.peakHold[ch]
-      const heldAt = this.peakHoldAt[ch] ?? 0
+      const held = hold[ch]
+      const heldAt = holdAt[ch] ?? 0
       if (held === undefined || peak >= held || now - heldAt > PEAK_HOLD_MS) {
-        this.peakHold[ch] = peak
-        this.peakHoldAt[ch] = now
+        hold[ch] = peak
+        holdAt[ch] = now
       }
-      if (frame.clipping[ch]) this.clipAt[ch] = now
+      if (frame.clipping[ch]) clipAt[ch] = now
     })
     this.version += 1
   }
 
   pushWaveform(frame: WaveformFrame, t: number): void {
+    if (frame.source === 'output') return // not drawn (step 07): the output has level meters
     this.checkTime(t)
-    const buffer = frame.source === 'output' ? this.waveformOut : this.waveform
+    const buffer = this.waveform
     buffer.push({ ...frame, t })
     const oldest = t - WAVEFORM_SECONDS
     while (buffer.length && (buffer[0]?.t ?? t) < oldest) buffer.shift()
@@ -136,8 +152,8 @@ export class LiveFrames {
     this.version += 1
   }
 
-  clipping(ch: number, now: number = performance.now()): boolean {
-    const at = this.clipAt[ch]
+  clipping(ch: number, now: number = performance.now(), source: FrameSource = 'input'): boolean {
+    const at = (source === 'output' ? this.clipOutAt : this.clipAt)[ch]
     return at !== undefined && now - at < CLIP_LED_MS
   }
 }

@@ -37,6 +37,8 @@ export interface AppState {
   selected: string[]
   /** How much non-target sound is turned down, in dB (TargetSpec.attenuation_db). */
   attenuation: number
+  /** The user moved the slider: the backend's default no longer replaces the value. */
+  attenuationTouched: boolean
   /** Processing runs by recording id, newest first. */
   runs: Record<number, Run[]>
   setBackend: (state: BackendState, version?: string | null) => void
@@ -67,6 +69,7 @@ export const initialAppState = {
   detection: null as (DetectionFrame & { t: number }) | null,
   selected: [] as string[],
   attenuation: DEFAULT_ATTENUATION_DB,
+  attenuationTouched: false,
   runs: {} as Record<number, Run[]>,
 }
 
@@ -78,7 +81,14 @@ export const useAppStore = create<AppState>()((set) => ({
   setBackend: (backend, version = null) => set({ backend, backendVersion: version }),
   setWsState: (ws) => set({ ws }),
   setActiveTab: (activeTab) => set({ activeTab }),
-  setConfig: (config) => set({ config }),
+  setConfig: (config) =>
+    set((state) => {
+      const db = config?.default_attenuation_db
+      // the slider starts at the backend's live default, unless the user already moved it
+      return typeof db === 'number' && !state.attenuationTouched
+        ? { config, attenuation: db }
+        : { config }
+    }),
   setStatus: (status) => set({ status }),
   setRecordings: (recordings) => set({ recordings }),
   pushToast: (kind, message) =>
@@ -91,7 +101,7 @@ export const useAppStore = create<AppState>()((set) => ({
   dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
   setDetection: (detection) => set({ detection }),
   setSelected: (selected) => set({ selected }),
-  setAttenuation: (attenuation) => set({ attenuation }),
+  setAttenuation: (attenuation) => set({ attenuation, attenuationTouched: true }),
   setRuns: (recordingId, runs) => set((state) => ({ runs: { ...state.runs, [recordingId]: runs } })),
   upsertRun: (run) =>
     set((state) => {

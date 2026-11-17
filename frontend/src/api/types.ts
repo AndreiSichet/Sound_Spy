@@ -23,10 +23,28 @@ export interface ModeInfo {
   reason: string | null
 }
 
+/** How the selected sounds are extracted (step 07). */
+export type ExtractionMethod = 'neural_tse' | 'mask_baseline'
+
+export interface MethodInfo {
+  name: ExtractionMethod
+  /** What the selector shows ("Neural", "Baseline"). */
+  display_name: string
+  available: boolean
+  /** Why not, when unavailable (e.g. the model is not trained yet). */
+  reason: string | null
+}
+
 export interface ConfigResponse {
   classes: ClassInfo[]
   modes: ModeInfo[]
   device_profile: string
+  /** Step 07. Optional so that an older backend still works. */
+  extraction_methods?: MethodInfo[]
+  /** The method a session uses unless another is chosen. */
+  default_method?: string
+  /** Where the attenuation slider starts (live default: 15 dB). */
+  default_attenuation_db?: number
 }
 
 export interface Direction {
@@ -71,8 +89,11 @@ export interface EngineStatus {
   detector?: DetectorStatus | null
   /** The speakers get the unprocessed (delay-matched) signal instead of the output (step 06). */
   bypass?: boolean
-  /** The session's extractor (step 06). */
+  /** The session's extractor (step 06): what is really running. */
   extraction?: ExtractionStatus | null
+  /** The method chosen for sessions (step 07); `extraction.method` can differ after a
+   *  fallback (no neural model -> baseline). */
+  extraction_method?: string | null
 }
 
 export interface ExtractionStatus {
@@ -82,6 +103,13 @@ export interface ExtractionStatus {
   /** A detector tells it whether the selected sounds are present. */
   gating: boolean
   target_active: boolean
+  /** Neural method only (step 07): where the model runs and how long one call takes. */
+  device?: string | null
+  model?: string | null
+  model_ms?: number | null
+  model_ms_p95?: number | null
+  /** The network's step runs as a traced (TorchScript) module. */
+  compiled?: boolean | null
 }
 
 /** Which side of the processing chain a visual frame shows. */
@@ -142,6 +170,7 @@ export interface SessionStartRequest {
   mode: Mode
   source: SourceRequest
   monitor?: boolean
+  method?: ExtractionMethod
 }
 
 export interface MonitorRequest {
@@ -173,7 +202,7 @@ export interface Recording {
 export interface ProcessRequest {
   labels: string[]
   attenuation_db?: number
-  method?: 'mask_baseline'
+  method?: ExtractionMethod
 }
 
 /** One offline processing of a recording (step 06). */
@@ -247,6 +276,7 @@ export type ServerMessage =
 export type ClientMessage =
   | Envelope<'set_target', TargetSpec>
   | Envelope<'set_bypass', { enabled: boolean }>
+  | Envelope<'set_method', { method: ExtractionMethod }>
 
 export type ServerMessageType = ServerMessage['type']
 

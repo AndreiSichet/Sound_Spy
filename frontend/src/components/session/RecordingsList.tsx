@@ -1,12 +1,15 @@
 // Saved recordings (GET /api/recordings), newest first. Each can be played in the browser,
 // analysed (Detect: the offline detection timeline, step 05) and processed (Process: offline
-// extraction of the currently selected classes, step 06). Processing runs are listed under their
-// recording with their status; a finished run gets an A/B player (original vs processed).
+// extraction of the currently selected classes, step 06) with the method chosen in "Process
+// with" (Neural or Baseline, step 07; it starts on the session's method). Processing runs are
+// listed under their recording with their status and method; a finished run gets an A/B player
+// (original vs processed), so the two methods can be compared on the same recording.
 // A recording whose file is gone is still listed (greyed, with its runs) but cannot be played.
 // The browser only ever plays SAVED files; live sound goes to the speakers from the backend.
 import { useEffect, useState } from 'react'
 import { ApiError, api, recordingAudioUrl, runAudioUrl } from '../../api/client.ts'
-import type { DetectionTimeline, Recording, Run } from '../../api/types.ts'
+import { isExtractionMethod, methodName } from '../../api/target.ts'
+import type { DetectionTimeline, ExtractionMethod, Recording, Run } from '../../api/types.ts'
 import { useAppStore } from '../../store/appStore.ts'
 import { OfflineTimeline } from '../detection/OfflineTimeline.tsx'
 import { ABPlayer } from './ABPlayer.tsx'
@@ -40,7 +43,9 @@ function RunRow({ run, recording }: { run: Run; recording: Recording }) {
         </span>
         <span className="text-slate-200">{names.join(', ')}</span>
         <span className="text-slate-400">rest −{run.attenuation_db} dB</span>
-        <span className="text-slate-500">{run.method}</span>
+        <span className="rounded bg-slate-800 px-1.5 text-slate-300" title={run.method}>
+          {methodName(run.method)}
+        </span>
         {run.processing_seconds != null && (
           <span className="text-slate-500">{run.processing_seconds.toFixed(1)} s to process</span>
         )}
@@ -76,6 +81,18 @@ export function RecordingsList() {
   const [playing, setPlaying] = useState<number | null>(null)
   const [timelines, setTimelines] = useState<Record<number, DetectionTimeline>>({})
   const [detecting, setDetecting] = useState<number | null>(null)
+  /** null = follow the session's method (the selector next to the attenuation slider). */
+  const [picked, setPicked] = useState<ExtractionMethod | null>(null)
+  const sessionMethod = useAppStore((s) => s.status?.extraction_method)
+  const methods = config?.extraction_methods ?? []
+  const available = (name: string | null | undefined) =>
+    methods.length === 0 || methods.find((m) => m.name === name)?.available === true
+  const followed = [sessionMethod, config?.default_method, 'neural_tse', 'mask_baseline'].find(
+    (name) => isExtractionMethod(name) && available(name),
+  )
+  // (a backend that lists no methods gets no `method`: it uses its own default)
+  const processMethod: ExtractionMethod | undefined =
+    picked ?? (methods.length > 0 && isExtractionMethod(followed) ? followed : undefined)
 
   const detect = async (id: number) => {
     if (timelines[id]) {
@@ -114,7 +131,11 @@ export function RecordingsList() {
 
   const process = async (id: number) => {
     try {
-      const run = await api.processRecording(id, { labels: selected, attenuation_db: attenuation })
+      const run = await api.processRecording(id, {
+        labels: selected,
+        attenuation_db: attenuation,
+        ...(processMethod ? { method: processMethod } : {}),
+      })
       if (!isRun(run)) return
       upsertRun(run)
       // state changes normally arrive as `run` messages over the WebSocket
@@ -150,7 +171,27 @@ export function RecordingsList() {
 
   return (
     <section aria-label="Recordings" className="space-y-2">
-      <h3 className="text-sm font-semibold text-slate-300">Recordings</h3>
+      <div className="flex flex-wrap items-center gap-4">
+        <h3 className="text-sm font-semibold text-slate-300">Recordings</h3>
+        {methods.length > 0 && (
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            Process with
+            <select
+              value={processMethod ?? ''}
+              onChange={(e) => setPicked(isExtractionMethod(e.target.value) ? e.target.value : null)}
+              aria-label="Processing method"
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5"
+            >
+              {methods.map((m) => (
+                <option key={m.name} value={m.name} disabled={!m.available} title={m.reason ?? ''}>
+                  {m.display_name}
+                  {m.available ? '' : ' (not available)'}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
       {recordings.length === 0 ? (
         <p className="text-sm text-slate-500">No recordings yet.</p>
       ) : (
@@ -192,7 +233,9 @@ export function RecordingsList() {
                   title={
                     selected.length === 0
                       ? 'Select one or more sounds above first'
-                      : `Keep the selected sounds, turn the rest down by ${attenuation} dB`
+                      : `Keep the selected sounds, turn the rest down by ${attenuation} dB (${methodName(
+                          processMethod,
+                        )})`
                   }
                   className="rounded border border-slate-700 px-2 py-0.5 disabled:opacity-50"
                   aria-label={`Process ${name}`}

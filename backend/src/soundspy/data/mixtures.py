@@ -36,6 +36,7 @@ from typing import Any
 
 import numpy as np
 import soundfile as sf
+from scipy.signal import fftconvolve
 
 from soundspy.config import AppConfig, MixtureConfig
 from soundspy.core.audio import AudioBuffer
@@ -412,8 +413,18 @@ def render(
     reference_rms_dbfs: float,
     peak_limit: float,
     activity_rate_hz: float = 10.0,
+    rirs: Sequence[np.ndarray] | None = None,
 ) -> RenderedMixture:
-    """Render ``recipe`` at ``sample_rate`` (mono). Same recipe -> identical samples."""
+    """Render ``recipe`` at ``sample_rate`` (mono). Same recipe -> identical samples.
+
+    ``rirs`` (step 07, optional): one room impulse response per event, in the order of
+    ``recipe.events``. Each event is convolved with its own response **before** it is added to
+    the target or the rest, so ``mixture == target + rest`` still holds and the target is the
+    reverberant target. The reverberation tail is cut at the end of the mixture.
+    """
+    if rirs is not None and len(rirs) != len(recipe.events):
+        raise RecipeError(f"{recipe.id}: {len(rirs)} impulse responses for "
+                          f"{len(recipe.events)} events")
     n = round(recipe.duration_s * sample_rate)
     target = np.zeros(n, dtype=np.float64)
     rest = np.zeros(n, dtype=np.float64)
@@ -422,7 +433,7 @@ def render(
     activity = np.zeros((n_frames, len(labels)), dtype=np.float32)
     target_set = set(recipe.target)
 
-    for event in recipe.events:
+    for number, event in enumerate(recipe.events):
         seg = library.load_segment(event.clip_id, event.clip_offset_s, event.dur_s,
                                    sample_rate).astype(np.float64)
         regions = library.regions(event.clip_id)
@@ -430,9 +441,12 @@ def render(
         if level > _EPS:
             seg *= ref / level
         seg *= 10.0 ** (event.gain_db / 20.0)
-        # TODO(module-3): spatial rendering goes here: convolve `seg` with the room impulse
-        # response from the event's source position to every microphone (pyroomacoustics)
-        # instead of adding it to a single mono channel.
+        if rirs is not None and seg.size:
+            # the event as heard in the room, from its own position (data/reverb.py)
+            seg = fftconvolve(seg, np.asarray(rirs[number], dtype=np.float64))
+        # TODO(module-3): multi-channel rendering goes here: one impulse response per
+        # microphone of the array (from the device profile's geometry) instead of one, and a
+        # (frames, channels) target/rest instead of mono.
         start = round(event.onset_s * sample_rate)
         stop = min(n, start + seg.shape[0])
         if stop <= start:
@@ -482,17 +496,18 @@ def render(
         activity_rate_hz=activity_rate_hz,
         scale=scale,
         target_gain_db=gain_db,
+        meta={"reverb": rirs is not None},
     )
 
 
 def render_with_config(
     recipe: Recipe, sample_rate: int, library: ClipLibrary, config: AppConfig,
-    *, activity_rate_hz: float = 10.0,
+    *, activity_rate_hz: float = 10.0, rirs: Sequence[np.ndarray] | None = None,
 ) -> RenderedMixture:
     mix = config.data.mixtures
     return render(recipe, sample_rate, library, config.labels,
                   reference_rms_dbfs=mix.reference_rms_dbfs, peak_limit=mix.peak_limit,
-                  activity_rate_hz=activity_rate_hz)
+                  activity_rate_hz=activity_rate_hz, rirs=rirs)
 
 
 # --------------------------------------------------------------------------------------------

@@ -1,13 +1,17 @@
 """Running an extractor over a whole signal, and building one from the configuration.
 
-* :func:`build_extractor`: the extractor named by ``extraction.method`` with a given activity
-  source (used by the live chain factory, offline processing and the evaluation).
+* :func:`resolve_method`: which method really runs: the requested one, or the baseline with a
+  reason when ``neural_tse`` is asked for but has no checkpoint (step 07).
+* :func:`build_extractor`: the extractor of a method (``neural_tse``, ``mask_baseline`` with a
+  given activity source, or ``passthrough``); used by the live chain factory, offline
+  processing and the evaluation.
 * :func:`run_offline`: feeds a buffer through an extractor block by block (the same ``process``
   the live session calls), then flushes its delay, so the result is **time-aligned** with the
   input and has the same length.
-* :func:`extract_file` / :func:`extract_buffer`: offline extraction of a recording. The detector
-  runs over the whole file first with centred windows (``centred_timeline``), then the extractor
-  uses that timeline: no detector lag, unlike live.
+* :func:`extract_file` / :func:`extract_buffer`: offline extraction of a recording. With the
+  baseline the detector runs over the whole file first with centred windows
+  (``centred_timeline``), then the extractor uses that timeline: no detector lag, unlike live.
+  The neural extractor needs no detector: the file simply goes through it block by block.
 * :func:`start_run` / :func:`execute_run`: the same as a **processing run** on disk
   (``io/runs.py``: WAV + sidecar in ``outputs/processed``), used by the CLI and the API worker.
 * :func:`irm_oracle`: the ideal ratio mask from the true target and rest, in the same STFT. No
@@ -35,17 +39,54 @@ from soundspy.extraction.mask_baseline import MaskBaselineExtractor
 from soundspy.io import runs as run_store
 from soundspy.io.storage import absolute_path, stored_path
 
-METHODS = ("mask_baseline", "passthrough")
-RUN_METHODS = ("mask_baseline",)  # what offline processing offers (passthrough would be a copy)
+METHODS = ("neural_tse", "mask_baseline", "passthrough")
+# what offline processing offers (passthrough would be a copy)
+RUN_METHODS = ("neural_tse", "mask_baseline")
 
 
 class ExtractionUnavailable(RuntimeError):
     """Offline extraction cannot run (e.g. no detection model). Message for the user."""
 
 
+def neural_available(config: AppConfig) -> str | None:
+    """``None`` if the neural extractor can be built, else the reason why not."""
+    checkpoint = config.extraction.neural_tse.checkpoint
+    if checkpoint is None:
+        return "no checkpoint is configured (extraction.neural_tse.checkpoint)"
+    if not Path(checkpoint).is_file():
+        return (f"its model file does not exist yet ({checkpoint}); train it with "
+                "`soundspy train extraction`")
+    return None
+
+
+def resolve_method(config: AppConfig, requested: str | None = None) -> tuple[str, str | None]:
+    """``(method that runs, warning or None)``.
+
+    ``requested`` (default: ``extraction.method``) is used as it is, except that ``neural_tse``
+    without a usable checkpoint falls back to ``mask_baseline``; the warning says so.
+    """
+    method = requested or config.extraction.method
+    if method not in METHODS:
+        raise ValueError(f"unknown extraction method {method!r}; methods: {list(METHODS)}")
+    if method == "neural_tse":
+        reason = neural_available(config)
+        if reason is not None:
+            return "mask_baseline", ("Neural extraction is not available: " + reason
+                                     + ". Using the baseline (detector-gated) method instead.")
+    return method, None
+
+
 def build_extractor(config: AppConfig, activity: ActivitySource | None, *,
-                    method: str | None = None) -> Processor:
+                    method: str | None = None, device: str | None = None) -> Processor:
+    """The extractor of ``method`` exactly (no fallback: see :func:`resolve_method`)."""
     method = method or config.extraction.method
+    if method == "neural_tse":
+        from soundspy.extraction.neural_tse import NeuralUnavailable, build_neural_extractor
+
+        try:
+            return build_neural_extractor(config, device=device)
+        except NeuralUnavailable as exc:
+            raise ExtractionUnavailable(str(exc)) from exc
     if method == "mask_baseline":
         return MaskBaselineExtractor(config.extraction.mask_baseline, activity)
     if method == "passthrough":
@@ -60,6 +101,7 @@ def run_offline(extractor: Processor, audio: AudioBuffer, target: TargetSpec, *,
     out_channels = extractor.configure(sr, channels)
     extractor.set_target(target)
     extractor.reset()
+    extractor.start()  # e.g. a GPU model's warm-up, on this thread
     delay = extractor.latency_samples
     padded = np.concatenate((audio.samples, np.zeros((delay, channels), dtype=np.float32)))
     parts = [extractor.process(AudioBuffer(padded[i:i + chunk_frames], sr)).samples
@@ -87,17 +129,24 @@ class OfflineResult:
 
 
 def extract_buffer(config: AppConfig, audio: AudioBuffer, labels: Collection[str], *,
-                   attenuation_db: float = 30.0, method: str | None = None,
+                   attenuation_db: float | None = None, method: str | None = None,
                    device: str | None = None) -> OfflineResult:
-    """Offline extraction of a buffer (any rate/channels): centred detection, then the extractor."""
+    """Offline extraction of a buffer (any rate/channels).
+
+    ``mask_baseline``: centred detection first, then the extractor. ``neural_tse``: the buffer
+    goes through the model block by block. ``attenuation_db`` defaults to
+    ``extraction.default_attenuation_db``.
+    """
     started = time.perf_counter()
-    method = method or config.extraction.method
+    method = method or resolve_method(config)[0]
+    if attenuation_db is None:
+        attenuation_db = config.extraction.default_attenuation_db
     target = TargetSpec(labels=frozenset(labels), attenuation_db=attenuation_db)
     target.validate(config.labels)
     activity = None
     if method == "mask_baseline" and target.labels:
         activity = _centred(config, audio, device)
-    extractor = build_extractor(config, activity, method=method)
+    extractor = build_extractor(config, activity, method=method, device=device)
     out = run_offline(extractor, mono(audio), target,
                       chunk_frames=config.extraction.offline_chunk_frames)
     info = {
@@ -110,6 +159,10 @@ def extract_buffer(config: AppConfig, audio: AudioBuffer, labels: Collection[str
     if activity is not None:
         info["target_segments"] = {lab: [[round(a, 3), round(b, 3)] for a, b in
                                          activity.segments(lab)] for lab in sorted(target.labels)}
+    status = getattr(extractor, "status_info", None)
+    if method == "neural_tse" and callable(status):
+        report = status()
+        info.update(model=report.get("model"), device=report.get("device"))
     return OfflineResult(out, activity, time.perf_counter() - started, info)
 
 
@@ -130,7 +183,7 @@ def _centred(config: AppConfig, audio: AudioBuffer, device: str | None) -> Timel
 
 
 def extract_file(config: AppConfig, path: Path, labels: Collection[str], *,
-                 attenuation_db: float = 30.0, method: str | None = None,
+                 attenuation_db: float | None = None, method: str | None = None,
                  device: str | None = None) -> OfflineResult:
     import soundfile as sf
 
@@ -164,15 +217,37 @@ def method_parameters(config: AppConfig, method: str) -> dict[str, Any]:
 
     if method == "mask_baseline":
         return dataclasses.asdict(config.extraction.mask_baseline)
+    if method == "neural_tse":
+        cfg = config.extraction.neural_tse
+        checkpoint = Path(cfg.checkpoint) if cfg.checkpoint else None
+        return {
+            "checkpoint": stored_path(checkpoint, config.project_root) if checkpoint else None,
+            "checkpoint_modified": (time.strftime(
+                "%Y-%m-%dT%H:%M:%S", time.localtime(checkpoint.stat().st_mtime))
+                if checkpoint and checkpoint.is_file() else None),
+            "model": dataclasses.asdict(cfg.model),
+            "block_chunks": cfg.live.block_chunks,
+        }
     return {}
 
 
+def run_method(config: AppConfig, requested: str | None = None) -> str:
+    """The method an offline run uses: ``requested``, or the default that can actually run."""
+    if requested is not None:
+        if requested not in RUN_METHODS:
+            raise ValueError(f"unknown method {requested!r}; methods: {list(RUN_METHODS)}")
+        return requested
+    method = resolve_method(config)[0]
+    return method if method in RUN_METHODS else "mask_baseline"
+
+
 def start_run(config: AppConfig, recording: Path, labels: Collection[str], *,
-              attenuation_db: float = 30.0, method: str | None = None) -> dict[str, Any]:
+              attenuation_db: float | None = None, method: str | None = None
+              ) -> dict[str, Any]:
     """Create a ``pending`` run for ``recording`` (validates labels and method)."""
-    method = method or config.extraction.method
-    if method not in RUN_METHODS:
-        raise ValueError(f"unknown method {method!r}; methods: {list(RUN_METHODS)}")
+    method = run_method(config, method)
+    if attenuation_db is None:
+        attenuation_db = config.extraction.default_attenuation_db
     target = TargetSpec(labels=frozenset(labels), attenuation_db=attenuation_db)
     if not target.labels:
         raise ValueError("select at least one sound class to extract")
@@ -180,7 +255,8 @@ def start_run(config: AppConfig, recording: Path, labels: Collection[str], *,
     return run_store.create_run(
         runs_dir(config), recording=stored_path(recording, config.project_root),
         labels=sorted(target.labels), attenuation_db=target.attenuation_db, method=method,
-        parameters=method_parameters(config, method), activity_mode="timeline")
+        parameters=method_parameters(config, method),
+        activity_mode="timeline" if method == "mask_baseline" else "none")
 
 
 def execute_run(config: AppConfig, run_id: str, *, device: str | None = None) -> dict[str, Any]:

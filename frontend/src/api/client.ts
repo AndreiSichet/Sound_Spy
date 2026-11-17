@@ -3,6 +3,7 @@ import type {
   ConfigResponse,
   DetectionTimeline,
   EngineStatus,
+  ExtractionMethod,
   HealthResponse,
   MonitorRequest,
   ProcessRequest,
@@ -72,6 +73,8 @@ export const api = {
   recordings: () => apiFetch<Recording[]>('/recordings'),
   detectRecording: (id: number) => send<DetectionTimeline>('POST', `/recordings/${id}/detect`),
   setBypass: (enabled: boolean) => send<EngineStatus>('PUT', '/session/bypass', { enabled }),
+  setMethod: (method: ExtractionMethod) =>
+    send<EngineStatus>('PUT', '/session/method', { method }),
   processRecording: (id: number, body: ProcessRequest) =>
     send<Run>('POST', `/recordings/${id}/process`, body),
   recordingRuns: (id: number) => apiFetch<Run[]>(`/recordings/${id}/runs`),

@@ -1,7 +1,10 @@
 // Start/Stop, source choice (microphone or a saved recording, looped), and live session figures:
-// state, input device / rate / channels, latency, real-time factor and the drop/overflow counters.
+// state, input device / rate / channels, latency, real-time factor, the drop/overflow counters,
+// the detector, and the extractor: its method, where its model runs (GPU / CPU), how long one
+// model call takes and the delay it adds (step 07).
 import { useState } from 'react'
 import { ApiError, api } from '../../api/client.ts'
+import { methodName } from '../../api/target.ts'
 import type { SourceRequest } from '../../api/types.ts'
 import { liveFrames } from '../viz/liveFrames.ts'
 import { useAppStore } from '../../store/appStore.ts'
@@ -151,12 +154,28 @@ export function SessionBar() {
           {status?.extraction && (
             <Stat
               label="Extraction"
-              value={`${status.extraction.method} · +${status.extraction.latency_ms} ms${
+              value={`${methodName(status.extraction.method)}${
+                status.extraction.device ? ` · ${status.extraction.device}` : ''
+              } · +${status.extraction.latency_ms} ms${
                 status.extraction.method === 'mask_baseline' && !status.extraction.gating
                   ? ' · no gating'
                   : ''
               }${status.bypass ? ' · bypassed' : ''}`}
               warn={status.extraction.method === 'mask_baseline' && !status.extraction.gating}
+            />
+          )}
+          {status?.extraction?.method === 'neural_tse' && (
+            <Stat
+              label="Model time"
+              value={
+                status.extraction.model_ms != null
+                  ? `${status.extraction.model_ms} ms${
+                      status.extraction.model_ms_p95 != null
+                        ? ` (p95 ${status.extraction.model_ms_p95})`
+                        : ''
+                    }`
+                  : '–'
+              }
             />
           )}
         </div>

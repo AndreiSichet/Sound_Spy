@@ -10,6 +10,9 @@ Subcommands::
     soundspy data stats                      coverage table (class x split x dataset)
     soundspy data mix [--split all] [--count N]   mixture recipes (JSONL)
     soundspy data preview [--split val] [--n 5]   render a few recipes to outputs/previews
+    soundspy data cache --task extraction [--sample-rate 44100] [--split all]
+                                             render every recipe once into arrays on D:
+                                             (training then reads them at memory speed)
 """
 
 from __future__ import annotations
@@ -62,6 +65,18 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     p.add_argument("--split", choices=("train", "val", "test"), default="val")
     p.add_argument("--n", type=int, default=5)
     p.set_defaults(handler=run_preview)
+
+    p = sub.add_parser("cache", help="pre-render the mixtures for training (resumable)")
+    p.add_argument("--task", choices=("extraction",), required=True)
+    p.add_argument("--sample-rate", type=int, default=None,
+                   help="default: the extraction model's rate (44100)")
+    p.add_argument("--split", choices=("train", "val", "test", "all"), default="all")
+    p.add_argument("--workers", type=int, default=None,
+                   help="parallel processes (default: CPU count - 2)")
+    p.add_argument("--limit", type=int, default=None, help="only the first N recipes per split")
+    p.add_argument("--force", action="store_true",
+                   help="rebuild a cache that was made with other settings")
+    p.set_defaults(handler=run_cache)
 
 
 def _config() -> AppConfig:
@@ -207,4 +222,33 @@ def run_preview(args: argparse.Namespace) -> int:
     for rid in ids:
         print(f"{rid}: {rid}_mix.wav, {rid}_target.wav, {rid}.json")
     print(f"-> {out_dir}")
+    return 0
+
+
+def run_cache(args: argparse.Namespace) -> int:
+    from soundspy.data.cache import CacheError, build_extraction_cache
+    from soundspy.data.mixtures import RecipeError
+    from soundspy.data.prepare import PrepareError
+    from soundspy.data.reverb import ReverbUnavailable
+
+    try:
+        config = _config()
+    except ConfigError as exc:
+        return _fail(str(exc))
+    splits = ("train", "val", "test") if args.split == "all" else (args.split,)
+    started = time.perf_counter()
+    total = 0
+    try:
+        for split in splits:
+            summary = build_extraction_cache(
+                config, split, sample_rate=args.sample_rate, workers=args.workers,
+                limit=args.limit, force=args.force, progress=lambda m: print(m, flush=True))
+            total += summary.bytes
+            state = (f"rendered {summary.built} shard(s) in {summary.seconds:.0f} s"
+                     if summary.built else "already complete")
+            print(f"{split}: {summary.recipes} recipes in {summary.shards} shard(s), "
+                  f"{summary.bytes / 1e9:.2f} GB, {state} -> {summary.directory}", flush=True)
+    except (CacheError, RecipeError, PrepareError, ReverbUnavailable) as exc:
+        return _fail(str(exc))
+    print(f"cache: {total / 1e9:.2f} GB in {time.perf_counter() - started:.0f} s")
     return 0

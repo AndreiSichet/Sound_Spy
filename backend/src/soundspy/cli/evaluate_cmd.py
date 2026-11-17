@@ -31,8 +31,10 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--limit", type=int, default=None, help="only the first N recipes")
-    parser.add_argument("--method", choices=("mask_baseline",), default="mask_baseline",
-                        help="extraction: the method to evaluate")
+    parser.add_argument("--method", choices=("mask_baseline", "neural_tse"),
+                        default="mask_baseline",
+                        help="extraction: mask_baseline = the five step-06 systems; neural_tse = "
+                             "those plus the neural extractor, also on a reverberant copy")
     parser.add_argument("--n", type=int, default=None,
                         help="extraction: number of recipes (default from config)")
     parser.add_argument("--sample-rate", type=int, default=None,

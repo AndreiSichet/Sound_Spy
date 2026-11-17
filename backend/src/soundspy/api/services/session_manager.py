@@ -7,8 +7,8 @@
   schedules ``_publish`` on the API's event loop with ``loop.call_soon_threadsafe``; conversion to
   a WebSocket message and fan-out to clients happen on the loop, so the audio thread never waits
   for a network send.
-- Remembers the target, the monitor settings and bypass between sessions, and stops the session
-  on app shutdown.
+- Remembers the target, the monitor settings, bypass and the chosen extraction method between
+  sessions, and stops the session on app shutdown.
 
 Routes call these methods from FastAPI's thread pool, so a lock serialises start/stop.
 """
@@ -76,6 +76,7 @@ class SessionManager:
         self.target: TargetSpec | None = None
         self.monitor = (False, config.output.default_gain_db, False)
         self.bypass = False
+        self.method: str | None = None  # None = extraction.method from the configuration
         self._lock = threading.RLock()
 
     @property
@@ -87,17 +88,23 @@ class SessionManager:
         session = self.session
         return session is not None and session.running
 
+    @property
+    def selected_method(self) -> str:
+        """The extraction method sessions are started with."""
+        return self.method or self.config.extraction.method
+
     def status(self) -> EngineStatus:
         """The running session's status, or, when idle, the stored Listen/volume settings that
         the next session will start with (so the page shows what the user chose)."""
         session = self.session
+        method = self.selected_method
         if session is not None and session.running:
-            return session.status
+            return dataclasses.replace(session.status, extraction_method=method)
         enabled, gain_db, muted = self.monitor
         if session is not None:  # a stopped/failed session: keep its figures, show the settings
             return dataclasses.replace(
                 session.status, monitoring=enabled, gain_db=gain_db, muted=muted,
-                bypass=self.bypass,
+                bypass=self.bypass, extraction_method=method,
             )
         return EngineStatus(
             t=0.0,
@@ -107,6 +114,7 @@ class SessionManager:
             gain_db=gain_db,
             muted=muted,
             bypass=self.bypass,
+            extraction_method=method,
         )
 
     # --- building ------------------------------------------------------------------------------
@@ -144,7 +152,8 @@ class SessionManager:
     def _open_session(self, request: SessionStartRequest) -> Session:
         """Build source, chain and output and start a session (one attempt)."""
         try:
-            chain = build_chain(request.mode, self.config, self.labels)
+            chain = build_chain(request.mode, self.config, self.labels,
+                                method=request.method or self.selected_method)
         except ModeUnavailableError as exc:
             raise BadRequestError(str(exc)) from exc
         source = self._build_source(request.source)
@@ -219,6 +228,15 @@ class SessionManager:
         if session is not None and session.running:
             session.set_target(target)
 
+    def set_method(self, method: str) -> EngineStatus:
+        """Choose the extraction method of the next session (not while one is running: the
+        methods have different delays, and swapping mid-stream would make the sound jump)."""
+        with self._lock:
+            if self.running:
+                raise ConflictError("stop the session to change the extraction method")
+            self.method = method
+            return self.status()
+
     def set_bypass(self, enabled: bool) -> EngineStatus:
         """A/B listening: play the unprocessed (delay-matched) signal instead of the output."""
         self.bypass = bool(enabled)
@@ -278,6 +296,8 @@ class SessionManager:
 
     def _publish(self, event: Event) -> None:
         try:
+            if isinstance(event, EngineStatus):  # the session does not know the chosen method
+                event = dataclasses.replace(event, extraction_method=self.selected_method)
             self.ws_manager.publish(event_message(event))
         except Exception:  # noqa: BLE001
             logger.exception("could not publish %s", type(event).__name__)

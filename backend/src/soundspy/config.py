@@ -278,7 +278,7 @@ class DetectionConfig:
 
 
 BACKBONES = ("efficientat_mn10_as", "stub")
-EXTRACTION_METHODS = ("mask_baseline", "passthrough")
+EXTRACTION_METHODS = ("mask_baseline", "neural_tse", "passthrough")
 
 
 @dataclass(frozen=True)
@@ -307,19 +307,128 @@ class ExtractionEvalConfig:
     sample_rate: int
     attenuation_db: float
     examples: int
+    example_ids: tuple[str, ...]  # recipes that are always among the listening examples
     live_delay_s: float
+    reverb_seed: int  # rooms of the reverberant copy of the test subset
+
+
+@dataclass(frozen=True)
+class WaveformerConfig:
+    """Architecture of the Waveformer network (``model`` in ``neural_tse.yaml``)."""
+
+    sample_rate: int
+    L: int
+    enc_dim: int
+    num_enc_layers: int
+    dec_dim: int
+    num_dec_layers: int
+    dec_buf_len: int
+    dec_chunk_size: int
+    out_buf_len: int
+    use_pos_enc: bool
+
+    def net_kwargs(self, label_len: int) -> dict[str, Any]:
+        """Keyword arguments of ``extraction.models.waveformer.Net``."""
+        return {"label_len": label_len, "L": self.L, "enc_dim": self.enc_dim,
+                "num_enc_layers": self.num_enc_layers, "dec_dim": self.dec_dim,
+                "num_dec_layers": self.num_dec_layers, "dec_buf_len": self.dec_buf_len,
+                "dec_chunk_size": self.dec_chunk_size, "out_buf_len": self.out_buf_len,
+                "use_pos_enc": self.use_pos_enc}
+
+
+@dataclass(frozen=True)
+class NeuralLiveConfig:
+    device: str  # auto | cuda | cpu
+    cpu_threads: int
+    block_chunks: int
+    on_target_change: str  # keep | reset
+    ramp_ms: float
+    compile: bool = True  # trace the streaming step with TorchScript (same output, faster)
+    detector_on_cpu: bool = True  # live: do not share the graphics card with the detector
+
+
+@dataclass(frozen=True)
+class ReverbConfig:
+    prob: float
+    rt60_s: tuple[float, float]
+    room_m: tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+    wall_margin_m: float
+    max_order: int
+
+
+@dataclass(frozen=True)
+class ExtractionCacheConfig:
+    shard_size: int
+    seed: int
+    min_free_gb: float
+    reverb: ReverbConfig
+
+
+@dataclass(frozen=True)
+class ExtractionLossConfig:
+    snr_weight: float
+    si_snr_weight: float
+    empty_weight: float
+    empty_floor_db: float
+
+
+@dataclass(frozen=True)
+class ExtractionTrainingConfig:
+    name: str
+    epochs: int
+    train_recipes: int
+    epoch_recipes: int  # crops per epoch (<= train_recipes: epochs rotate through the pool)
+    train_crop_s: float
+    crop_target_prob: float
+    batch_size: int
+    max_batch_size: int
+    effective_batch_size: int
+    num_workers: int
+    loader_timeout_s: float
+    lr_backbone: float
+    lr_label: float
+    weight_decay: float
+    warmup_epochs: float
+    grad_clip: float
+    amp: bool
+    seed: int
+    val_examples: int
+    patience: int
+    time_budget_h: float
+    loss: ExtractionLossConfig
+    gain_db: float
+    mic_noise_db: tuple[float, float] | None
+    smoke_epochs: int
+    smoke_train_recipes: int
+    smoke_val_examples: int
+
+
+@dataclass(frozen=True)
+class NeuralTSEConfig:
+    """``configs/extraction/neural_tse.yaml``: the Waveformer extractor (step 07)."""
+
+    model: WaveformerConfig
+    pretrained_file: str
+    pretrained_url: str
+    pretrained_sha256: str
+    label_init: dict[str, tuple[str, ...]]  # our class -> pretrained classes ((), = mean of all)
+    checkpoint: Path | None  # absolute (resolved against the project root)
+    live: NeuralLiveConfig
+    data: ExtractionCacheConfig
+    training: ExtractionTrainingConfig
 
 
 @dataclass(frozen=True)
 class ExtractionConfig:
     """``configs/extraction/default.yaml`` + the per-method files."""
 
-    method: str  # mask_baseline | passthrough
+    method: str  # neural_tse | mask_baseline | passthrough (what a new session uses)
+    default_attenuation_db: float  # live / UI / offline default; the evaluation has its own
     offline_max_seconds: float
     offline_chunk_frames: int
     evaluation: ExtractionEvalConfig
     mask_baseline: MaskBaselineConfig
-    neural_tse: dict[str, Any]  # placeholder until step 07 (not validated)
+    neural_tse: NeuralTSEConfig
 
 
 @dataclass(frozen=True)
@@ -676,21 +785,187 @@ def load_mask_baseline_config(path: Path) -> MaskBaselineConfig:
     )
 
 
-def load_extraction_config(directory: Path) -> ExtractionConfig:
+def _text(sec: _Section, key: str) -> str:
+    if not isinstance(sec.data[key], str) or not sec.data[key]:
+        raise sec._fail(key, "a non-empty string")
+    return str(sec.data[key])
+
+
+def _choice(sec: _Section, key: str, options: tuple[str, ...]) -> str:
+    if sec.data[key] not in options:
+        raise sec._fail(key, f"one of {list(options)}")
+    return str(sec.data[key])
+
+
+def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> NeuralTSEConfig:
+    """Load and validate ``configs/extraction/neural_tse.yaml``."""
+    path = Path(path)
+    source = f"extraction/{path.name}"
+    top = _Section({"root": load_yaml(path)}, "root",
+                   ("model", "pretrained", "label_init", "checkpoint", "live", "data",
+                    "training"), source)
+    top.name = ""
+    d = top.data
+
+    def sub(key: str, keys: tuple[str, ...]) -> _Section:
+        return _Section(d, key, keys, source)
+
+    m = sub("model", ("sample_rate", "L", "enc_dim", "num_enc_layers", "dec_dim",
+                      "num_dec_layers", "dec_buf_len", "dec_chunk_size", "out_buf_len",
+                      "use_pos_enc"))
+    model = WaveformerConfig(
+        sample_rate=m.integer("sample_rate", ge=8000),
+        L=m.integer("L", ge=1),
+        enc_dim=m.integer("enc_dim", ge=8),
+        num_enc_layers=m.integer("num_enc_layers", ge=1),
+        dec_dim=m.integer("dec_dim", ge=8),
+        num_dec_layers=m.integer("num_dec_layers", ge=1),
+        dec_buf_len=m.integer("dec_buf_len", ge=1),
+        dec_chunk_size=m.integer("dec_chunk_size", ge=1),
+        out_buf_len=m.integer("out_buf_len", ge=1),
+        use_pos_enc=m.boolean("use_pos_enc"),
+    )
+    if model.enc_dim % model.dec_dim or model.dec_dim % 8:
+        raise m._fail("dec_dim", "a multiple of 8 that divides enc_dim")
+
+    pre = sub("pretrained", ("file", "url", "sha256"))
+    sha = _text(pre, "sha256").lower()
+    if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+        raise pre._fail("sha256", "a 64-character hex SHA-256")
+
+    init = d["label_init"]
+    if not isinstance(init, dict):
+        raise ConfigError(f"{source}: 'label_init' must map our classes to pretrained classes")
+    unknown = sorted(set(init) - set(labels))
+    if unknown:
+        raise ConfigError(f"{source}: 'label_init' names unknown class(es) {unknown}; "
+                          f"classes: {list(labels)}")
+    label_init: dict[str, tuple[str, ...]] = {}
+    for name, sources in init.items():
+        if not isinstance(sources, list) or not all(isinstance(x, str) for x in sources):
+            raise ConfigError(f"{source}: 'label_init.{name}' must be a list of class names")
+        label_init[name] = tuple(sources)
+
+    checkpoint = d["checkpoint"]
+    if checkpoint is not None and (not isinstance(checkpoint, str) or not checkpoint):
+        raise top._fail("checkpoint", "a path or null")
+
+    live = sub("live", ("device", "cpu_threads", "block_chunks", "on_target_change", "ramp_ms",
+                        "compile", "detector_on_cpu"))
+    data = sub("data", ("shard_size", "seed", "min_free_gb", "reverb"))
+    rv = data.sub("reverb", ("prob", "rt60_s", "room_m", "wall_margin_m", "max_order"))
+    rooms = rv.data["room_m"]
+    ok = (isinstance(rooms, list) and len(rooms) == 3 and all(
+        isinstance(r, list) and len(r) == 2
+        and all(isinstance(v, int | float) and not isinstance(v, bool) for v in r)
+        and 0 < r[0] <= r[1] for r in rooms))
+    if not ok:
+        raise rv._fail("room_m", "three [low, high] ranges in metres (length, width, height)")
+    margin = rv.number("wall_margin_m", gt=0, le=2)
+    if any(r[0] <= 2 * margin for r in rooms):
+        raise rv._fail("room_m", f"larger than twice wall_margin_m ({margin} m) in every axis")
+
+    tr = sub("training", (
+        "name", "epochs", "train_recipes", "epoch_recipes", "train_crop_s", "crop_target_prob",
+        "batch_size",
+        "max_batch_size", "effective_batch_size", "num_workers", "loader_timeout_s",
+        "lr_backbone", "lr_label", "weight_decay", "warmup_epochs", "grad_clip", "amp", "seed",
+        "val_examples", "patience", "time_budget_h", "loss", "augment", "smoke"))
+    loss = tr.sub("loss", ("snr_weight", "si_snr_weight", "empty_weight", "empty_floor_db"))
+    aug = tr.sub("augment", ("gain_db", "mic_noise_db"))
+    smoke = tr.sub("smoke", ("epochs", "train_recipes", "val_examples"))
+    batch = tr.integer("batch_size", ge=1)
+    max_batch = tr.integer("max_batch_size", ge=1)
+    if max_batch < batch:
+        raise tr._fail("max_batch_size", f">= batch_size ({batch})")
+    loss_cfg = ExtractionLossConfig(
+        snr_weight=loss.number("snr_weight", ge=0),
+        si_snr_weight=loss.number("si_snr_weight", ge=0),
+        empty_weight=loss.number("empty_weight", ge=0),
+        empty_floor_db=loss.number("empty_floor_db", le=0),
+    )
+    if loss_cfg.snr_weight + loss_cfg.si_snr_weight <= 0:
+        raise loss._fail("si_snr_weight", "> 0 together with snr_weight")
+
+    return NeuralTSEConfig(
+        model=model,
+        pretrained_file=_text(pre, "file"),
+        pretrained_url=_text(pre, "url"),
+        pretrained_sha256=sha,
+        label_init=label_init,
+        checkpoint=resolve_path(checkpoint, project_root) if checkpoint else None,
+        live=NeuralLiveConfig(
+            device=_choice(live, "device", ("auto", "cuda", "cpu")),
+            cpu_threads=live.integer("cpu_threads", ge=1),
+            block_chunks=live.integer("block_chunks", ge=1),
+            on_target_change=_choice(live, "on_target_change", ("keep", "reset")),
+            ramp_ms=live.number("ramp_ms", ge=0, le=1000),
+            compile=live.boolean("compile"),
+            detector_on_cpu=live.boolean("detector_on_cpu"),
+        ),
+        data=ExtractionCacheConfig(
+            shard_size=data.integer("shard_size", ge=1),
+            seed=data.integer("seed", ge=0),
+            min_free_gb=data.number("min_free_gb", ge=0),
+            reverb=ReverbConfig(
+                prob=rv.number("prob", ge=0, le=1),
+                rt60_s=rv.pair("rt60_s", ge=0.05, le=3),
+                room_m=tuple((float(r[0]), float(r[1])) for r in rooms),
+                wall_margin_m=margin,
+                max_order=rv.integer("max_order", ge=0),
+            ),
+        ),
+        training=ExtractionTrainingConfig(
+            name=_text(tr, "name"),
+            epochs=tr.integer("epochs", ge=1),
+            train_recipes=tr.integer("train_recipes", ge=1),
+            epoch_recipes=tr.integer("epoch_recipes", ge=1),
+            train_crop_s=tr.number("train_crop_s", gt=0),
+            crop_target_prob=tr.number("crop_target_prob", ge=0, le=1),
+            batch_size=batch,
+            max_batch_size=max_batch,
+            effective_batch_size=tr.integer("effective_batch_size", ge=1),
+            num_workers=tr.integer("num_workers", ge=0),
+            loader_timeout_s=tr.number("loader_timeout_s", gt=0),
+            lr_backbone=tr.number("lr_backbone", gt=0),
+            lr_label=tr.number("lr_label", gt=0),
+            weight_decay=tr.number("weight_decay", ge=0),
+            warmup_epochs=tr.number("warmup_epochs", ge=0),
+            grad_clip=tr.number("grad_clip", gt=0),
+            amp=tr.boolean("amp"),
+            seed=tr.integer("seed", ge=0),
+            val_examples=tr.integer("val_examples", ge=1),
+            patience=tr.integer("patience", ge=1),
+            time_budget_h=tr.number("time_budget_h", gt=0),
+            loss=loss_cfg,
+            gain_db=aug.number("gain_db", ge=0, le=40),
+            mic_noise_db=(None if aug.data["mic_noise_db"] is None
+                          else aug.pair("mic_noise_db", ge=-140, le=0)),
+            smoke_epochs=smoke.integer("epochs", ge=1),
+            smoke_train_recipes=smoke.integer("train_recipes", ge=1),
+            smoke_val_examples=smoke.integer("val_examples", ge=1),
+        ),
+    )
+
+
+def load_extraction_config(directory: Path, project_root: Path, labels: LabelSet
+                           ) -> ExtractionConfig:
     """Load ``configs/extraction/``: ``default.yaml`` and the per-method files."""
     directory = Path(directory)
     source = "extraction/default.yaml"
     top = _Section({"root": load_yaml(directory / "default.yaml")}, "root",
-                   ("method", "offline", "evaluation"), source)
+                   ("method", "default_attenuation_db", "offline", "evaluation"), source)
     top.name = ""
-    if top.data["method"] not in EXTRACTION_METHODS:
-        raise top._fail("method", f"one of {list(EXTRACTION_METHODS)}")
     off = _Section(top.data, "offline", ("max_seconds", "chunk_frames"), source)
     ev = _Section(top.data, "evaluation", ("n", "seed", "sample_rate", "attenuation_db",
-                                           "examples", "live_delay_s"), source)
-    neural = directory / "neural_tse.yaml"
+                                           "examples", "example_ids", "live_delay_s",
+                                           "reverb_seed"), source)
+    ids = ev.data["example_ids"]
+    if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
+        raise ev._fail("example_ids", "a list of recipe ids")
     return ExtractionConfig(
-        method=str(top.data["method"]),
+        method=_choice(top, "method", EXTRACTION_METHODS),
+        default_attenuation_db=top.number("default_attenuation_db", ge=0, le=60),
         offline_max_seconds=off.number("max_seconds", gt=0),
         offline_chunk_frames=off.integer("chunk_frames", ge=1),
         evaluation=ExtractionEvalConfig(
@@ -699,10 +974,12 @@ def load_extraction_config(directory: Path) -> ExtractionConfig:
             sample_rate=ev.integer("sample_rate", ge=8000),
             attenuation_db=ev.number("attenuation_db", ge=0, le=120),
             examples=ev.integer("examples", ge=0),
+            example_ids=tuple(ids),
             live_delay_s=ev.number("live_delay_s", ge=0, le=5),
+            reverb_seed=ev.integer("reverb_seed", ge=0),
         ),
         mask_baseline=load_mask_baseline_config(directory / "mask_baseline.yaml"),
-        neural_tse=load_yaml(neural) if neural.is_file() else {},
+        neural_tse=load_neural_tse_config(directory / "neural_tse.yaml", project_root, labels),
     )
 
 
@@ -771,13 +1048,14 @@ def load_config(
 
     paths = {key: resolve_path(value, project_root) for key, value in default["paths"].items()}
     api = default.get("api", {})
+    labels = load_label_set(configs_dir / "classes.yaml")
 
     return AppConfig(
         project_root=project_root,
         configs_dir=configs_dir,
         paths=paths,
         device_profile=load_device_profile(default["active_device_profile"], configs_dir),
-        labels=load_label_set(configs_dir / "classes.yaml"),
+        labels=labels,
         capture=_capture(default),
         engine=_engine(default),
         output=_output(default),
@@ -793,5 +1071,5 @@ def load_config(
         data=load_data_config(configs_dir / "data" / "default.yaml"),
         detection=load_detection_config(configs_dir / "detection" / "default.yaml",
                                         project_root),
-        extraction=load_extraction_config(configs_dir / "extraction"),
+        extraction=load_extraction_config(configs_dir / "extraction", project_root, labels),
     )

@@ -67,11 +67,11 @@ describe('class chips', () => {
     expect(useAppStore.getState().selected).toEqual(['speech', 'dishes'])
     const last = vi.mocked(sendTarget).mock.calls.at(-1)?.[0]
     expect(last).toEqual({ labels: ['speech', 'dishes'], direction: null, source_id: null,
-      attenuation_db: 30 })
+      attenuation_db: 15 })
     fireEvent.click(screen.getByTestId('chip-speech'))
     expect(vi.mocked(sendTarget).mock.calls.at(-1)?.[0].labels).toEqual(['dishes'])
     expect(screen.getByTestId('selection-hint')).toHaveTextContent(
-      'Keeping 1 sound type(s); everything else is turned down by 30 dB.',
+      'Keeping 1 sound type(s); everything else is turned down by 15 dB.',
     )
   })
 

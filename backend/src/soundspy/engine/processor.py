@@ -50,6 +50,13 @@ class Processor(ABC):
     @abstractmethod
     def process(self, chunk: AudioBuffer) -> AudioBuffer: ...
 
+    def start(self) -> None:  # noqa: B027 - optional hook, no-op by default
+        """Called once **on the audio thread**, after ``configure`` and before the first chunk.
+
+        For work that must happen on the thread that will call ``process``: e.g. warming a GPU
+        model up (CUDA initialises per thread). The source is not delivering audio yet.
+        """
+
     def reset(self) -> None:  # noqa: B027 - optional hook, no-op by default
         """Clear internal state (e.g. filter memories, model state buffers)."""
 
@@ -73,6 +80,9 @@ class SideProcessor(ABC):
 
     @abstractmethod
     def observe(self, chunk: AudioBuffer) -> list[Event]: ...
+
+    def start(self) -> None:  # noqa: B027 - optional hook, no-op by default
+        """Called once on the audio thread before the first chunk (see ``Processor.start``)."""
 
     def reset(self) -> None:  # noqa: B027 - optional hook, no-op by default
         """Clear internal state."""

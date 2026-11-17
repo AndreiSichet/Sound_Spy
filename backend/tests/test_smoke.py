@@ -87,6 +87,9 @@ CHANNEL_INDEXING_ALLOWED = {
     "dsp/levels.py",
     "io/mic_source.py",
     "io/file_source.py",
+    # adapted third-party network (step 07): it slices (batch, time, feature) tensors, not
+    # audio channels; kept as close to the original source as possible
+    "extraction/models/waveformer/model.py",
 }
 CHANNEL_INDEXING = re.compile(r"\[\s*:\s*,|\.(mean|sum|average)\([^)]*axis\s*=\s*(1|-1)")
 

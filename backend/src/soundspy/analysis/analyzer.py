@@ -55,11 +55,13 @@ class _Schedule:
 
 
 class Analyzer(SideProcessor):
-    def __init__(self, config: AnalysisConfig, source: str = "input") -> None:
+    def __init__(self, config: AnalysisConfig, source: str = "input", *,
+                 waveform: bool = True) -> None:
         if source not in ("input", "output"):
             raise ValueError(f"source must be 'input' or 'output', got {source!r}")
         self.config = config
         self.source = source  # stamped on every event: which side of the chain it observes
+        self.waveform = waveform  # False: no WaveformFrame events (the output side, step 07)
         self._reducer = ChannelReducer("mean")
 
     def configure(self, sample_rate: int, num_channels: int) -> None:
@@ -144,12 +146,13 @@ class Analyzer(SideProcessor):
             timed.append((start + off, 0, self._level_event((start + off) / sr)))
         self._level_parts.append(chunk.samples[cut:])
 
-        cut = 0
-        for off in self._wave.due_in(start, n):
-            self._wave_parts.append(mono[cut:off])
-            cut = off
-            timed.append((start + off, 1, self._wave_event((start + off) / sr)))
-        self._wave_parts.append(mono[cut:])
+        if self.waveform:
+            cut = 0
+            for off in self._wave.due_in(start, n):
+                self._wave_parts.append(mono[cut:off])
+                cut = off
+                timed.append((start + off, 1, self._wave_event((start + off) / sr)))
+            self._wave_parts.append(mono[cut:])
 
         cut = 0
         for off in self._spec.due_in(start, n):

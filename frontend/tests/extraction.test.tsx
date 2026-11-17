@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConfigResponse, EngineStatus, Recording, Run } from '../src/api/types.ts'
+import { LevelMeters } from '../src/components/viz/LevelMeters.tsx'
 import { ClassChips } from '../src/components/detection/ClassChips.tsx'
 import { ABPlayer } from '../src/components/session/ABPlayer.tsx'
 import { ExtractionControls } from '../src/components/session/ExtractionControls.tsx'
@@ -88,7 +89,7 @@ describe('extraction controls', () => {
     const slider = screen.getByLabelText('Attenuation (dB)')
     expect(slider).toHaveAttribute('min', '0')
     expect(slider).toHaveAttribute('max', '40')
-    expect(slider).toHaveValue('30')
+    expect(slider).toHaveValue('15') // the live default (step 07)
     fireEvent.change(slider, { target: { value: '12' } })
     expect(useAppStore.getState().attenuation).toBe(12)
     expect(vi.mocked(sendTarget).mock.calls.at(-1)?.[0]).toEqual({
@@ -161,11 +162,158 @@ describe('extraction controls', () => {
   it('the session bar shows the extraction method and its latency', () => {
     render(<SessionBar />)
     const stats = screen.getByTestId('session-stats')
-    expect(stats).toHaveTextContent('mask_baseline · +21.33 ms')
+    expect(stats).toHaveTextContent('Baseline · +21.33 ms')
+    expect(stats).not.toHaveTextContent('Model time')
     expect(stats).toHaveTextContent('105.3 ms')
     expect(stats).not.toHaveTextContent('no gating')
     act(() => useAppStore.setState({ status: { ...RUNNING, bypass: true } }))
     expect(stats).toHaveTextContent('bypassed')
+  })
+})
+
+describe('extraction method (step 07)', () => {
+  const METHODS: ConfigResponse = {
+    ...CONFIG,
+    extraction_methods: [
+      { name: 'neural_tse', display_name: 'Neural', available: true, reason: null },
+      { name: 'mask_baseline', display_name: 'Baseline', available: true, reason: null },
+    ],
+    default_method: 'neural_tse',
+    default_attenuation_db: 15,
+  }
+  const IDLE: EngineStatus = {
+    state: 'idle', mode: null, device: null, sample_rate: null, channels: null, message: '',
+    extraction_method: 'neural_tse',
+  }
+
+  it('is chosen while stopped and sent to the backend', async () => {
+    const fetchMock = vi.fn(async () =>
+      json({ ...IDLE, extraction_method: 'mask_baseline' }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    useAppStore.setState({ config: METHODS, status: IDLE })
+    render(<ExtractionControls />)
+    const select = screen.getByLabelText('Extraction method')
+    expect(select).toHaveValue('neural_tse')
+    expect(select).toBeEnabled()
+    expect(screen.getByRole('option', { name: 'Neural' })).toBeInTheDocument()
+    fireEvent.change(select, { target: { value: 'mask_baseline' } })
+    await waitFor(() => expect(select).toHaveValue('mask_baseline'))
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/api/session/method')
+    expect(init.method).toBe('PUT')
+    expect(JSON.parse(String(init.body))).toEqual({ method: 'mask_baseline' })
+    expect(useAppStore.getState().status?.extraction_method).toBe('mask_baseline')
+  })
+
+  it('cannot be changed during a session', () => {
+    useAppStore.setState({ config: METHODS, status: { ...RUNNING, extraction_method: 'neural_tse' } })
+    render(<ExtractionControls />)
+    expect(screen.getByLabelText('Extraction method')).toBeDisabled()
+  })
+
+  it('greys out a method that cannot run and shows the one that will', () => {
+    const reason = 'its model file does not exist yet; train it with `soundspy train extraction`'
+    useAppStore.setState({
+      status: IDLE, // the configured choice is still "neural_tse"
+      config: {
+        ...METHODS,
+        default_method: 'mask_baseline',
+        extraction_methods: [
+          { name: 'neural_tse', display_name: 'Neural', available: false, reason },
+          { name: 'mask_baseline', display_name: 'Baseline', available: true, reason: null },
+        ],
+      },
+    })
+    render(<ExtractionControls />)
+    const option = screen.getByRole('option', { name: 'Neural (not available)' })
+    expect(option).toBeDisabled()
+    expect(option).toHaveAttribute('title', reason)
+    expect(screen.getByLabelText('Extraction method')).toHaveValue('mask_baseline')
+  })
+
+  it('shows a failed change as a toast', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ detail: 'stop the session to change the extraction method' }, 409)),
+    )
+    useAppStore.setState({ config: METHODS, status: IDLE })
+    render(<ExtractionControls />)
+    fireEvent.change(screen.getByLabelText('Extraction method'), {
+      target: { value: 'mask_baseline' },
+    })
+    await waitFor(() => expect(useAppStore.getState().toasts).toHaveLength(1))
+    expect(useAppStore.getState().toasts[0]?.message).toContain('stop the session')
+  })
+
+  it('the session bar shows the neural method, its device and the model time', () => {
+    useAppStore.setState({
+      status: {
+        ...RUNNING,
+        rtf_p95: 0.41,
+        extraction_method: 'neural_tse',
+        extraction: {
+          method: 'neural_tse', latency_ms: 10.6, gating: false, target_active: true,
+          device: 'cuda', model: 'tse_waveformer_v1', model_ms: 6.1, model_ms_p95: 7.9,
+        },
+      },
+    })
+    render(<SessionBar />)
+    const stats = screen.getByTestId('session-stats')
+    expect(stats).toHaveTextContent('Neural · cuda · +10.6 ms')
+    expect(stats).toHaveTextContent('Model time')
+    expect(stats).toHaveTextContent('6.1 ms (p95 7.9)')
+    expect(stats).toHaveTextContent('0.410')
+    expect(stats).not.toHaveTextContent('no gating') // the neural method needs no detector
+  })
+
+  it('the attenuation slider starts at the backend default until it is moved', () => {
+    expect(useAppStore.getState().attenuation).toBe(15)
+    act(() => useAppStore.getState().setConfig({ ...METHODS, default_attenuation_db: 12 }))
+    expect(useAppStore.getState().attenuation).toBe(12)
+    render(<ExtractionControls />)
+    fireEvent.change(screen.getByLabelText('Attenuation (dB)'), { target: { value: '25' } })
+    act(() => useAppStore.getState().setConfig({ ...METHODS, default_attenuation_db: 12 }))
+    expect(useAppStore.getState().attenuation).toBe(25) // a reconnect does not undo the choice
+  })
+})
+
+describe('output level meter (step 07)', () => {
+  it('keeps its own level, peak hold and clip memory', () => {
+    const frame = (peak: number, clip = false) => ({
+      rms_dbfs: [peak - 10], peak_dbfs: [peak], clipping: [clip],
+    })
+    liveFrames.pushLevels({ ...frame(-6), rms_dbfs: [-16, -18], peak_dbfs: [-6, -8],
+      clipping: [false, false] }, 1.0, 1000)
+    liveFrames.pushLevels({ ...frame(-30, true), source: 'output' }, 1.0, 1000)
+    expect(liveFrames.levelsOf('input')?.peak_dbfs).toEqual([-6, -8])
+    expect(liveFrames.levelsOf('output')?.peak_dbfs).toEqual([-30])
+    expect(liveFrames.peakHoldOf('input')).toEqual([-6, -8])
+    expect(liveFrames.peakHoldOf('output')).toEqual([-30])
+    expect(liveFrames.clipping(0, 1100, 'output')).toBe(true)
+    expect(liveFrames.clipping(0, 1100)).toBe(false) // the input did not clip
+    // a lower peak is held for about a second, then the hold follows
+    liveFrames.pushLevels({ ...frame(-40), source: 'output' }, 1.2, 1200)
+    expect(liveFrames.peakHoldOf('output')).toEqual([-30])
+    liveFrames.pushLevels({ ...frame(-40), source: 'output' }, 2.3, 2300)
+    expect(liveFrames.peakHoldOf('output')).toEqual([-40])
+    expect(liveFrames.peakHoldOf('input')).toEqual([-6, -8])
+    liveFrames.reset()
+    expect(liveFrames.peakHoldOf('output')).toEqual([])
+    expect(liveFrames.levelsOf('output')).toBeNull()
+  })
+
+  it('is drawn next to the input meters', () => {
+    render(
+      <>
+        <LevelMeters />
+        <LevelMeters source="output" />
+      </>,
+    )
+    expect(screen.getByTestId('level-meters')).toHaveAttribute('aria-label', 'Input level meters')
+    expect(screen.getByTestId('level-meters-output')).toHaveAttribute(
+      'aria-label', 'Output level meter',
+    )
   })
 })
 
@@ -188,8 +336,9 @@ describe('input / output spectrogram', () => {
     handleServerMessage({
       type: 'waveform', t: 1.2, payload: { mins: [-0.1], maxs: [0.1], source: 'output' },
     })
+    // step 07: the output is shown as a level meter; an output waveform is not kept
     expect(liveFrames.waveform).toHaveLength(0)
-    expect(liveFrames.waveformOut).toHaveLength(1)
+    expect('waveformOut' in liveFrames).toBe(false)
     liveFrames.reset()
     expect(liveFrames.spectrogramOut).toHaveLength(0)
     expect(liveFrames.levelsOut).toBeNull()
@@ -286,6 +435,88 @@ describe('A/B player', () => {
   })
 })
 
+describe('processing a recording with a chosen method (step 07)', () => {
+  const METHODS: ConfigResponse = {
+    ...CONFIG,
+    extraction_methods: [
+      { name: 'neural_tse', display_name: 'Neural', available: true, reason: null },
+      { name: 'mask_baseline', display_name: 'Baseline', available: true, reason: null },
+    ],
+    default_method: 'neural_tse',
+    default_attenuation_db: 15,
+  }
+
+  function mockApi() {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/recordings') return json([RECORDING])
+      if (url === '/api/recordings/3/runs') return json([])
+      if (url === '/api/recordings/3/process' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { method?: string }
+        const n = fetchMock.mock.calls.filter(([u]) => u === url).length
+        return json({ ...RUN, run_id: `run_${n}`, method: body.method ?? 'neural_tse' }, 202)
+      }
+      return json({}, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  function bodies(fetchMock: ReturnType<typeof mockApi>) {
+    return fetchMock.mock.calls
+      .filter(([url]) => url === '/api/recordings/3/process')
+      .map((call) => JSON.parse(String((call as unknown as [string, RequestInit])[1].body)))
+  }
+
+  it('follows the session method and can be set per run', async () => {
+    const fetchMock = mockApi()
+    useAppStore.setState({
+      ws: 'connected', config: METHODS, selected: ['speech'], attenuation: 15,
+      status: { ...RUNNING, extraction_method: 'mask_baseline' },
+    })
+    render(<RecordingsList />)
+    const button = await screen.findByRole('button', { name: 'Process speech_1.wav' })
+    const select = screen.getByLabelText('Processing method')
+    expect(select).toHaveValue('mask_baseline') // the session's method
+    expect(button).toHaveAttribute(
+      'title', 'Keep the selected sounds, turn the rest down by 15 dB (Baseline)',
+    )
+    fireEvent.click(button)
+    await waitFor(() => expect(screen.getByTestId('run-run_1')).toBeInTheDocument())
+    fireEvent.change(select, { target: { value: 'neural_tse' } })
+    fireEvent.click(button)
+    await waitFor(() => expect(screen.getByTestId('run-run_2')).toBeInTheDocument())
+    expect(bodies(fetchMock)).toEqual([
+      { labels: ['speech'], attenuation_db: 15, method: 'mask_baseline' },
+      { labels: ['speech'], attenuation_db: 15, method: 'neural_tse' },
+    ])
+    // both runs are listed with their method, ready to be compared
+    expect(screen.getByTestId('run-run_1')).toHaveTextContent('Baseline')
+    expect(screen.getByTestId('run-run_2')).toHaveTextContent('Neural')
+  })
+
+  it('skips a method that is not available', async () => {
+    const fetchMock = mockApi()
+    useAppStore.setState({
+      ws: 'connected', selected: ['speech'],
+      status: { ...RUNNING, extraction_method: 'neural_tse' },
+      config: {
+        ...METHODS,
+        default_method: 'mask_baseline',
+        extraction_methods: [
+          { name: 'neural_tse', display_name: 'Neural', available: false, reason: 'not trained' },
+          { name: 'mask_baseline', display_name: 'Baseline', available: true, reason: null },
+        ],
+      },
+    })
+    render(<RecordingsList />)
+    const button = await screen.findByRole('button', { name: 'Process speech_1.wav' })
+    expect(screen.getByLabelText('Processing method')).toHaveValue('mask_baseline')
+    fireEvent.click(button)
+    await waitFor(() => expect(bodies(fetchMock)).toHaveLength(1))
+    expect(bodies(fetchMock)[0].method).toBe('mask_baseline')
+  })
+})
+
 describe('processing a recording', () => {
   function mockApi(runs: Run[] = []) {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -316,6 +547,8 @@ describe('processing a recording', () => {
     expect(screen.getByTestId(`run-status-${RUN.run_id}`)).toHaveTextContent('waiting…')
     expect(screen.getByTestId(`run-${RUN.run_id}`)).toHaveTextContent('Speech')
     expect(screen.getByTestId(`run-${RUN.run_id}`)).toHaveTextContent('rest −24 dB')
+    expect(screen.getByTestId(`run-${RUN.run_id}`)).toHaveTextContent('Baseline')
+    expect(screen.queryByLabelText('Processing method')).toBeNull() // no methods from the backend
 
     // state changes arrive over the WebSocket: no polling
     act(() => handleServerMessage({ type: 'run', t: 0, payload: { ...RUN, status: 'running' } }))

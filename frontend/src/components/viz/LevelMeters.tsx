@@ -1,6 +1,10 @@
-// One vertical meter per input channel: RMS bar, peak tick, peak hold (~1 s), red clip LED.
+// One vertical meter per channel: RMS bar, peak tick, peak hold (~1 s), red clip LED.
 // Scale -60..+6 dBFS (the laptop mic can exceed 0 dBFS: Windows adds +7.4 dB after the converter).
+// `source="input"` shows what the microphone hears (one meter per microphone); `source="output"`
+// shows the sound after extraction (one channel), so the two can be compared at a glance: with a
+// class selected the output meter drops whenever only other sounds are present (step 07).
 import { useCallback } from 'react'
+import type { FrameSource } from '../../api/types.ts'
 import { liveFrames } from './liveFrames.ts'
 import { METER_MIN_DB, dbToFraction } from './scales.ts'
 import { useCanvasLoop } from './useCanvasLoop.ts'
@@ -13,11 +17,12 @@ function barColour(db: number): string {
   return '#34d399'
 }
 
-export function LevelMeters() {
+export function LevelMeters({ source = 'input' }: { source?: FrameSource }) {
+  const output = source === 'output'
   const draw = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number, now: number) => {
     ctx.clearRect(0, 0, w, h)
-    const levels = liveFrames.levels
-    const channels = levels?.rms_dbfs.length ?? 2
+    const levels = liveFrames.levelsOf(source)
+    const channels = levels?.rms_dbfs.length ?? (output ? 1 : 2)
     const top = 14
     const bottom = h - 18
     const scaleW = 28
@@ -50,30 +55,30 @@ export function LevelMeters() {
         ctx.fillStyle = '#e2e8f0'
         ctx.fillRect(x, y(peak), meterW, 2)
       }
-      const hold = liveFrames.peakHold[ch]
+      const hold = liveFrames.peakHoldOf(source)[ch]
       if (hold !== undefined && hold > METER_MIN_DB) {
         ctx.fillStyle = barColour(hold)
         ctx.fillRect(x, y(hold) - 1, meterW, 2)
       }
       // clip LED above the meter
-      ctx.fillStyle = liveFrames.clipping(ch, now) ? '#ef4444' : '#3f1d1d'
+      ctx.fillStyle = liveFrames.clipping(ch, now, source) ? '#ef4444' : '#3f1d1d'
       ctx.beginPath()
       ctx.arc(x + meterW / 2, 6, 4, 0, Math.PI * 2)
       ctx.fill()
       ctx.fillStyle = '#94a3b8'
       ctx.textAlign = 'center'
-      ctx.fillText(`ch${ch}`, x + meterW / 2, h - 7)
+      ctx.fillText(output ? 'out' : `ch${ch}`, x + meterW / 2, h - 7)
       ctx.textAlign = 'right'
     }
-  }, [])
+  }, [source, output])
   const ref = useCanvasLoop(draw)
   return (
     <canvas
       ref={ref}
       role="img"
-      aria-label="Input level meters"
+      aria-label={output ? 'Output level meter' : 'Input level meters'}
       className="h-48 w-full"
-      data-testid="level-meters"
+      data-testid={output ? 'level-meters-output' : 'level-meters'}
     />
   )
 }

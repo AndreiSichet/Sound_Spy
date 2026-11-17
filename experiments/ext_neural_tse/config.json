@@ -1,0 +1,72 @@
+{
+  "method": "neural_tse",
+  "systems": [
+    "mixture",
+    "timeline",
+    "live",
+    "oracle",
+    "irm",
+    "neural_offline",
+    "neural_stream",
+    "neural_live_db"
+  ],
+  "extraction": {
+    "n_fft": 1024,
+    "hop": 256,
+    "open_ms": 10.0,
+    "hold_ms": 300.0,
+    "close_ms": 200.0,
+    "noise_alpha": 0.95,
+    "noise_guard_s": 0.5,
+    "noise_max_age_s": 5.0,
+    "minstat_window_s": 1.5,
+    "minstat_smoothing": 0.85,
+    "minstat_bias": 1.6,
+    "dd_alpha": 0.98,
+    "gain_smoothing": 0.6
+  },
+  "neural_tse": {
+    "checkpoint": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\tse_waveformer_v1\\checkpoints\\best.pt",
+    "model": "tse_waveformer_v1",
+    "live": {
+      "device": "auto",
+      "cpu_threads": 4,
+      "block_chunks": 1,
+      "on_target_change": "keep",
+      "ramp_ms": 20.0
+    }
+  },
+  "evaluation": {
+    "n": 500,
+    "seed": 1234,
+    "sample_rate": 48000,
+    "attenuation_db": 30.0,
+    "examples": 10,
+    "example_ids": [
+      "test-000036",
+      "test-000030"
+    ],
+    "live_delay_s": 0.05,
+    "reverb_seed": 4242
+  },
+  "detection": {
+    "checkpoint": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\det_mn10_v1\\checkpoints\\best.pt",
+    "hop_s": 0.25,
+    "ema_alpha": 0.5,
+    "hysteresis": 0.1
+  },
+  "labels": [
+    "speech",
+    "music",
+    "footsteps",
+    "dishes",
+    "chair_scrape",
+    "alarm",
+    "traffic"
+  ],
+  "app_version": "0.1.0",
+  "git": {
+    "commit": "dd171f66ab8fdafe5ad65df63d4b3b6d0e835767",
+    "dirty": true
+  }
+}

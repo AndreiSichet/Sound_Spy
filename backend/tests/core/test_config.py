@@ -134,10 +134,18 @@ def test_module_configs_loaded(config) -> None:
     assert config.detection.backbone == "efficientat_mn10_as"
     assert config.detection.window_s == 1.0 and config.detection.input_context_s == 10.0
     ext = config.extraction
+    # the `config` fixture switches to the baseline and drops the neural checkpoint (rule 11)
     assert ext.method == "mask_baseline" and ext.offline_max_seconds == 300
     assert (ext.mask_baseline.n_fft, ext.mask_baseline.hop) == (1024, 256)
     assert ext.evaluation.n == 500 and ext.evaluation.sample_rate == 48000
-    assert "checkpoint" in ext.neural_tse  # placeholder until step 07
+    assert ext.default_attenuation_db == 15.0 and ext.evaluation.attenuation_db == 30.0
+    neural = ext.neural_tse
+    assert neural.model.sample_rate == 44100 and neural.checkpoint is None
+    assert neural.training.effective_batch_size == 16 and neural.training.time_budget_h == 12
+    assert neural.training.epoch_recipes <= neural.training.train_recipes
+    assert neural.data.reverb.prob == 0.5 and neural.data.reverb.rt60_s == (0.2, 0.8)
+    assert set(neural.label_init) == set(config.labels)  # every class is mapped (maybe to none)
+    assert len(neural.pretrained_sha256) == 64 and neural.pretrained_url.startswith("https://")
     assert len(config.labels) == 7
     assert config.api.cors_origins == ("http://localhost:5173",)
     assert (config.api.host, config.api.port) == ("127.0.0.1", 8765)
@@ -224,7 +232,13 @@ def test_cache_env_points_to_model_cache_only_if_unset(config, tmp_path, monkeyp
         ("mask_baseline.yaml", ["n_fft"], 1023, "'n_fft' must be an even number"),
         ("mask_baseline.yaml", ["dd_alpha"], 1.5, "'dd_alpha' must be <= 0.9999"),
         ("mask_baseline.yaml", ["minstat_bias"], 0.5, "'minstat_bias' must be >= 1"),
-        ("default.yaml", ["method"], "neural_tse", "'method' must be one of"),
+        ("default.yaml", ["method"], "magic", "'method' must be one of"),
+        ("default.yaml", ["default_attenuation_db"], -1, "'default_attenuation_db' must be >= 0"),
+        ("neural_tse.yaml", ["label_init", "unicorn"], [], "unicorn"),
+        ("neural_tse.yaml", ["live", "on_target_change"], "maybe", "must be one of"),
+        ("neural_tse.yaml", ["data", "reverb", "prob"], 1.5, "'data.reverb.prob' must be <= 1"),
+        ("neural_tse.yaml", ["training", "loss", "empty_floor_db"], 3, "empty_floor_db"),
+        ("neural_tse.yaml", ["model", "L"], 0, "'model.L' must be an integer >= 1"),
         ("default.yaml", ["offline", "max_seconds"], 0, "'offline.max_seconds' must be > 0"),
         ("default.yaml", ["evaluation", "n"], 0, "'evaluation.n' must be an integer >= 1"),
     ],
