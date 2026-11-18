@@ -1,0 +1,507 @@
+{
+  "examples": 320,
+  "groups": {
+    "pair_a": 40,
+    "pair_absent": 40,
+    "pair_b": 40,
+    "val": 200
+  },
+  "attenuation_db": 30.0,
+  "rows": [
+    {
+      "gate": null,
+      "live": {
+        "si_sdr_i": 4.683,
+        "worse": 25,
+        "suppression_db": -12.641,
+        "pair_absent_db": -25.629,
+        "interruption": 0.31,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.683,
+        "worse": 25,
+        "suppression_db": -12.641,
+        "pair_absent_db": -25.629,
+        "interruption": 0.31,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.575,
+        "worse": 31,
+        "suppression_db": -14.108,
+        "pair_absent_db": -34.188,
+        "interruption": 0.362,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.737,
+        "worse": 29,
+        "suppression_db": -13.991,
+        "pair_absent_db": -33.389,
+        "interruption": 0.362,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.796,
+        "worse": 30,
+        "suppression_db": -13.889,
+        "pair_absent_db": -33.295,
+        "interruption": 0.358,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.407,
+        "worse": 33,
+        "suppression_db": -17.488,
+        "pair_absent_db": -37.388,
+        "interruption": 0.373,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.634,
+        "worse": 30,
+        "suppression_db": -14.505,
+        "pair_absent_db": -36.536,
+        "interruption": 0.372,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.676,
+        "worse": 31,
+        "suppression_db": -14.124,
+        "pair_absent_db": -36.364,
+        "interruption": 0.368,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 2.718,
+        "worse": 40,
+        "suppression_db": -18.613,
+        "pair_absent_db": -39.832,
+        "interruption": 0.452,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.094,
+        "worse": 36,
+        "suppression_db": -14.898,
+        "pair_absent_db": -38.972,
+        "interruption": 0.448,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.177,
+        "worse": 36,
+        "suppression_db": -14.321,
+        "pair_absent_db": -38.749,
+        "interruption": 0.444,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.679,
+        "worse": 32,
+        "suppression_db": -13.8,
+        "pair_absent_db": -33.226,
+        "interruption": 0.362,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.823,
+        "worse": 30,
+        "suppression_db": -13.706,
+        "pair_absent_db": -32.421,
+        "interruption": 0.358,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.89,
+        "worse": 31,
+        "suppression_db": -13.587,
+        "pair_absent_db": -32.314,
+        "interruption": 0.358,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.533,
+        "worse": 32,
+        "suppression_db": -17.384,
+        "pair_absent_db": -35.992,
+        "interruption": 0.372,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.744,
+        "worse": 29,
+        "suppression_db": -14.482,
+        "pair_absent_db": -35.155,
+        "interruption": 0.372,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.642,
+        "worse": 25,
+        "suppression_db": -13.535,
+        "pair_absent_db": -44.275,
+        "interruption": 0.31,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.804,
+        "worse": 30,
+        "suppression_db": -14.031,
+        "pair_absent_db": -34.961,
+        "interruption": 0.368,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 2.907,
+        "worse": 37,
+        "suppression_db": -18.404,
+        "pair_absent_db": -38.365,
+        "interruption": 0.428,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.253,
+        "worse": 35,
+        "suppression_db": -14.833,
+        "pair_absent_db": -37.497,
+        "interruption": 0.426,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.38,
+        "worse": 36,
+        "suppression_db": -14.122,
+        "pair_absent_db": -37.263,
+        "interruption": 0.422,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.811,
+        "worse": 31,
+        "suppression_db": -13.251,
+        "pair_absent_db": -30.67,
+        "interruption": 0.346,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.949,
+        "worse": 28,
+        "suppression_db": -13.16,
+        "pair_absent_db": -29.887,
+        "interruption": 0.346,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 4.102,
+        "worse": 28,
+        "suppression_db": -12.992,
+        "pair_absent_db": -29.762,
+        "interruption": 0.346,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.626,
+        "worse": 31,
+        "suppression_db": -14.99,
+        "pair_absent_db": -32.702,
+        "interruption": 0.356,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.859,
+        "worse": 29,
+        "suppression_db": -14.017,
+        "pair_absent_db": -31.895,
+        "interruption": 0.355,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.978,
+        "worse": 30,
+        "suppression_db": -13.574,
+        "pair_absent_db": -31.706,
+        "interruption": 0.352,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.119,
+        "worse": 36,
+        "suppression_db": -15.407,
+        "pair_absent_db": -34.394,
+        "interruption": 0.404,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.482,
+        "worse": 33,
+        "suppression_db": -14.269,
+        "pair_absent_db": -33.547,
+        "interruption": 0.403,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.693,
+        "worse": 34,
+        "suppression_db": -13.576,
+        "pair_absent_db": -33.317,
+        "interruption": 0.399,
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    }
+  ],
+  "seconds": 1195.6,
+  "chosen": null,
+  "max_cost_db": 0.3
+}

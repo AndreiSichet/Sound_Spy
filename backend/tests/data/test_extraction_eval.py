@@ -234,7 +234,8 @@ def test_subset_bins_and_summary_helpers(recipe_env) -> None:
     assert (summary["n"], summary["n_empty"]) == (2, 1)
     assert summary["live"] == {"si_sdr": 1.0, "si_sdr_i": -4.0, "si_sdr_i_median": -4.0,
                                "snr_i": 3.0, "missed": 0.5, "suppression_db": -20.0,
-                               "worse": 1}  # the -10 dB recipe
+                               "worse": 1,  # the -10 dB recipe
+                               "interruption": None, "n": 2, "n_empty": 1}  # (step 07c)
     assert summarize([])["live"]["si_sdr_i"] is None
 
 

@@ -265,34 +265,32 @@ class _Fifo:
         self._data = self._data[n:]
 
 
-class NeuralTSEExtractor(Extractor):
-    method = "neural_tse"
+class WaveformerStream:
+    """The Waveformer as a stream at the session rate (step 07c, taken out of
+    ``NeuralTSEExtractor`` so the hybrid extractor can use it as one of its routes).
+
+    ``process(x, labels)`` returns as many estimate samples as it is given, ``latency`` samples
+    late: the resampling bridge, the model steps and the optional output gate of the module
+    docstring. ``labels=None`` lets the model rest (no model call, zeros out; the input side
+    keeps running, so the model's context is real input when it starts again, with a fresh
+    state).
+    """
 
     def __init__(self, core: NeuralCore, live: NeuralLiveConfig,
                  gate: NeuralGateConfig | None = None) -> None:
         self.core = core
         self.live = live
         self.gate_config = gate if gate is not None and gate.enabled else None
-        self._gate = (OutputGate(self.gate_config, core.sample_rate, core.hop)
-                      if self.gate_config is not None else None)
-        self._latency = 0
-        self._times: deque[float] = deque(maxlen=200)
+        self.gate = (OutputGate(self.gate_config, core.sample_rate, core.hop)
+                     if self.gate_config is not None else None)
+        self.latency = 0
+        self.sample_rate: int | None = None
+        self.times: deque[float] = deque(maxlen=200)
         self._model_reset = True
-        self._labels: frozenset[str] = frozenset()  # the last non-empty selection
 
-    # --- Processor -----------------------------------------------------------------------------
-
-    @property
-    def latency_samples(self) -> int:
-        return self._latency
-
-    def configure(self, sample_rate: int, num_channels: int) -> int:
-        if num_channels != 1:
-            raise ValueError(
-                f"NeuralTSEExtractor works on one channel, got {num_channels} "
-                "(put a ChannelReducer or a spatial filter before it)")
-        super().configure(sample_rate, num_channels)
+    def configure(self, sample_rate: int) -> int:
         core = self.core
+        self.sample_rate = int(sample_rate)
         self._resample = sample_rate != core.sample_rate
         self._block = core.hop * self.live.block_chunks
         wait = core.lookahead + self._block - 1  # model-rate samples a step may still be missing
@@ -310,11 +308,9 @@ class NeuralTSEExtractor(Extractor):
             self._down = self._up = None
             self._filter_delay = 0
             self._primed = wait
-        self._latency = self._primed + self._filter_delay
-        self._ramp_step = (1.0 if self.live.ramp_ms <= 0
-                           else 1000.0 / (self.live.ramp_ms * sample_rate))
+        self.latency = self._primed + self._filter_delay
         self.reset()
-        return 1
+        return self.latency
 
     def reset(self) -> None:
         if self.sample_rate is None:
@@ -324,21 +320,15 @@ class NeuralTSEExtractor(Extractor):
             self._up.reset()
         self._model_in = _Fifo(self.core.context)  # zeros before the first sample
         self._estimate = _Fifo(self._primed)
-        self._dry = _Fifo(self._latency)
-        self._mix = 1.0 if self._processing() else 0.0
         self._state = None
         self._model_reset = True
-        self._times.clear()
-        if self._gate is not None:
-            self._gate.reset()
+        self.times.clear()
+        if self.gate is not None:
+            self.gate.reset()
 
-    def set_target(self, target: TargetSpec) -> None:
-        previous = self.target
-        super().set_target(target)
-        if (previous is not None and previous.labels and target.labels
-                and previous.labels != target.labels
-                and self.live.on_target_change == "reset"):
-            self._model_reset = True
+    def request_reset(self) -> None:
+        """The model starts from a clean state at its next call."""
+        self._model_reset = True
 
     def start(self) -> None:
         """Warm the model up **on the calling thread** (the audio thread): CUDA sets up
@@ -357,6 +347,104 @@ class NeuralTSEExtractor(Extractor):
             for _ in range(3):
                 core.step(np.zeros(size, dtype=np.float32), label, core.init_state())
 
+    def process(self, x: np.ndarray, labels) -> np.ndarray:
+        """Estimate samples for ``x`` (1-D, session rate); ``labels=None``: rest."""
+        x = np.asarray(x, dtype=np.float32).reshape(-1)
+        core = self.core
+        model_x = self._down.push(x.reshape(-1, 1)).reshape(-1) if self._resample else x
+        self._model_in.push(model_x)
+        steps = (len(self._model_in) - core.context - core.lookahead) // core.hop
+        if steps >= self.live.block_chunks:
+            size = core.context + steps * core.hop + core.lookahead
+            if labels is not None:
+                if self._model_reset or self._state is None:
+                    self._state = core.init_state()
+                    self._model_reset = False
+                    if self.gate is not None:
+                        self.gate.reset()
+                started = time.perf_counter()
+                window = self._model_in.peek(size)
+                out, self._state = core.step(window, core.label_vector(labels), self._state)
+                if self.gate is not None:  # the model input of exactly these output samples
+                    out = self.gate.process(
+                        out, window[core.context:core.context + steps * core.hop])
+                self.times.append(time.perf_counter() - started)
+            else:  # resting: the model starts fresh when it is needed again
+                out = np.zeros(steps * core.hop, dtype=np.float32)
+                self._model_reset = True
+            self._model_in.drop(steps * core.hop)
+            if self._resample:
+                out = self._up.push(out.reshape(-1, 1)).reshape(-1)
+            self._estimate.push(out)
+        return self._estimate.read(x.shape[0])
+
+    def model_ms(self) -> tuple[float | None, float | None]:
+        times = list(self.times)
+        if not times:
+            return None, None
+        return (round(1000.0 * float(np.mean(times)), 2),
+                round(1000.0 * float(np.percentile(times, 95)), 2))
+
+
+class NeuralTSEExtractor(Extractor):
+    method = "neural_tse"
+
+    def __init__(self, core: NeuralCore, live: NeuralLiveConfig,
+                 gate: NeuralGateConfig | None = None) -> None:
+        self.core = core
+        self.stream = WaveformerStream(core, live, gate)
+        self.gate_config = self.stream.gate_config
+        self._latency = 0
+        self._labels: frozenset[str] = frozenset()  # the last non-empty selection
+
+    @property
+    def live(self) -> NeuralLiveConfig:
+        return self.stream.live
+
+    @live.setter
+    def live(self, value: NeuralLiveConfig) -> None:  # before configure(), e.g. in tests
+        self.stream.live = value
+
+    @property
+    def _gate(self) -> OutputGate | None:
+        return self.stream.gate
+
+    # --- Processor -----------------------------------------------------------------------------
+
+    @property
+    def latency_samples(self) -> int:
+        return self._latency
+
+    def configure(self, sample_rate: int, num_channels: int) -> int:
+        if num_channels != 1:
+            raise ValueError(
+                f"NeuralTSEExtractor works on one channel, got {num_channels} "
+                "(put a ChannelReducer or a spatial filter before it)")
+        super().configure(sample_rate, num_channels)
+        self._latency = self.stream.configure(sample_rate)
+        self._ramp_step = (1.0 if self.live.ramp_ms <= 0
+                           else 1000.0 / (self.live.ramp_ms * sample_rate))
+        self.reset()
+        return 1
+
+    def reset(self) -> None:
+        if self.sample_rate is None:
+            return
+        self.stream.reset()
+        self._dry = _Fifo(self._latency)
+        self._mix = 1.0 if self._processing() else 0.0
+
+    def set_target(self, target: TargetSpec) -> None:
+        previous = self.target
+        super().set_target(target)
+        if (previous is not None and previous.labels and target.labels
+                and previous.labels != target.labels
+                and self.live.on_target_change == "reset"):
+            self.stream.request_reset()
+
+    def start(self) -> None:
+        self.stream.start()
+
     def _processing(self) -> bool:
         return self.target is not None and bool(self.target.labels)
 
@@ -367,43 +455,14 @@ class NeuralTSEExtractor(Extractor):
             raise ValueError(f"expected 1 channel, got {chunk.num_channels}")
         x = chunk.samples.reshape(-1)
         n = x.shape[0]
-        core = self.core
         processing = self._processing()
         running = processing or self._mix > 0.0  # the model also runs while fading out
-
+        if processing:
+            self._labels = self.target.labels
+        # while fading out after a deselection, keep extracting the last selection
         self._dry.push(x)
-        model_x = self._down.push(chunk.samples).reshape(-1) if self._resample else x
-        self._model_in.push(model_x)
-        steps = (len(self._model_in) - core.context - core.lookahead) // core.hop
-        if steps >= self.live.block_chunks:
-            size = core.context + steps * core.hop + core.lookahead
-            if running:
-                if self._model_reset or self._state is None:
-                    self._state = core.init_state()
-                    self._model_reset = False
-                    if self._gate is not None:
-                        self._gate.reset()
-                if processing:
-                    self._labels = self.target.labels
-                # while fading out after a deselection, keep extracting the last selection
-                started = time.perf_counter()
-                window = self._model_in.peek(size)
-                out, self._state = core.step(window, core.label_vector(self._labels),
-                                             self._state)
-                if self._gate is not None:  # the model input of exactly these output samples
-                    out = self._gate.process(
-                        out, window[core.context:core.context + steps * core.hop])
-                self._times.append(time.perf_counter() - started)
-            else:  # pass-through: the model rests and starts fresh when it is needed again
-                out = np.zeros(steps * core.hop, dtype=np.float32)
-                self._model_reset = True
-            self._model_in.drop(steps * core.hop)
-            if self._resample:
-                out = self._up.push(out.reshape(-1, 1)).reshape(-1)
-            self._estimate.push(out)
-
+        estimate = self.stream.process(x, self._labels if running else None)
         dry = self._dry.read(n)
-        estimate = self._estimate.read(n)
         target_mix = 1.0 if processing else 0.0
         if self._mix == target_mix:
             weight: np.ndarray | float = target_mix
@@ -421,7 +480,7 @@ class NeuralTSEExtractor(Extractor):
 
     def status_info(self) -> dict[str, Any]:
         info = super().status_info()
-        times = list(self._times)
+        mean, p95 = self.stream.model_ms()
         info.update(
             target_active=self._processing(),
             device=str(self.core.device),
@@ -431,8 +490,8 @@ class NeuralTSEExtractor(Extractor):
                          else None),
             compiled=bool(self.live.compile and any(
                 v is not None for v in self.core._compiled.values())),
-            model_ms=round(1000.0 * float(np.mean(times)), 2) if times else None,
-            model_ms_p95=round(1000.0 * float(np.percentile(times, 95)), 2) if times else None,
+            model_ms=mean,
+            model_ms_p95=p95,
         )
         return info
 

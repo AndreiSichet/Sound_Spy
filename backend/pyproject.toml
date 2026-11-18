@@ -32,6 +32,11 @@ ml = [
     "scikit-learn>=1.4",
     "pandas>=2.1",
     "matplotlib>=3.8",
+    # step 07c: the speech enhancer (DeepFilterNet3) runs its streaming step with ONNX Runtime
+    # on the CPU (2.6 ms per 20 ms chunk vs 8-16 ms with PyTorch); onnx exports it once.
+    # Tested: onnxruntime 1.32.0, onnx 1.23.2.
+    "onnxruntime>=1.20",
+    "onnx>=1.16",
 ]
 spatial = [
     "pyroomacoustics>=0.7",

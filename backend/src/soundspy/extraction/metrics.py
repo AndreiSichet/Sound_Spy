@@ -100,3 +100,39 @@ def suppression_db(output: np.ndarray, mixture: np.ndarray) -> float:
 def is_silent(reference: np.ndarray) -> bool:
     ref = _flat(reference)
     return float(ref @ ref) <= _TINY
+
+
+def frame_power(x: np.ndarray, n: int, frames: int) -> np.ndarray:
+    """Mean power of ``frames`` consecutive frames of ``n`` samples (a 1-D signal)."""
+    y = np.asarray(x[:frames * n], dtype=np.float64).reshape(frames, n)
+    return np.einsum("fn,fn->f", y, y) / n
+
+
+def interruption_rate(output: np.ndarray, reference: np.ndarray, sample_rate: int, *,
+                      frame_ms: float = 50.0, drop_db: float = 6.0, range_db: float = 20.0,
+                      floor_dbfs: float = -70.0) -> float | None:
+    """Share of the reference's active frames that the output turned down by more than
+    ``drop_db`` (step 07c: "interruption rate": cut word starts, ducked syllables).
+
+    Frames of ``frame_ms``; a frame is active when the reference's energy in it is within
+    ``range_db`` of its loudest frame and above ``floor_dbfs``. ``None`` when no frame is
+    active. For a speech-only input (reference = input) it is exactly "output more than 6 dB
+    below the input".
+
+    The dataset's speech clips carry their own background (a room, a street), which a speech
+    enhancer removes too: on synthetic mixtures the rate therefore also counts removed noise in
+    quiet frames of the reference. ``range_db`` (20 dB) keeps such frames out as far as their
+    level allows; the real-room benchmark (quiet room) measures interruptions cleanly.
+    """
+    ref, out = _flat(reference), _flat(output)
+    n = max(1, int(round(frame_ms * sample_rate / 1000.0)))
+    frames = min(ref.size, out.size) // n
+    if frames == 0:
+        return None
+    r, o = frame_power(ref, n, frames), frame_power(out, n, frames)
+    level = 10.0 * np.log10(r + _TINY)
+    active = (level > level.max() - range_db) & (level > floor_dbfs)
+    if not active.any():
+        return None
+    drop = level - 10.0 * np.log10(o + _TINY)
+    return float(np.mean(drop[active] > drop_db))

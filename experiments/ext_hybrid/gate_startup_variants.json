@@ -1,0 +1,168 @@
+{
+  "off": {
+    "live": {
+      "si_sdr_i": 4.683,
+      "worse": 25,
+      "suppression_db": -12.641,
+      "pair_absent_db": -25.629,
+      "interruption": 0.31,
+      "si_sdr_i_by_route": {
+        "dfn": 8.699,
+        "wf": 3.752
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    }
+  },
+  "warm 2 s, start closed (configured)": {
+    "live": {
+      "si_sdr_i": 3.744,
+      "worse": 29,
+      "suppression_db": -14.482,
+      "pair_absent_db": -35.155,
+      "interruption": 0.372,
+      "si_sdr_i_by_route": {
+        "dfn": 6.458,
+        "wf": 3.115
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    },
+    "centred": {
+      "si_sdr_i": 4.642,
+      "worse": 25,
+      "suppression_db": -13.535,
+      "pair_absent_db": -44.275,
+      "interruption": 0.31,
+      "si_sdr_i_by_route": {
+        "dfn": 9.112,
+        "wf": 3.605
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    }
+  },
+  "warm 1 s, start closed": {
+    "live": {
+      "si_sdr_i": 4.015,
+      "worse": 27,
+      "suppression_db": -14.482,
+      "pair_absent_db": -33.92,
+      "interruption": 0.327,
+      "si_sdr_i_by_route": {
+        "dfn": 7.898,
+        "wf": 3.115
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    },
+    "centred": {
+      "si_sdr_i": 4.642,
+      "worse": 25,
+      "suppression_db": -13.535,
+      "pair_absent_db": -43.03,
+      "interruption": 0.31,
+      "si_sdr_i_by_route": {
+        "dfn": 9.116,
+        "wf": 3.605
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    }
+  },
+  "warm 0, start closed": {
+    "live": {
+      "si_sdr_i": 4.067,
+      "worse": 27,
+      "suppression_db": -14.482,
+      "pair_absent_db": -33.92,
+      "interruption": 0.318,
+      "si_sdr_i_by_route": {
+        "dfn": 8.171,
+        "wf": 3.115
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    },
+    "centred": {
+      "si_sdr_i": 4.635,
+      "worse": 25,
+      "suppression_db": -13.535,
+      "pair_absent_db": -40.597,
+      "interruption": 0.31,
+      "si_sdr_i_by_route": {
+        "dfn": 9.077,
+        "wf": 3.605
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    }
+  },
+  "warm 2 s, start open": {
+    "live": {
+      "si_sdr_i": 3.744,
+      "worse": 29,
+      "suppression_db": -14.482,
+      "pair_absent_db": -35.155,
+      "interruption": 0.372,
+      "si_sdr_i_by_route": {
+        "dfn": 6.458,
+        "wf": 3.115
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    },
+    "centred": {
+      "si_sdr_i": 4.562,
+      "worse": 25,
+      "suppression_db": -13.531,
+      "pair_absent_db": -36.793,
+      "interruption": 0.31,
+      "si_sdr_i_by_route": {
+        "dfn": 9.031,
+        "wf": 3.526
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    }
+  },
+  "warm 0, start open": {
+    "live": {
+      "si_sdr_i": 4.067,
+      "worse": 27,
+      "suppression_db": -14.482,
+      "pair_absent_db": -33.92,
+      "interruption": 0.318,
+      "si_sdr_i_by_route": {
+        "dfn": 8.171,
+        "wf": 3.115
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    },
+    "centred": {
+      "si_sdr_i": 4.556,
+      "worse": 25,
+      "suppression_db": -13.531,
+      "pair_absent_db": -35.532,
+      "interruption": 0.31,
+      "si_sdr_i_by_route": {
+        "dfn": 8.998,
+        "wf": 3.526
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    }
+  }
+}

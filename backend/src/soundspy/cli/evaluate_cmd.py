@@ -5,6 +5,8 @@
     soundspy evaluate extraction --method mask_baseline [--split test] [--n 500]
                                  [--sample-rate 48000] [--name ext_neural_tse_v2]
                                  [--no-reverb] [--no-benchmarks]
+    soundspy evaluate extraction --method hybrid [--benchmark real [--session ID]]
+    soundspy evaluate hybrid-gate [--n 200] [--bench-n 40]
 
 **detection** scores the trained model against the zero-shot baseline, writes
 ``experiments/<name>/metrics.json`` and prints a per-class table (without a trained checkpoint
@@ -18,6 +20,12 @@ renders listening examples to ``outputs/eval/ext_<method>/``.
 **gate** (step 07b) tries a grid of output-gate settings on the validation set with the neural
 model (default: ``extraction.neural_tse.checkpoint``) and writes ``gate_tuning.json`` / ``.md``
 next to the checkpoint's experiment.
+
+**hybrid** (step 07c): ``--method hybrid`` scores the hybrid extractor and its parts (see
+``training/evaluate_hybrid.py``) on the test recipes and benchmarks; ``--benchmark real`` instead
+scores the real-room benchmark the owner recorded (``soundspy record-benchmark``).
+**hybrid-gate** tries the ``tuning`` grid of ``hybrid.yaml`` on validation recipes and writes
+``experiments/ext_hybrid/gate_tuning.json`` / ``.md``.
 """
 
 from __future__ import annotations
@@ -31,7 +39,7 @@ HELP = "evaluate the detection model or an extraction method"
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
-    parser.add_argument("task", choices=("detection", "extraction", "gate"))
+    parser.add_argument("task", choices=("detection", "extraction", "gate", "hybrid-gate"))
     parser.add_argument("--checkpoint", default=None,
                         help="gate: the neural model (default: extraction.neural_tse.checkpoint)")
     parser.add_argument("--experiment", default=None, help="experiment name (default from config)")
@@ -39,10 +47,17 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--limit", type=int, default=None, help="only the first N recipes")
-    parser.add_argument("--method", choices=("mask_baseline", "neural_tse"),
+    parser.add_argument("--method", choices=("mask_baseline", "neural_tse", "hybrid"),
                         default="mask_baseline",
                         help="extraction: mask_baseline = the five step-06 systems; neural_tse = "
-                             "those plus the neural extractor, also on a reverberant copy")
+                             "those plus the neural extractor, also on a reverberant copy; "
+                             "hybrid = the baseline systems plus the hybrid and its parts")
+    parser.add_argument("--benchmark", choices=("real",), default=None,
+                        help="extraction, hybrid: the real-room benchmark instead of the recipes")
+    parser.add_argument("--session", default=None,
+                        help="--benchmark real: the recording session (default: the newest)")
+    parser.add_argument("--bench-n", type=int, default=40,
+                        help="hybrid-gate: recipes per validation pair benchmark")
     parser.add_argument("--n", type=int, default=None,
                         help="extraction: number of recipes (default from config)")
     parser.add_argument("--sample-rate", type=int, default=None,
@@ -136,11 +151,51 @@ def run_gate(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_hybrid_gate(args: argparse.Namespace) -> int:
+    from soundspy.config import ConfigError, load_config
+    from soundspy.training.evaluate_hybrid import format_table
+    from soundspy.training.evaluate_hybrid import run_tuning as tune
+
+    try:
+        config = load_config()
+        result = tune(config, args.device, n=args.n or 200, bench_n=args.bench_n,
+                      progress=lambda m: print(m, flush=True))
+    except (ConfigError, RuntimeError, ValueError) as exc:
+        print(f"error: {exc}")
+        return 1
+    print(format_table(result))
+    chosen = result["chosen"]
+    print(f"chosen (strongest suppression costing <= {result['max_cost_db']:g} dB SI-SDRi, "
+          "live detector):", chosen["gate"] if chosen else "none")
+    print(f"-> {result['path']}")
+    return 0
+
+
+def run_real(args: argparse.Namespace) -> int:
+    from soundspy.config import ConfigError, load_config
+    from soundspy.training.real_benchmark import RealBenchmarkError, evaluate_real, format_real
+
+    try:
+        config = load_config()
+        result = evaluate_real(config, session=args.session, device=args.device,
+                               progress=lambda m: print(m, flush=True))
+    except (ConfigError, RealBenchmarkError, ValueError) as exc:
+        print(f"error: {exc}")
+        return 1
+    print(format_real(result))
+    print(f"-> {result['path']}")
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
+    if args.task == "extraction" and args.benchmark == "real":
+        return run_real(args)
     if args.task == "extraction":
         return run_extraction(args)
     if args.task == "gate":
         return run_gate(args)
+    if args.task == "hybrid-gate":
+        return run_hybrid_gate(args)
 
     from soundspy.config import ConfigError, load_config
     from soundspy.data.mixtures import RecipeError

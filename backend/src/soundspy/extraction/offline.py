@@ -1,10 +1,11 @@
 """Running an extractor over a whole signal, and building one from the configuration.
 
 * :func:`resolve_method`: which method really runs: the requested one, or the baseline with a
-  reason when ``neural_tse`` is asked for but has no checkpoint (step 07).
-* :func:`build_extractor`: the extractor of a method (``neural_tse``, ``mask_baseline`` with a
-  given activity source, or ``passthrough``); used by the live chain factory, offline
-  processing and the evaluation.
+  reason when ``neural_tse`` has no checkpoint (step 07) or ``hybrid`` has neither of its routes
+  (step 07c).
+* :func:`build_extractor`: the extractor of a method (``hybrid``, ``neural_tse``,
+  ``mask_baseline`` with a given activity source, or ``passthrough``); used by the live chain
+  factory, offline processing and the evaluation.
 * :func:`run_offline`: feeds a buffer through an extractor block by block (the same ``process``
   the live session calls), then flushes its delay, so the result is **time-aligned** with the
   input and has the same length.
@@ -12,6 +13,7 @@
   baseline the detector runs over the whole file first with centred windows
   (``centred_timeline``), then the extractor uses that timeline: no detector lag, unlike live.
   The neural extractor needs no detector: the file simply goes through it block by block.
+  The hybrid (step 07c) gets the centred timeline for its gate when a detector is there.
 * :func:`start_run` / :func:`execute_run`: the same as a **processing run** on disk
   (``io/runs.py``: WAV + sidecar in ``outputs/processed``), used by the CLI and the API worker.
 * :func:`irm_oracle`: the ideal ratio mask from the true target and rest, in the same STFT. No
@@ -39,13 +41,36 @@ from soundspy.extraction.mask_baseline import MaskBaselineExtractor
 from soundspy.io import runs as run_store
 from soundspy.io.storage import absolute_path, stored_path
 
-METHODS = ("neural_tse", "mask_baseline", "passthrough")
+METHODS = ("hybrid", "neural_tse", "mask_baseline", "passthrough")
 # what offline processing offers (passthrough would be a copy)
-RUN_METHODS = ("neural_tse", "mask_baseline")
+RUN_METHODS = ("hybrid", "neural_tse", "mask_baseline")
+# methods that use the detector's timeline offline (the baseline to gate, the hybrid's gate)
+TIMELINE_METHODS = ("mask_baseline", "hybrid")
 
 
 class ExtractionUnavailable(RuntimeError):
     """Offline extraction cannot run (e.g. no detection model). Message for the user."""
+
+
+def default_gate(config: AppConfig, method: str) -> bool:
+    """Whether a method's gate is on when the session did not choose (step 07c): the hybrid's
+    gate for ``hybrid``, the step-07b output gate for ``neural_tse``."""
+    if method == "hybrid":
+        return config.extraction.hybrid.gate.enabled
+    if method == "neural_tse":
+        return config.extraction.neural_tse.gate.enabled
+    return False
+
+
+def hybrid_available(config: AppConfig) -> str | None:
+    """``None`` if at least one route of the hybrid extractor can be built (step 07c)."""
+    from soundspy.config import speech_model_dir
+
+    speech = (speech_model_dir(config) / "config.ini").is_file()
+    if speech or neural_available(config) is None:
+        return None
+    return ("neither the Waveformer checkpoint nor the speech enhancement model exists "
+            "(`soundspy data download deepfilternet`)")
 
 
 def neural_available(config: AppConfig) -> str | None:
@@ -68,6 +93,12 @@ def resolve_method(config: AppConfig, requested: str | None = None) -> tuple[str
     method = requested or config.extraction.method
     if method not in METHODS:
         raise ValueError(f"unknown extraction method {method!r}; methods: {list(METHODS)}")
+    if method == "hybrid":
+        reason = hybrid_available(config)
+        if reason is not None:
+            return "mask_baseline", ("Hybrid extraction is not available: " + reason
+                                     + ". Using the baseline (detector-gated) method instead.")
+        return method, None
     if method == "neural_tse":
         reason = neural_available(config)
         if reason is not None:
@@ -82,6 +113,13 @@ def build_extractor(config: AppConfig, activity: ActivitySource | None, *,
     """The extractor of ``method`` exactly (no fallback: see :func:`resolve_method`).
     ``gate``: the neural output gate on / off (``None``: as configured)."""
     method = method or config.extraction.method
+    if method == "hybrid":
+        from soundspy.extraction.hybrid import HybridUnavailable, build_hybrid_extractor
+
+        try:
+            return build_hybrid_extractor(config, activity, device=device, gate=gate)
+        except HybridUnavailable as exc:
+            raise ExtractionUnavailable(str(exc)) from exc
     if method == "neural_tse":
         from soundspy.extraction.neural_tse import NeuralUnavailable, build_neural_extractor
 
@@ -146,8 +184,14 @@ def extract_buffer(config: AppConfig, audio: AudioBuffer, labels: Collection[str
     target = TargetSpec(labels=frozenset(labels), attenuation_db=attenuation_db)
     target.validate(config.labels)
     activity = None
+    notes: list[str] = []
     if method == "mask_baseline" and target.labels:
         activity = _centred(config, audio, device)
+    elif method == "hybrid" and target.labels:
+        try:  # the hybrid's gate uses the detector; without it the gate stays open
+            activity = _centred(config, audio, device)
+        except ExtractionUnavailable as exc:
+            notes.append(f"gate without detector (stays open): {exc}")
     extractor = build_extractor(config, activity, method=method, device=device, gate=gate)
     out = run_offline(extractor, mono(audio), target,
                       chunk_frames=config.extraction.offline_chunk_frames)
@@ -166,6 +210,12 @@ def extract_buffer(config: AppConfig, audio: AudioBuffer, labels: Collection[str
         report = status()
         info.update(model=report.get("model"), device=report.get("device"),
                     gate=report.get("gate"), gate_closed=report.get("gate_closed"))
+    if method == "hybrid" and callable(status):
+        report = status()
+        info.update(route=report.get("route"), model=report.get("model"),
+                    device=report.get("device"), gate=report.get("gate"),
+                    gate_closed=report.get("gate_closed"),
+                    notes=notes + list(report.get("notes") or []))
     return OfflineResult(out, activity, time.perf_counter() - started, info)
 
 
@@ -223,6 +273,14 @@ def method_parameters(config: AppConfig, method: str, gate: bool | None = None
 
     if method == "mask_baseline":
         return dataclasses.asdict(config.extraction.mask_baseline)
+    if method == "hybrid":
+        hy = config.extraction.hybrid
+        waveformer = method_parameters(config, "neural_tse", False)
+        gate_cfg = hy.gate if gate is None else dataclasses.replace(hy.gate, enabled=gate)
+        speech = dataclasses.asdict(hy.speech)
+        speech["model_dir"] = None if hy.speech.model_dir is None else str(hy.speech.model_dir)
+        return {"gate": dataclasses.asdict(gate_cfg), "speech": speech,
+                "ramp_ms": hy.ramp_ms, "waveformer": waveformer}
     if method == "neural_tse":
         cfg = config.extraction.neural_tse
         checkpoint = Path(cfg.checkpoint) if cfg.checkpoint else None
@@ -265,7 +323,7 @@ def start_run(config: AppConfig, recording: Path, labels: Collection[str], *,
         runs_dir(config), recording=stored_path(recording, config.project_root),
         labels=sorted(target.labels), attenuation_db=target.attenuation_db, method=method,
         parameters=method_parameters(config, method, gate),
-        activity_mode="timeline" if method == "mask_baseline" else "none")
+        activity_mode="timeline" if method in TIMELINE_METHODS else "none")
 
 
 def execute_run(config: AppConfig, run_id: str, *, device: str | None = None) -> dict[str, Any]:

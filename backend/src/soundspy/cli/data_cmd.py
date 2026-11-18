@@ -6,6 +6,7 @@ Subcommands::
     soundspy data download ontology esc50    download + verify + extract (resumable)
     soundspy data download fsd50k [--yes]
     soundspy data download librispeech [--yes]   train-clean-100, dev-clean, test-clean (7 GB)
+    soundspy data download deepfilternet     the hybrid method's speech enhancer (8 MB, step 07c)
     soundspy data cleanup-archives [--yes]   delete downloaded archives of finished datasets
     soundspy data prepare                    clip index + activity maps
     soundspy data stats                      coverage table (class x split x dataset)
@@ -40,8 +41,10 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
     p = sub.add_parser("download", help="download, verify and extract datasets (resumable)")
     p.add_argument("datasets", nargs="+",
-                   choices=("ontology", "esc50", "fsd50k", "librispeech", "all"),
-                   help="what to download")
+                   choices=("ontology", "esc50", "fsd50k", "librispeech", "deepfilternet",
+                            "all"),
+                   help="what to download (deepfilternet: the hybrid method's speech "
+                        "enhancer, 8 MB; not part of 'all')")
     p.add_argument("--yes", action="store_true", help="do not ask before large downloads")
     p.add_argument("--no-progress", action="store_true", help="no progress bars")
     p.set_defaults(handler=run_download)
@@ -120,6 +123,30 @@ def run_paths(args: argparse.Namespace) -> int:
     return 0
 
 
+def _download_speech_model(config: AppConfig, *, progress: bool) -> int:
+    """DeepFilterNet3 (step 07c): download + SHA-256 check + unpack, then export its
+    streaming step to ONNX and check it against PyTorch."""
+    from soundspy.config import speech_model_dir
+    from soundspy.data.download import DownloadError
+    from soundspy.extraction.speech_enhancer import SpeechUnavailable, load_speech_core
+    from soundspy.extraction.speech_model import SpeechModelError, ensure_weights
+
+    sp = config.extraction.hybrid.speech
+    try:
+        folder = ensure_weights(sp.model_file, sp.model_url, sp.model_sha256,
+                                config.paths["model_cache"], progress=progress)
+        if folder != speech_model_dir(config):
+            print(f"note: extraction.hybrid.speech.model_dir points elsewhere: "
+                  f"{speech_model_dir(config)}")
+        core = load_speech_core(folder, sp.device, post_filter=sp.post_filter,
+                                backend=sp.backend, cpu_threads=sp.cpu_threads)
+    except (DownloadError, SpeechModelError, SpeechUnavailable) as exc:
+        return _fail(str(exc))
+    extra = f", streaming step {core.onnx_file.name}" if core.onnx_file else ""
+    print(f"deepfilternet: ready -> {folder} ({core.device_name}{extra})")
+    return 0
+
+
 def run_download(args: argparse.Namespace) -> int:
     from soundspy.data.download import DownloadContext, DownloadError, download
 
@@ -133,8 +160,13 @@ def run_download(args: argparse.Namespace) -> int:
         confirm=(lambda _m: True) if args.yes else _confirm,
     )
     start = time.monotonic()
+    datasets = [d for d in args.datasets if d != "deepfilternet"]
+    if "deepfilternet" in args.datasets:
+        code = _download_speech_model(config, progress=not args.no_progress)
+        if code or not datasets:
+            return code
     try:
-        results = download(args.datasets, ctx)
+        results = download(datasets, ctx)
     except DownloadError as exc:
         return _fail(str(exc))
     except KeyboardInterrupt:

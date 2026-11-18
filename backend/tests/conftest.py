@@ -400,9 +400,13 @@ def config():
     evaluation = dataclasses.replace(  # no earlier model, no benchmark sets (step 07b)
         config.extraction.evaluation, compare_checkpoint=None, bench_absent=0, bench_pair_n=0,
         bench_librispeech=0)
+    hybrid = config.extraction.hybrid  # no speech enhancer either (step 07c): see tiny_speech
+    hybrid = dataclasses.replace(hybrid, speech=dataclasses.replace(
+        hybrid.speech, model_dir=PROJECT_ROOT / "no-speech-model-in-tests"))
     extraction = dataclasses.replace(
         config.extraction, method="mask_baseline", evaluation=evaluation,
-        neural_tse=dataclasses.replace(config.extraction.neural_tse, checkpoint=None))
+        neural_tse=dataclasses.replace(config.extraction.neural_tse, checkpoint=None),
+        hybrid=hybrid)
     return dataclasses.replace(
         config, extraction=extraction,
         detection=dataclasses.replace(config.detection, checkpoint=None))
@@ -446,6 +450,65 @@ def tiny_neural(config, tmp_path: Path):
 def neural_kit():
     """Helpers for tests that need a tiny neural extractor on another config."""
     return types.SimpleNamespace(make=make_tiny_neural, model=dict(TINY_WAVEFORMER))
+
+
+# step 07c: a tiny network with DeepFilterNet3's layout (48 kHz, the real DSP: 960 / 480)
+TINY_DFN = dict(conv_ch=8, emb_hidden_dim=16, df_hidden_dim=16, enc_linear_groups=8,
+                linear_groups=4)
+
+
+def write_tiny_speech_model(folder: Path, *, seed: int = 0) -> Path:
+    """A model folder like the published one (``config.ini`` + ``checkpoints/``) holding a
+    tiny random DeepFilterNet3-shaped network. Returns the folder."""
+    import configparser
+
+    import torch
+
+    from soundspy.extraction.models.deepfilternet import DfParams
+    from soundspy.extraction.speech_model import build_model
+
+    p = DfParams(**TINY_DFN)
+    torch.manual_seed(seed)
+    net = build_model(p).eval()
+    with torch.no_grad():  # non-trivial normalisation statistics
+        for module in net.modules():
+            if isinstance(module, torch.nn.BatchNorm2d):
+                module.running_mean.uniform_(-0.1, 0.1)
+                module.running_var.uniform_(0.5, 1.5)
+    model_dir = folder / "DeepFilterNet3"
+    (model_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
+    torch.save(net.state_dict(), model_dir / "checkpoints" / "model_1.ckpt.best")
+    ini = configparser.ConfigParser()
+    text = lambda v: ",".join(map(str, v)) if isinstance(v, tuple) else str(v)  # noqa: E731
+    ini["df"] = {k: text(getattr(p, k)) for k in (
+        "sr", "fft_size", "hop_size", "nb_erb", "nb_df", "norm_tau", "lsnr_max", "lsnr_min",
+        "min_nb_erb_freqs", "df_order", "df_lookahead")}
+    ini["deepfilternet"] = {k: text(getattr(p, k)) for k in (
+        "conv_lookahead", "conv_ch", "conv_kernel", "convt_kernel", "conv_kernel_inp",
+        "emb_hidden_dim", "emb_num_layers", "enc_linear_groups", "linear_groups",
+        "df_hidden_dim", "df_num_layers", "df_pathway_kernel_size_t", "df_gru_skip",
+        "emb_gru_skip", "enc_concat")}
+    with (model_dir / "config.ini").open("w", encoding="utf-8") as fh:
+        ini.write(fh)
+    return model_dir
+
+
+def make_tiny_speech(config, folder: Path, *, backend: str = "torch", seed: int = 0):
+    """``config`` with the tiny speech enhancer (``write_tiny_speech_model``) as the hybrid's
+    speech route (CPU)."""
+    model_dir = write_tiny_speech_model(folder / "speech", seed=seed)
+    hybrid = config.extraction.hybrid
+    hybrid = dataclasses.replace(hybrid, performance_cores=False, speech=dataclasses.replace(
+        hybrid.speech, model_dir=model_dir, backend=backend, device="cpu"))
+    return dataclasses.replace(config, extraction=dataclasses.replace(config.extraction,
+                                                                      hybrid=hybrid))
+
+
+@pytest.fixture
+def speech_kit():
+    """Helpers for tests that need the tiny speech enhancer."""
+    return types.SimpleNamespace(make=make_tiny_speech, write=write_tiny_speech_model,
+                                 params=dict(TINY_DFN))
 
 
 AUDIO_THREAD_NAMES = ("soundspy-session", "fake-input-stream", "fake-output-stream",

@@ -448,6 +448,88 @@ Result: `experiments/tse_waveformer_v2` (`leak_floor_db` −50) stopped at epoch
 +2.88 without, suppression −17.1 / −15.6 dB (v1 +3.28 / −12.5; v1 + gate,
 `experiments/ext_neural_tse_v1_gate/`: +2.97 / −14.0); streaming = offline.
 
+## Hybrid extraction (step 07c)
+
+Method `hybrid` (default, `configs/extraction/hybrid.yaml`): `HybridExtractor`
+(`extraction/hybrid.py`) with routes `off` (the input), `speech_enhancer` (exactly
+`speech.labels` selected: DeepFilterNet3), `waveformer` (anything else, including speech + other
+classes: `WaveformerStream`), optionally `cascade` (`speech.route: cascade`: Waveformer, then
+DeepFilterNet3). Every route's estimate is delayed to the slowest route's latency (FIFO pads), so
+the extractor has one fixed `latency_samples` (1919 at 48 kHz). A selection change starts the
+new route's network at once; its weight ramps up (`live.ramp_ms`) only one latency later (its
+estimate is valid from then), the old one ramps down and rests afterwards. Resting routes are
+not called at all; a route that starts again is `reset()` and its pad re-primed (saves ~1 ms
+per chunk on the live Waveformer route). `y = G · (est + g · (x − est))`, `G` from
+the gate. `build_hybrid_extractor(config, activity, device=, gate=)` notes a missing route
+(`notes`, warning `hybrid_route_unavailable`); neither route → `HybridUnavailable` →
+`resolve_method` / `build_chain` fall back to `mask_baseline` with `extraction_fallback`.
+`detector_device` looks at `HybridExtractor.core` (the Waveformer's). `start()` pins the audio
+thread to the performance cores (`engine/cpu.py`, `GetSystemCpuSetInformation` →
+`SetThreadAffinityMask`; no-op on single-class CPUs and off Windows).
+
+**`WaveformerStream`** (`extraction/neural_tse.py`): the resampling bridge, model steps and
+optional 07b output gate taken out of `NeuralTSEExtractor` (which now mixes on top of it);
+`process(x, labels | None)`, `latency`, `start()`, `request_reset()`, `model_ms()`.
+
+**Speech enhancer.** `extraction/models/deepfilternet/` (MIT / Apache-2.0, headers kept):
+`dsp.py` = libDF's STFT (Vorbis window 960, hop 480, `wnorm = 2·hop/fft²`, unnormalised inverse),
+ERB widths (`erb_fb`), ERB dB features with running mean (init −60…−90 dB) / 40, unit-normalised
+96 complex bins (init 0.001…0.0001), `alpha = 0.99`; `model.py` = DfNet3 with the checkpoint's
+module names, `forward` (whole sequence, as upstream) and `stream(spec, erb, low, state)` with
+state = (2 feature frames ×2, 4 spectra, 4 c0 frames, 3 GRU states); the first
+`conv_lookahead` frames of a stream only enter the spectrum window (`push_spectra`), resting
+frames move the windows and clear the recurrent state (`push_features`); `deep_filter_real`
+(no complex tensors, ONNX-exportable); `fuse_for_inference` replaces depthwise 1×1 convolutions
+by `ChannelScale` (PyTorch ran them as 64 calls each on one CPU thread). `speech_model.py`:
+`ensure_weights` (zip + SHA-256 from `hybrid.yaml`, unpacked to
+`<model_cache>/deepfilternet/DeepFilterNet3/`), `read_params(config.ini)`, `load_model` (strict,
+`weights_only`), `export_onnx` (opset 17, dynamic frame count, cached next to the model as
+`DeepFilterNet3_stream_v<EXPORT_VERSION>_<sha12>.onnx`). `speech_enhancer.py`: `SpeechCore`
+(backend `onnx`: ONNX Runtime CPU session, NumPy state, checked against PyTorch within 1e-4 at
+load; `torch`: any device; `whole()` always PyTorch), `SpeechEnhancer.process(x, active)`
+(latency `(hop − 1) + conv_lookahead·hop + (fft − hop)` = 1919), `enhance_whole`,
+`load_speech_core` (cached). `soundspy data download deepfilternet` downloads, unpacks and
+exports.
+
+**`HybridGate`** (`extraction/hybrid_gate.py`, `gate` in `hybrid.yaml`): blocks of `block_ms`
+counted from the stream start; per completed block: one-pole envelopes of est and input
+(`attack_ms` / `release_ms`) → `ratio_db`; *rise* = ratio > `reopen_ratio_db` and input above
+`min_level_dbfs` and no warm-up left; presence from the `ActivitySource` every 10 blocks
+(`active`, and `absent(labels, centre, now, close_prob_factor)`: every selected class's smoothed
+probability below factor × its threshold); close when confidently absent for `close_hold_ms` and
+no rise for `close_hold_ms`, ramp `close_ms`; otherwise open, ramp `open_ms`; the next block
+ramps linearly (in dB) to the new position; closed gain `10^(−attenuation_db/20)`.
+`restart(warmup)` after a speech-enhancer route starts: rises ignored for `warmup_ms`;
+`start_closed` (with an activity source) starts a stream closed. `ActivitySource.absent`
+(default: not active); `LiveDetectorActivity(state, lag_s, thresholds)` (the factory passes the
+detector core's thresholds); `TimelineActivity(..., probabilities=, thresholds=)` (both timeline
+builders store their smoothed probabilities). Offline (`extract_buffer`) uses the centred
+timeline; without a detector the gate stays open (note in the run info).
+
+**API / UI.** `/api/config`: `hybrid` in `extraction_methods`, `default_gates` per method;
+`default_gate` = the default method's. `SessionManager.selected_gate` = the chosen method's own
+default unless switched; choosing another method resets the switch to that method's default.
+Status `extraction`: `route`, `routes`, `gate_state` (open | closed | off), `gate_closed`,
+`gate_reopened`, `speech_enhancer` / `waveformer` (model, device, latency_ms, model_ms(_p95)),
+`performance_cores`, `notes`. Frontend: "Hybrid" in the selector, the Gate switch for Hybrid
+and Neural, session bar `Hybrid · speech enhancer · cpu (onnx) · gate closed · +39.98 ms`.
+
+**Evaluation** (`training/evaluate_hybrid.py`, `--method hybrid`): systems `wf`, `wf_hgate`,
+`dfn`, `dfn_hgate`, `cascade`, `cascade_hgate` (Speech-only selections have the last four),
+`hybrid_offline` / `hybrid_live` (centred / causal timeline), `hybrid_stream` (20 ms chunks
+through `HybridExtractor`, main set only), `hybrid_live_db`, `hybrid_high_db`; whole-file
+outputs via `gate_output` (the same gate over `latency` zeros + the signal); per-recipe
+`interrupt` (`metrics.interruption_rate`); `speech_only` summary. `summarize` / CSV accept
+systems missing for some recipes. `soundspy evaluate hybrid-gate`: the configured route once
+over `--n` val recipes + `--bench-n` val copies of the pair benchmarks
+(`<mixtures>/bench_val_<name>.jsonl`, `benchmark_sets(split=, counts=)`), every combination of
+`tuning`, live (causal) timeline; `experiments/ext_hybrid/gate_tuning.json|md`.
+Real-room benchmark: `soundspy record-benchmark` → `data/benchmark/<session>/<part>_NN.wav`
+(sidecar `benchmark_session`, `part`); `training/real_benchmark.py` (`build_cases`,
+`score_case`, `model_systems`, `evaluate_real`) → `experiments/ext_hybrid/real_room.json|md`.
+
+Result (`experiments/ext_hybrid/`): gate 400 ms / 0.5 / −6 dB, warm-up 1 s (val). Test +3.14 dB offline = streaming, +1.97 with the live detector (v1 +3.28); music only with Speech selected −48.1 dB at 30 dB, −60.5 at 40 dB; speech over music +7.59 offline / +4.22 live (v1 +5.33); owner's classical recording −66.2 dB live and offline. Live: Speech route RTF p95 0.39, Waveformer route 0.72 (worst 0.86, as Neural alone), 144 ms.
+
 ## Training data (step 04, `soundspy.data`)
 
 Storage (`paths` in `default.yaml`; large data never inside the repository):
@@ -567,6 +649,7 @@ report is given in chat; `project_insights.md` is updated every step.
 | 06 | Extraction baseline (detector-guided masking) + SI-SDR metrics; offline processing with A/B playback — **done** (detector-gated Wiener filter, `extraction/`, run sidecars, rebuildable DB) | 1 |
 | 07 | Neural TSE (Waveformer fine-tuned, label-conditioned, streaming); live extraction in the Semantic tab — **done** (`extraction/neural_tse.py`, cache + reverb, method selector) | 1 |
 | 07b | Neural extraction v2: silent-frame loss, output gate, LibriSpeech, dynamic mixing, speaker-queue draining — **done** | 1 |
+| 07c | Hybrid extraction: DeepFilterNet3 for Speech, Waveformer v1 for the rest, detector-closed / output-reopened gate, real-room benchmark — **done** | 1 |
 | 08 | End-to-end evaluation, robustness, polish, documentation for the university report | 1 |
 | module-3/4 | Simulated array (pyroomacoustics), DOA, beamforming, Spatial tab | 2 |
 | module-5 | Source tracking + detection fusion, Sources tab | 3 |

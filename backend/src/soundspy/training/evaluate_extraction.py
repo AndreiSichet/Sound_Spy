@@ -96,12 +96,15 @@ from soundspy.extraction.activity import (
 )
 from soundspy.extraction.mask_baseline import MaskBaselineExtractor
 from soundspy.extraction.offline import irm_oracle, run_offline
+from soundspy.training.evaluate_hybrid import HYBRID_SYSTEMS
+from soundspy.training.evaluate_hybrid import SHORT_NAMES as HYBRID_SHORT
+from soundspy.training.evaluate_hybrid import SYSTEM_NAMES as HYBRID_NAMES
 from soundspy.training.experiment import git_commit, read_json, write_json
 
 SYSTEMS = ("mixture", "timeline", "live", "oracle", "irm")  # the step-06 comparison
 NEURAL_SYSTEMS = ("neural_offline", "neural_stream", "neural_live_db", "neural_high_db")
 EXTRA_NEURAL = ("neural_v1", "neural_nogate")  # step 07b, when configured
-ALL_SYSTEMS = (*SYSTEMS, *EXTRA_NEURAL, *NEURAL_SYSTEMS)
+ALL_SYSTEMS = (*SYSTEMS, *EXTRA_NEURAL, *NEURAL_SYSTEMS, *HYBRID_SYSTEMS)
 WORSE_DB = -5.0  # "made worse": SI-SDRi below this
 SYSTEM_NAMES = {
     "mixture": "mixture (no processing)",
@@ -115,15 +118,17 @@ SYSTEM_NAMES = {
     "neural_high_db": "neural_tse streaming, high dB",
     "neural_nogate": "neural_tse without the gate (whole file)",
     "neural_v1": "previous neural model (whole file)",
+    **HYBRID_NAMES,
 }
 SHORT_NAMES = {
     "timeline": "baseline offline", "live": "baseline live", "oracle": "baseline oracle",
     "irm": "IRM", "neural_offline": "neural offline", "neural_stream": "neural streaming",
     "neural_live_db": "neural, live dB", "neural_high_db": "neural, high dB",
     "neural_nogate": "neural, no gate", "neural_v1": "neural v1",
+    **HYBRID_SHORT,
 }
 BENCHMARKS = ("absent", "pair_absent", "pair_a", "pair_b", "librispeech")
-EVALUATED_METHODS = ("mask_baseline", "neural_tse")
+EVALUATED_METHODS = ("mask_baseline", "neural_tse", "hybrid")
 T2R_BINS = ("<= -5 dB", "-5 .. 5 dB", ">= 5 dB")
 DURATION_BINS = ("< 1 s", "1 .. 3 s", ">= 3 s")
 TARGET_COUNT_BINS = ("1 target class", "2+ target classes")
@@ -144,6 +149,8 @@ def systems_for(method: str, *, compare: bool = False, gate: bool = False
     configured; ``gate``: the output gate is on, so the model without it is a row too)."""
     if method == "mask_baseline":
         return SYSTEMS
+    if method == "hybrid":
+        return (*SYSTEMS, *HYBRID_SYSTEMS)
     extra = (("neural_v1",) if compare else ()) + (("neural_nogate",) if gate else ())
     return (*SYSTEMS, *extra, *NEURAL_SYSTEMS)
 
@@ -195,7 +202,8 @@ def _median(values: Iterable[float]) -> float | None:
 def _systems_of(records: list[dict[str, Any]]) -> tuple[str, ...]:
     if not records:
         return SYSTEMS
-    return tuple(s for s in ALL_SYSTEMS if s in records[0])
+    present = set().union(*(r.keys() for r in records))
+    return tuple(s for s in ALL_SYSTEMS if s in present)
 
 
 def summarize(records: list[dict[str, Any]], systems: Sequence[str] | None = None
@@ -206,14 +214,19 @@ def summarize(records: list[dict[str, Any]], systems: Sequence[str] | None = Non
     empty = [r for r in records if r["empty"]]
     out: dict[str, Any] = {"n": len(with_target), "n_empty": len(empty)}
     for system in systems:
+        rows = [r for r in with_target if system in r]  # step 07c: some systems score only
+        absent = [r for r in empty if system in r]  # some recipes (Speech-only routes)
         out[system] = {
-            "si_sdr": _mean(r[system]["si_sdr"] for r in with_target),
-            "si_sdr_i": _mean(r[system]["si_sdr_i"] for r in with_target),
-            "si_sdr_i_median": _median(r[system]["si_sdr_i"] for r in with_target),
-            "snr_i": _mean(r[system]["snr_i"] for r in with_target),
-            "missed": _mean(float(r[system]["missed"]) for r in with_target),
-            "suppression_db": _mean(r[system]["suppression_db"] for r in empty),
-            "worse": sum(1 for r in with_target if r[system]["si_sdr_i"] < WORSE_DB),
+            "si_sdr": _mean(r[system]["si_sdr"] for r in rows),
+            "si_sdr_i": _mean(r[system]["si_sdr_i"] for r in rows),
+            "si_sdr_i_median": _median(r[system]["si_sdr_i"] for r in rows),
+            "snr_i": _mean(r[system]["snr_i"] for r in rows),
+            "missed": _mean(float(r[system]["missed"]) for r in rows),
+            "suppression_db": _mean(r[system]["suppression_db"] for r in absent),
+            "worse": sum(1 for r in rows if r[system]["si_sdr_i"] < WORSE_DB),
+            "interruption": _mean(r[system]["interrupt"] for r in rows
+                                  if r[system].get("interrupt") is not None),
+            "n": len(rows), "n_empty": len(absent),
         }
     return out
 
@@ -254,9 +267,11 @@ def breakdowns(records: list[dict[str, Any]], labels: list[str],
 # One recipe
 
 
-def process_recipe(config: AppConfig, rendered, core, *, attenuation_db: float
+def process_recipe(config: AppConfig, rendered, core, *, attenuation_db: float,
+                   sources_out: dict[str, ActivitySource] | None = None
                    ) -> tuple[dict[str, np.ndarray], dict[str, float]]:
-    """The five step-06 systems' outputs for one rendered recipe (1-D arrays), and timings."""
+    """The five step-06 systems' outputs for one rendered recipe (1-D arrays), and timings.
+    ``sources_out``: filled with the activity sources (timeline, live, oracle)."""
     det, ext, cfg = config.detection, config.extraction, config.extraction.mask_baseline
     recipe = rendered.recipe
     mixture = rendered.mixture.samples.ravel()
@@ -276,6 +291,8 @@ def process_recipe(config: AppConfig, rendered, core, *, attenuation_db: float
                                  rendered.activity_rate_hz),
     }
     times["detector"] = time.perf_counter() - started
+    if sources_out is not None:
+        sources_out.update(sources)
 
     started = time.perf_counter()
     outputs = {"mixture": mixture}
@@ -344,8 +361,8 @@ def dominant_other(rendered) -> str | None:
 
 
 def score(outputs: dict[str, np.ndarray], mixture: np.ndarray, reference: np.ndarray,
-          attenuation_db: float, attenuations: dict[str, float] | None = None
-          ) -> dict[str, dict[str, Any]]:
+          attenuation_db: float, attenuations: dict[str, float] | None = None,
+          sample_rate: int | None = None) -> dict[str, dict[str, Any]]:
     """Metrics of every system (``attenuations``: systems run at another attenuation)."""
     empty = M.is_silent(reference)
     scores: dict[str, dict[str, Any]] = {}
@@ -365,6 +382,9 @@ def score(outputs: dict[str, np.ndarray], mixture: np.ndarray, reference: np.nda
                                and level <= -(floor - MISSED_MARGIN_DB)),
                 "suppression_db": None,
             }
+            if sample_rate is not None:  # step 07c: target frames turned down by > 6 dB
+                rate = M.interruption_rate(out, reference, sample_rate)
+                scores[system]["interrupt"] = None if rate is None else round(rate, 4)
     return scores
 
 
@@ -374,7 +394,8 @@ def score(outputs: dict[str, np.ndarray], mixture: np.ndarray, reference: np.nda
 
 def _run_pass(config: AppConfig, chosen: list[Recipe], library: ClipLibrary, core, neural_core,
               *, sample_rate: int, reverberant: bool, want: set[str], out_dir: Path,
-              progress: Callable[[str], None], compare_core=None
+              progress: Callable[[str], None], compare_core=None, hybrid_cores=None,
+              stream: bool = True
               ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, float]]:
     """All systems over ``chosen`` (dry, or in simulated rooms). Returns the per-recipe
     records, the listening examples written and the seconds spent per part."""
@@ -382,9 +403,10 @@ def _run_pass(config: AppConfig, chosen: list[Recipe], library: ClipLibrary, cor
     reverb = dataclasses.replace(config.extraction.neural_tse.data.reverb, prob=1.0)
     records: list[dict[str, Any]] = []
     listening: list[dict[str, Any]] = []
-    seconds = {"render": 0.0, "detector": 0.0, "extractor": 0.0, "neural": 0.0}
+    seconds = {"render": 0.0, "detector": 0.0, "extractor": 0.0, "neural": 0.0, "hybrid": 0.0}
     live_db = config.extraction.default_attenuation_db
-    floors = {"neural_live_db": live_db, "neural_high_db": ev.high_attenuation_db}
+    floors = {"neural_live_db": live_db, "neural_high_db": ev.high_attenuation_db,
+              "hybrid_live_db": live_db, "hybrid_high_db": ev.high_attenuation_db}
     started = time.perf_counter()
     for i, recipe in enumerate(chosen):
         t0 = time.perf_counter()
@@ -397,8 +419,9 @@ def _run_pass(config: AppConfig, chosen: list[Recipe], library: ClipLibrary, cor
         rendered = render_with_config(recipe, sample_rate, library, config,
                                       activity_rate_hz=det.activity_rate_hz, rirs=rirs)
         seconds["render"] += time.perf_counter() - t0
+        sources: dict[str, ActivitySource] = {}
         outputs, times = process_recipe(config, rendered, core,
-                                        attenuation_db=ev.attenuation_db)
+                                        attenuation_db=ev.attenuation_db, sources_out=sources)
         for key, value in times.items():
             seconds[key] += value
         if neural_core is not None:
@@ -407,10 +430,19 @@ def _run_pass(config: AppConfig, chosen: list[Recipe], library: ClipLibrary, cor
                                                   compare_core=compare_core)
             outputs.update(neural)
             seconds["neural"] += spent
+        if hybrid_cores is not None:
+            from soundspy.training.evaluate_hybrid import process_recipe_hybrid
+
+            t0 = time.perf_counter()
+            outputs.update(process_recipe_hybrid(config, rendered, sources, hybrid_cores,
+                                                 attenuation_db=ev.attenuation_db,
+                                                 stream=stream))
+            seconds["hybrid"] += time.perf_counter() - t0
         mixture = rendered.mixture.samples.ravel()
         reference = rendered.target.samples.ravel()
         outputs = {s: outputs[s] for s in ALL_SYSTEMS if s in outputs}  # a fixed order
-        scores = score(outputs, mixture, reference, ev.attenuation_db, floors)
+        scores = score(outputs, mixture, reference, ev.attenuation_db, floors,
+                       sample_rate=sample_rate)
         active_s = target_active_seconds(rendered)
         record = {
             "id": recipe.id, "empty": M.is_silent(reference), "target": list(recipe.target),
@@ -445,7 +477,7 @@ def evaluate_extraction(config: AppConfig, method: str = "mask_baseline", split:
     sample_rate = ev.sample_rate if sample_rate is None else sample_rate
     examples = ev.examples if examples is None else examples
     reverberant = (method == "neural_tse") if reverberant is None else reverberant
-    benchmarks = (method == "neural_tse") if benchmarks is None else benchmarks
+    benchmarks = (method in ("neural_tse", "hybrid")) if benchmarks is None else benchmarks
     name = name or experiment_name(method)
     if det is None or det.checkpoint is None:
         raise ExtractionEvalError("no detection model is configured (detection.checkpoint): "
@@ -456,7 +488,14 @@ def evaluate_extraction(config: AppConfig, method: str = "mask_baseline", split:
         core = load_core(Path(det.checkpoint), device if device != "auto" else det.live.device)
     except DetectorUnavailable as exc:
         raise ExtractionEvalError(str(exc)) from exc
-    neural_core = compare_core = None
+    neural_core = compare_core = hybrid_cores = None
+    if method == "hybrid":
+        from soundspy.training.evaluate_hybrid import load_cores
+
+        try:
+            hybrid_cores = load_cores(config, device)
+        except Exception as exc:  # noqa: BLE001 - a missing model becomes the message
+            raise ExtractionEvalError(f"the hybrid extractor cannot be loaded: {exc}") from exc
     if method == "neural_tse":
         from soundspy.extraction.neural_tse import NeuralUnavailable, load_neural_core
 
@@ -491,7 +530,10 @@ def evaluate_extraction(config: AppConfig, method: str = "mask_baseline", split:
              f"detector {core.name} on {core.device}"
              + (f"; extractor {neural_core.name} on {neural_core.device}"
                 f"{', output gate on' if gate_on else ''}" if neural_core else "")
-             + (f"; compared with {compare_core.name}" if compare_core else ""))
+             + (f"; compared with {compare_core.name}" if compare_core else "")
+             + (f"; hybrid: Waveformer {hybrid_cores.waveformer.name} on "
+                f"{hybrid_cores.waveformer.device}, DeepFilterNet3 on "
+                f"{hybrid_cores.speech.device_name}" if hybrid_cores else ""))
 
     library = ClipLibrary.from_config(config)
     out_dir = config.paths["outputs"] / "eval" / name
@@ -501,7 +543,8 @@ def evaluate_extraction(config: AppConfig, method: str = "mask_baseline", split:
     labels = list(config.labels)
     records, listening, seconds = _run_pass(
         config, chosen, library, core, neural_core, sample_rate=sample_rate, reverberant=False,
-        want=want, out_dir=out_dir, progress=progress, compare_core=compare_core)
+        want=want, out_dir=out_dir, progress=progress, compare_core=compare_core,
+        hybrid_cores=hybrid_cores)
     result: dict[str, Any] = {
         "method": method,
         "split": split,
@@ -525,6 +568,19 @@ def evaluate_extraction(config: AppConfig, method: str = "mask_baseline", split:
     if compare_core is not None:
         result["compared_with"] = {"model": compare_core.name,
                                    "checkpoint": str(compare_core.checkpoint)}
+    if hybrid_cores is not None:
+        hy = config.extraction.hybrid
+        speech_labels = sorted(hy.speech.labels)
+        result["extractor"] = {
+            "model": f"{hybrid_cores.waveformer.name} + {hybrid_cores.speech.name}",
+            "device": f"{hybrid_cores.waveformer.device} + {hybrid_cores.speech.device_name}",
+            "checkpoint": str(hybrid_cores.waveformer.checkpoint),
+            "speech_checkpoint": str(hybrid_cores.speech.checkpoint),
+            "gate": dataclasses.asdict(hy.gate), "route": hy.speech.route,
+            "latencies": hybrid_cores.latencies(sample_rate)}
+        result["high_attenuation_db"] = ev.high_attenuation_db
+        result["speech_only"] = summarize(
+            [r for r in records if sorted(r["target"]) == speech_labels], systems)
     reverb_records: list[dict[str, Any]] = []
     if reverberant:
         progress("the same recipes in simulated rooms (reverberant copy) …")
@@ -541,7 +597,7 @@ def evaluate_extraction(config: AppConfig, method: str = "mask_baseline", split:
         }
 
     bench_records: dict[str, list[dict[str, Any]]] = {}
-    if benchmarks and neural_core is not None:
+    if benchmarks and (neural_core is not None or hybrid_cores is not None):
         sets = benchmark_sets(config, library, progress)
         result["benchmarks"] = {}
         for bench, recipes_ in sets.items():
@@ -552,7 +608,7 @@ def evaluate_extraction(config: AppConfig, method: str = "mask_baseline", split:
             rows, written, spent = _run_pass(
                 config, recipes_, library, core, neural_core, sample_rate=sample_rate,
                 reverberant=False, want=keep, out_dir=out_dir, progress=progress,
-                compare_core=compare_core)
+                compare_core=compare_core, hybrid_cores=hybrid_cores, stream=False)
             bench_records[bench] = rows
             listening += [{**w, "benchmark": bench} for w in written]
             parts = breakdowns(rows, labels, systems)
@@ -578,6 +634,11 @@ def evaluate_extraction(config: AppConfig, method: str = "mask_baseline", split:
         "method": method,
         "systems": list(systems),
         "extraction": dataclasses.asdict(config.extraction.mask_baseline),
+        "hybrid": (None if hybrid_cores is None else
+                   dataclasses.asdict(config.extraction.hybrid) | {
+                       "speech": dataclasses.asdict(config.extraction.hybrid.speech)
+                       | {"model_dir": str(hybrid_cores.speech.checkpoint.parent.parent)},
+                       "waveformer": str(hybrid_cores.waveformer.checkpoint)}),
         "neural_tse": (None if neural_core is None else
                        {"checkpoint": str(neural_core.checkpoint), "model": neural_core.name,
                         "live": dataclasses.asdict(config.extraction.neural_tse.live),
@@ -644,7 +705,8 @@ def _write_example(out_dir: Path, record: dict[str, Any], outputs: dict[str, np.
 
 def _examples_markdown(examples: list[dict[str, Any]], systems: Sequence[str] = SYSTEMS) -> str:
     shown = [s for s in ("timeline", "live", "oracle", "neural_v1", "neural_nogate",
-                         "neural_stream", "irm") if s in systems]
+                         "neural_stream", "irm", "wf", "dfn_hgate", "hybrid_offline",
+                         "hybrid_live") if s in systems]
     names = " / ".join(SHORT_NAMES[s] for s in shown)
     lines = ["# Listening examples", "",
              "Each recipe: `_mixture` (input), `_target` (the correct output) and one file per "
@@ -657,11 +719,15 @@ def _examples_markdown(examples: list[dict[str, Any]], systems: Sequence[str] = 
              "|---|---|---|---|---|"]
     for ex in examples:
         other = [p for p in ex["present"] if p not in ex["target"]] or ["(background only)"]
+        def cell(s: str, key: str, fmt: str, ex: dict = ex) -> str:
+            value = (ex["scores"].get(s) or {}).get(key)
+            return "-" if value is None else format(value, fmt)
+
         if ex["empty"]:
             scores = "target absent; suppression " + " / ".join(
-                f"{ex['scores'][s]['suppression_db']:.1f}" for s in shown)
+                cell(s, "suppression_db", ".1f") for s in shown)
         else:
-            scores = " / ".join(f"{ex['scores'][s]['si_sdr_i']:+.1f}" for s in shown)
+            scores = " / ".join(cell(s, "si_sdr_i", "+.1f") for s in shown)
         mark = f" ({ex['benchmark']})" if ex.get("benchmark") else ""
         lines.append(f"| {ex['id']}{mark} | {', '.join(ex['target'])} | {', '.join(other)} | "
                      f"{ex['target_to_rest_db']:+.1f} dB | {scores} |")
@@ -673,7 +739,7 @@ def write_per_recipe(path: Path, records: list[dict[str, Any]],
     systems = _systems_of(records) if systems is None else systems
     fields = ["id", "empty", "target", "present", "target_to_rest_db", "foreground",
               "target_active_s"]
-    metrics = ("si_sdr", "si_sdr_i", "snr_i", "missed", "suppression_db")
+    metrics = ("si_sdr", "si_sdr_i", "snr_i", "missed", "suppression_db", "interrupt")
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(fields + [f"{s}_{m}" for s in systems for m in metrics])
@@ -682,7 +748,7 @@ def write_per_recipe(path: Path, records: list[dict[str, Any]],
                    r["target_to_rest_db"], r["foreground"], r["target_active_s"]]
             for s in systems:
                 for m in metrics:
-                    value = r[s][m]
+                    value = (r.get(s) or {}).get(m)  # Speech-only systems: other recipes empty
                     row.append("" if value is None else int(value) if m == "missed" else value)
             writer.writerow(row)
 
@@ -710,6 +776,10 @@ def _overall_table(summary: dict[str, Any], systems: Sequence[str] = SYSTEMS,
             name = f"neural_tse streaming, {live_db:g} dB"
         if system == "neural_high_db" and high_db is not None:
             name = f"neural_tse streaming, {high_db:g} dB"
+        if system == "hybrid_live_db" and live_db is not None:
+            name = f"hybrid offline, {live_db:g} dB"
+        if system == "hybrid_high_db" and high_db is not None:
+            name = f"hybrid offline, {high_db:g} dB"
         worse = "-" if not summary["n"] else str(s.get("worse", "-"))
         lines.append(f"| {name} | {_f(s['si_sdr'])} | {_f(s['si_sdr_i'])} | "
                      f"{_f(s['si_sdr_i_median'])} | {_f(s['snr_i'])} | {worse} | {missed} | "
@@ -722,6 +792,8 @@ def _columns(systems: Sequence[str]) -> list[str]:
     variants that repeat ``neural_stream`` when it is there)."""
     hidden = {"mixture"} | ({"neural_offline", "neural_live_db", "neural_high_db"}
                             if "neural_stream" in systems else set())
+    if "hybrid_offline" in systems:  # step 07c: the stream equals offline; the dB variants
+        hidden |= {"hybrid_stream", "hybrid_live_db", "hybrid_high_db", "oracle", "irm"}
     return [s for s in systems if s not in hidden]
 
 
@@ -753,6 +825,22 @@ def format_markdown(result: dict[str, Any], labels: list[str]) -> str:
     def table(title: str, groups: dict[str, Any], **kw: Any) -> list[str]:
         return _breakdown_table(title, groups, systems=systems, **kw)
 
+    speech = result.get("speech_only")
+    speech_lines: list[str] = []
+    if speech and speech.get("n"):
+        speech_lines = [
+            f"## Speech selected alone ({speech['n']} recipes with a target, "
+            f"{speech['n_empty']} without)", "",
+            "| System | SI-SDRi (dB) | worse by > 5 dB | interruption | suppression, absent |",
+            "|---|---|---|---|---|"]
+        for s in systems:
+            row = speech[s]
+            if not row.get("n") and not row.get("n_empty"):
+                continue
+            inter = "-" if row["interruption"] is None else f"{100 * row['interruption']:.1f} %"
+            speech_lines.append(f"| {SYSTEM_NAMES[s]} | {_f(row['si_sdr_i'])} | {row['worse']} | "
+                                f"{inter} | {_f(row['suppression_db'])} |")
+        speech_lines.append("")
     lines = [
         f"# Extraction evaluation: {result['method']} ({result['split']})", "",
         f"{result['recipes']} recipes ({overall['n']} with a target, {overall['n_empty']} with "
@@ -761,6 +849,7 @@ def format_markdown(result: dict[str, Any], labels: list[str]) -> str:
         f"{result['detector']['device']}{neural}. {result['audio_seconds']:.0f} s of audio in "
         f"{sec['total']:.0f} s ({spent}).", "",
         "## Overall", "", *_overall_table(overall, systems, live_db, high_db), "",
+        *speech_lines,
     ]
     reverb = result.get("reverberant")
     if reverb:
@@ -828,12 +917,14 @@ BENCH_TEXT = {
 }
 
 
-def bench_path(config: AppConfig, bench: str) -> Path:
-    return Path(config.paths["mixtures"]) / f"bench_{bench}.jsonl"
+def bench_path(config: AppConfig, bench: str, split: str = "test") -> Path:
+    prefix = "bench_" if split == "test" else f"bench_{split}_"
+    return Path(config.paths["mixtures"]) / f"{prefix}{bench}.jsonl"
 
 
 def benchmark_sets(config: AppConfig, library: ClipLibrary,
-                   progress: Callable[[str], None] = print) -> dict[str, list[Recipe]]:
+                   progress: Callable[[str], None] = print, *, split: str = "test",
+                   counts: dict[str, int] | None = None) -> dict[str, list[Recipe]]:
     """The benchmark recipe sets: read from ``<mixtures>/bench_*.jsonl``, made (once, with
     ``benchmarks.seed``) when a file is missing. The file holds the settings it was made with
     (first line ``{"benchmark": ...}``), and a file made with other settings is made again."""
@@ -869,15 +960,22 @@ def benchmark_sets(config: AppConfig, library: ClipLibrary,
                                 [RecipeSpec(present=(key, c), target=(key,)) for c in others])
     out: dict[str, list[Recipe]] = {}
     for number, (bench, (count, settings, spec)) in enumerate(specs.items()):
-        path = bench_path(config, bench)
+        if counts is not None:  # step 07c: only these sets, this many recipes
+            if bench not in counts:
+                continue
+            count = counts[bench]
+        path = bench_path(config, bench, split)
         header = {"benchmark": bench, "count": count, "seed": ev.bench_seed + number,
                   "pair": list(ev.bench_pair or ()), "min_clip_s": ev.bench_pair_min_clip_s,
                   "labels": labels}
+        if split != "test":
+            header["split"] = split
         recipes = _read_bench(path, header)
         if recipes is None:
             try:
-                recipes = generate_recipes(library, config.labels, settings, "test", count,
-                                           ev.bench_seed + number, spec=spec, prefix=bench)
+                recipes = generate_recipes(library, config.labels, settings, split, count,
+                                           ev.bench_seed + number, spec=spec,
+                                           prefix=bench if split == "test" else f"{split}-{bench}")
             except Exception as exc:  # noqa: BLE001 - e.g. no LibriSpeech clips indexed
                 progress(f"benchmark {bench} skipped: {exc}")
                 continue

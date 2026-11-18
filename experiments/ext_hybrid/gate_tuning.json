@@ -1,0 +1,1028 @@
+{
+  "examples": 320,
+  "groups": {
+    "val": 200,
+    "pair_absent": 40,
+    "pair_a": 40,
+    "pair_b": 40
+  },
+  "attenuation_db": 30.0,
+  "warmup_ms": 1000.0,
+  "start_closed": true,
+  "rows": [
+    {
+      "gate": null,
+      "live": {
+        "si_sdr_i": 4.683,
+        "worse": 25,
+        "suppression_db": -12.641,
+        "pair_absent_db": -25.629,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 8.699,
+          "wf": 3.752
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.683,
+        "worse": 25,
+        "suppression_db": -12.641,
+        "pair_absent_db": -25.629,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 8.699,
+          "wf": 3.752
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.808,
+        "worse": 30,
+        "suppression_db": -14.108,
+        "pair_absent_db": -33.028,
+        "interruption": 0.328,
+        "si_sdr_i_by_route": {
+          "dfn": 6.981,
+          "wf": 3.073
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.801,
+        "worse": 24,
+        "suppression_db": -13.049,
+        "pair_absent_db": -39.249,
+        "interruption": 0.311,
+        "si_sdr_i_by_route": {
+          "dfn": 9.128,
+          "wf": 3.798
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.986,
+        "worse": 28,
+        "suppression_db": -13.991,
+        "pair_absent_db": -32.237,
+        "interruption": 0.327,
+        "si_sdr_i_by_route": {
+          "dfn": 7.392,
+          "wf": 3.196
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.733,
+        "worse": 24,
+        "suppression_db": -12.995,
+        "pair_absent_db": -38.419,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.036,
+          "wf": 3.736
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 4.049,
+        "worse": 29,
+        "suppression_db": -13.889,
+        "pair_absent_db": -32.123,
+        "interruption": 0.323,
+        "si_sdr_i_by_route": {
+          "dfn": 7.596,
+          "wf": 3.227
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.664,
+        "worse": 26,
+        "suppression_db": -12.991,
+        "pair_absent_db": -37.79,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.019,
+          "wf": 3.655
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.645,
+        "worse": 32,
+        "suppression_db": -17.488,
+        "pair_absent_db": -36.227,
+        "interruption": 0.329,
+        "si_sdr_i_by_route": {
+          "dfn": 7.04,
+          "wf": 2.859
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.668,
+        "worse": 29,
+        "suppression_db": -16.483,
+        "pair_absent_db": -44.725,
+        "interruption": 0.311,
+        "si_sdr_i_by_route": {
+          "dfn": 9.294,
+          "wf": 3.595
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.904,
+        "worse": 28,
+        "suppression_db": -14.505,
+        "pair_absent_db": -35.384,
+        "interruption": 0.327,
+        "si_sdr_i_by_route": {
+          "dfn": 7.606,
+          "wf": 3.046
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.622,
+        "worse": 26,
+        "suppression_db": -13.601,
+        "pair_absent_db": -43.463,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.139,
+          "wf": 3.575
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.951,
+        "worse": 29,
+        "suppression_db": -14.124,
+        "pair_absent_db": -35.185,
+        "interruption": 0.323,
+        "si_sdr_i_by_route": {
+          "dfn": 7.819,
+          "wf": 3.055
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.556,
+        "worse": 26,
+        "suppression_db": -13.478,
+        "pair_absent_db": -42.554,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.12,
+          "wf": 3.497
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.073,
+        "worse": 36,
+        "suppression_db": -18.613,
+        "pair_absent_db": -38.67,
+        "interruption": 0.358,
+        "si_sdr_i_by_route": {
+          "dfn": 5.907,
+          "wf": 2.416
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.351,
+        "worse": 32,
+        "suppression_db": -18.896,
+        "pair_absent_db": -46.841,
+        "interruption": 0.311,
+        "si_sdr_i_by_route": {
+          "dfn": 9.433,
+          "wf": 3.173
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.502,
+        "worse": 30,
+        "suppression_db": -14.898,
+        "pair_absent_db": -37.819,
+        "interruption": 0.353,
+        "si_sdr_i_by_route": {
+          "dfn": 6.65,
+          "wf": 2.772
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.355,
+        "worse": 27,
+        "suppression_db": -14.578,
+        "pair_absent_db": -45.555,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.342,
+          "wf": 3.199
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 200.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.597,
+        "worse": 30,
+        "suppression_db": -14.321,
+        "pair_absent_db": -37.569,
+        "interruption": 0.349,
+        "si_sdr_i_by_route": {
+          "dfn": 6.939,
+          "wf": 2.822
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.359,
+        "worse": 27,
+        "suppression_db": -14.11,
+        "pair_absent_db": -44.632,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.328,
+          "wf": 3.207
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.912,
+        "worse": 31,
+        "suppression_db": -13.8,
+        "pair_absent_db": -31.99,
+        "interruption": 0.328,
+        "si_sdr_i_by_route": {
+          "dfn": 7.295,
+          "wf": 3.128
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.804,
+        "worse": 23,
+        "suppression_db": -12.992,
+        "pair_absent_db": -38.723,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.14,
+          "wf": 3.799
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 4.062,
+        "worse": 29,
+        "suppression_db": -13.706,
+        "pair_absent_db": -31.19,
+        "interruption": 0.323,
+        "si_sdr_i_by_route": {
+          "dfn": 7.682,
+          "wf": 3.223
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.753,
+        "worse": 23,
+        "suppression_db": -12.986,
+        "pair_absent_db": -37.896,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.056,
+          "wf": 3.756
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 4.133,
+        "worse": 30,
+        "suppression_db": -13.587,
+        "pair_absent_db": -31.063,
+        "interruption": 0.323,
+        "si_sdr_i_by_route": {
+          "dfn": 7.895,
+          "wf": 3.261
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.691,
+        "worse": 24,
+        "suppression_db": -12.986,
+        "pair_absent_db": -37.239,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.041,
+          "wf": 3.683
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.772,
+        "worse": 31,
+        "suppression_db": -17.384,
+        "pair_absent_db": -34.75,
+        "interruption": 0.328,
+        "si_sdr_i_by_route": {
+          "dfn": 7.331,
+          "wf": 2.946
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.693,
+        "worse": 27,
+        "suppression_db": -16.402,
+        "pair_absent_db": -44.305,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.229,
+          "wf": 3.641
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 4.015,
+        "worse": 27,
+        "suppression_db": -14.482,
+        "pair_absent_db": -33.92,
+        "interruption": 0.327,
+        "si_sdr_i_by_route": {
+          "dfn": 7.898,
+          "wf": 3.115
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.642,
+        "worse": 25,
+        "suppression_db": -13.535,
+        "pair_absent_db": -43.03,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.116,
+          "wf": 3.605
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 4.079,
+        "worse": 28,
+        "suppression_db": -14.031,
+        "pair_absent_db": -33.699,
+        "interruption": 0.323,
+        "si_sdr_i_by_route": {
+          "dfn": 8.116,
+          "wf": 3.143
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.579,
+        "worse": 25,
+        "suppression_db": -13.464,
+        "pair_absent_db": -42.091,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.101,
+          "wf": 3.531
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.27,
+        "worse": 33,
+        "suppression_db": -18.404,
+        "pair_absent_db": -37.123,
+        "interruption": 0.334,
+        "si_sdr_i_by_route": {
+          "dfn": 6.423,
+          "wf": 2.539
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.404,
+        "worse": 29,
+        "suppression_db": -18.517,
+        "pair_absent_db": -46.585,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.399,
+          "wf": 3.246
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.671,
+        "worse": 29,
+        "suppression_db": -14.833,
+        "pair_absent_db": -36.262,
+        "interruption": 0.332,
+        "si_sdr_i_by_route": {
+          "dfn": 7.166,
+          "wf": 2.861
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.383,
+        "worse": 26,
+        "suppression_db": -14.435,
+        "pair_absent_db": -45.286,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.319,
+          "wf": 3.239
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 400.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 3.809,
+        "worse": 30,
+        "suppression_db": -14.122,
+        "pair_absent_db": -36.0,
+        "interruption": 0.328,
+        "si_sdr_i_by_route": {
+          "dfn": 7.635,
+          "wf": 2.923
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.377,
+        "worse": 26,
+        "suppression_db": -14.024,
+        "pair_absent_db": -44.335,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.305,
+          "wf": 3.235
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 4.031,
+        "worse": 30,
+        "suppression_db": -13.251,
+        "pair_absent_db": -30.032,
+        "interruption": 0.315,
+        "si_sdr_i_by_route": {
+          "dfn": 7.694,
+          "wf": 3.181
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.761,
+        "worse": 23,
+        "suppression_db": -12.989,
+        "pair_absent_db": -38.343,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.013,
+          "wf": 3.775
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 4.175,
+        "worse": 27,
+        "suppression_db": -13.16,
+        "pair_absent_db": -29.248,
+        "interruption": 0.314,
+        "si_sdr_i_by_route": {
+          "dfn": 8.059,
+          "wf": 3.274
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.725,
+        "worse": 23,
+        "suppression_db": -12.985,
+        "pair_absent_db": -37.549,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.001,
+          "wf": 3.734
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.3,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 4.332,
+        "worse": 27,
+        "suppression_db": -12.992,
+        "pair_absent_db": -29.107,
+        "interruption": 0.314,
+        "si_sdr_i_by_route": {
+          "dfn": 8.287,
+          "wf": 3.416
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.752,
+        "worse": 24,
+        "suppression_db": -12.984,
+        "pair_absent_db": -36.852,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 8.998,
+          "wf": 3.768
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.875,
+        "worse": 30,
+        "suppression_db": -14.99,
+        "pair_absent_db": -32.058,
+        "interruption": 0.319,
+        "si_sdr_i_by_route": {
+          "dfn": 7.477,
+          "wf": 3.04
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.691,
+        "worse": 26,
+        "suppression_db": -16.359,
+        "pair_absent_db": -43.857,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.185,
+          "wf": 3.649
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 4.147,
+        "worse": 27,
+        "suppression_db": -14.017,
+        "pair_absent_db": -31.251,
+        "interruption": 0.318,
+        "si_sdr_i_by_route": {
+          "dfn": 8.112,
+          "wf": 3.227
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.658,
+        "worse": 24,
+        "suppression_db": -13.531,
+        "pair_absent_db": -42.585,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.08,
+          "wf": 3.632
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.5,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 4.269,
+        "worse": 28,
+        "suppression_db": -13.574,
+        "pair_absent_db": -31.038,
+        "interruption": 0.314,
+        "si_sdr_i_by_route": {
+          "dfn": 8.351,
+          "wf": 3.323
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.682,
+        "worse": 24,
+        "suppression_db": -13.46,
+        "pair_absent_db": -41.626,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.072,
+          "wf": 3.664
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -6.0
+      },
+      "live": {
+        "si_sdr_i": 3.492,
+        "worse": 32,
+        "suppression_db": -15.407,
+        "pair_absent_db": -33.744,
+        "interruption": 0.32,
+        "si_sdr_i_by_route": {
+          "dfn": 6.847,
+          "wf": 2.715
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.444,
+        "worse": 29,
+        "suppression_db": -18.28,
+        "pair_absent_db": -46.279,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.394,
+          "wf": 3.296
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -10.0
+      },
+      "live": {
+        "si_sdr_i": 3.905,
+        "worse": 28,
+        "suppression_db": -14.269,
+        "pair_absent_db": -32.898,
+        "interruption": 0.318,
+        "si_sdr_i_by_route": {
+          "dfn": 7.584,
+          "wf": 3.052
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.437,
+        "worse": 26,
+        "suppression_db": -14.351,
+        "pair_absent_db": -44.984,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.355,
+          "wf": 3.297
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    },
+    {
+      "gate": {
+        "close_hold_ms": 800.0,
+        "close_prob_factor": 0.8,
+        "reopen_ratio_db": -14.0
+      },
+      "live": {
+        "si_sdr_i": 4.126,
+        "worse": 29,
+        "suppression_db": -13.576,
+        "pair_absent_db": -32.644,
+        "interruption": 0.314,
+        "si_sdr_i_by_route": {
+          "dfn": 8.135,
+          "wf": 3.196
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      },
+      "centred": {
+        "si_sdr_i": 4.505,
+        "worse": 25,
+        "suppression_db": -13.997,
+        "pair_absent_db": -44.016,
+        "interruption": 0.31,
+        "si_sdr_i_by_route": {
+          "dfn": 9.349,
+          "wf": 3.383
+        },
+        "with_target": 271,
+        "absent": 9,
+        "pair_absent": 40
+      }
+    }
+  ],
+  "seconds": 1687.8,
+  "max_cost_db": 1.0,
+  "clock": "live",
+  "chosen": {
+    "gate": {
+      "close_hold_ms": 400.0,
+      "close_prob_factor": 0.5,
+      "reopen_ratio_db": -6.0
+    },
+    "live": {
+      "si_sdr_i": 3.772,
+      "worse": 31,
+      "suppression_db": -17.384,
+      "pair_absent_db": -34.75,
+      "interruption": 0.328,
+      "si_sdr_i_by_route": {
+        "dfn": 7.331,
+        "wf": 2.946
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    },
+    "centred": {
+      "si_sdr_i": 4.693,
+      "worse": 27,
+      "suppression_db": -16.402,
+      "pair_absent_db": -44.305,
+      "interruption": 0.31,
+      "si_sdr_i_by_route": {
+        "dfn": 9.229,
+        "wf": 3.641
+      },
+      "with_target": 271,
+      "absent": 9,
+      "pair_absent": 40
+    }
+  }
+}

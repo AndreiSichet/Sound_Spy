@@ -14,7 +14,12 @@ from soundspy.api.schemas import (
     ModeInfo,
 )
 from soundspy.engine.modes import Mode, requires_array
-from soundspy.extraction.offline import neural_available, resolve_method
+from soundspy.extraction.offline import (
+    default_gate,
+    hybrid_available,
+    neural_available,
+    resolve_method,
+)
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -37,13 +42,18 @@ def app_config(config: ConfigDep) -> ConfigResponse:
         reason = None if available else "requires a microphone array (device profile geometry)"
         modes.append(ModeInfo(mode=mode, available=available, reason=reason))
     reason = neural_available(config)
+    hybrid_reason = hybrid_available(config)
     methods = [
+        MethodInfo(name="hybrid", display_name="Hybrid", available=hybrid_reason is None,
+                   reason=hybrid_reason),
         MethodInfo(name="neural_tse", display_name="Neural", available=reason is None,
                    reason=reason),
         MethodInfo(name="mask_baseline", display_name="Baseline", available=True),
     ]
+    default = resolve_method(config)[0]
     return ConfigResponse(
         classes=classes, modes=modes, device_profile=profile.name,
-        extraction_methods=methods, default_method=resolve_method(config)[0],
-        default_gate=config.extraction.neural_tse.gate.enabled,
+        extraction_methods=methods, default_method=default,
+        default_gate=default_gate(config, default),
+        default_gates={m.name: default_gate(config, m.name) for m in methods},
         default_attenuation_db=config.extraction.default_attenuation_db)

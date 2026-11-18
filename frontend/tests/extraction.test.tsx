@@ -648,7 +648,7 @@ describe('the neural output gate (step 07b)', () => {
     render(<ExtractionControls />)
     expect(screen.getByLabelText('Output gate')).toBeDisabled()
     expect(screen.getByLabelText('Output gate')).toHaveAttribute(
-      'title', 'The gate belongs to the Neural method',
+      'title', 'The gate belongs to the Hybrid and Neural methods',
     )
   })
 
@@ -690,5 +690,77 @@ describe('the neural output gate (step 07b)', () => {
     expect(body).toEqual({ labels: ['speech'], attenuation_db: 40, method: 'neural_tse',
                            gate: false })
     expect(screen.getByTestId('run-run_g')).toHaveTextContent('Neural · no gate')
+  })
+})
+
+describe('hybrid method (step 07c)', () => {
+  const HYBRID: ConfigResponse = {
+    ...CONFIG,
+    extraction_methods: [
+      { name: 'hybrid', display_name: 'Hybrid', available: true, reason: null },
+      { name: 'neural_tse', display_name: 'Neural', available: true, reason: null },
+      { name: 'mask_baseline', display_name: 'Baseline', available: true, reason: null },
+    ],
+    default_method: 'hybrid',
+    default_gate: true,
+    default_gates: { hybrid: true, neural_tse: false, mask_baseline: false },
+    default_attenuation_db: 15,
+  }
+  const IDLE: EngineStatus = {
+    state: 'idle', mode: null, device: null, sample_rate: null, channels: null, message: '',
+  }
+
+  it('is the default and its gate switch is on and usable', () => {
+    useAppStore.setState({ config: HYBRID, status: IDLE })
+    render(<ExtractionControls />)
+    expect(screen.getByLabelText('Extraction method')).toHaveValue('hybrid')
+    const gate = screen.getByLabelText('Output gate')
+    expect(gate).toBeEnabled()
+    expect(gate).toHaveAttribute('aria-pressed', 'true')
+    expect(gate.getAttribute('title')).toContain('Hybrid')
+  })
+
+  it('shows Neural with its own gate default (off)', () => {
+    useAppStore.setState({ config: HYBRID, status: { ...IDLE, extraction_method: 'neural_tse' } })
+    render(<ExtractionControls />)
+    expect(screen.getByLabelText('Output gate')).toHaveTextContent('Gate off')
+  })
+
+  it('the session bar shows the route, the gate state and the delay', () => {
+    useAppStore.setState({
+      status: {
+        ...RUNNING,
+        latency_ms: 145.2,
+        extraction_method: 'hybrid',
+        extraction: {
+          method: 'hybrid', latency_ms: 39.98, gating: true, target_active: true,
+          device: 'cpu (onnx)', route: 'speech_enhancer', gate: true, gate_state: 'closed',
+          model_ms: 4.1, model_ms_p95: 5.5,
+        },
+      },
+    })
+    render(<SessionBar />)
+    const stats = screen.getByTestId('session-stats')
+    expect(stats).toHaveTextContent(
+      'Hybrid · speech enhancer · cpu (onnx) · gate closed · +39.98 ms',
+    )
+    expect(stats).toHaveTextContent('145.2 ms')
+    expect(stats).toHaveTextContent('4.1 ms (p95 5.5)')
+  })
+
+  it('says when the hybrid has no detector for its gate', () => {
+    useAppStore.setState({
+      status: {
+        ...RUNNING,
+        extraction: {
+          method: 'hybrid', latency_ms: 39.98, gating: false, target_active: false,
+          route: 'waveformer', gate: true, gate_state: 'open',
+        },
+      },
+    })
+    render(<SessionBar />)
+    expect(screen.getByTestId('session-stats')).toHaveTextContent(
+      'Hybrid · Waveformer · gate open · no detector · +39.98 ms',
+    )
   })
 })

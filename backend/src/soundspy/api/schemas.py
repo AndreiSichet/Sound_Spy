@@ -162,6 +162,15 @@ class ExtractionStatusModel(BaseModel):
     compiled: bool | None = None  # the streaming step runs as a traced (TorchScript) module
     gate: bool | None = None  # the neural extractor's output gate is on (step 07b)
     gate_closed: float | None = None  # share of model steps with the gate mostly closed
+    # hybrid extractor only (step 07c)
+    route: str | None = None  # off | speech_enhancer | waveformer | cascade
+    routes: list[str] | None = None  # the routes this session can use
+    gate_state: str | None = None  # open | closed | off (the hybrid gate right now)
+    gate_reopened: int | None = None  # times the gate reopened
+    speech_enhancer: dict[str, Any] | None = None  # model, device, latency_ms, model_ms(_p95)
+    waveformer: dict[str, Any] | None = None  # the same for the Waveformer route
+    performance_cores: bool | None = None  # the audio thread is kept on the fast CPU cores
+    notes: list[str] | None = None  # routes that are missing, and why
 
 
 class WarningModel(_FromCore):
@@ -254,8 +263,8 @@ class SourceRequest(BaseModel):
     loop: bool = True
 
 
-SessionMethod = Literal["neural_tse", "mask_baseline", "passthrough"]
-RunMethod = Literal["neural_tse", "mask_baseline"]
+SessionMethod = Literal["hybrid", "neural_tse", "mask_baseline", "passthrough"]
+RunMethod = Literal["hybrid", "neural_tse", "mask_baseline"]
 
 
 class SessionStartRequest(BaseModel):
@@ -296,7 +305,7 @@ class ProcessRequest(BaseModel):
     # None = extraction.default_attenuation_db
     attenuation_db: float | None = Field(default=None, ge=0.0, le=60.0)
     method: RunMethod | None = None  # None = the default method that can run
-    gate: bool | None = None  # neural only; None = extraction.neural_tse.gate.enabled
+    gate: bool | None = None  # hybrid / neural; None = the method's own default (step 07c)
 
 
 # --- REST --------------------------------------------------------------------------------------
@@ -324,7 +333,7 @@ class ModeInfo(BaseModel):
 class MethodInfo(BaseModel):
     """An extraction method the page can offer."""
 
-    name: str  # neural_tse | mask_baseline
+    name: str  # hybrid | neural_tse | mask_baseline
     display_name: str
     available: bool
     reason: str | None = None  # why not, when unavailable
@@ -336,7 +345,10 @@ class ConfigResponse(BaseModel):
     device_profile: str
     extraction_methods: list[MethodInfo] = Field(default_factory=list)
     default_method: str = "mask_baseline"  # what a session uses when nothing was chosen
-    default_gate: bool = True  # whether the neural output gate is on when nothing was chosen
+    default_gate: bool = True  # whether the default method's gate is on when nothing was chosen
+    # step 07c: each method's own gate default (hybrid: its hybrid gate; neural_tse: the
+    # output gate of step 07b)
+    default_gates: dict[str, bool] = Field(default_factory=dict)
     default_attenuation_db: float = 15.0
 
 

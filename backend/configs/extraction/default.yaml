@@ -1,10 +1,11 @@
 # Extraction: which method a new session and offline processing use by default, and how the
-# methods are evaluated. Method parameters live in their own files (neural_tse.yaml,
-# mask_baseline.yaml).
+# methods are evaluated. Method parameters live in their own files (hybrid.yaml,
+# neural_tse.yaml, mask_baseline.yaml).
 
-method: neural_tse               # neural_tse | mask_baseline | passthrough
-                                 # neural_tse needs its checkpoint (neural_tse.yaml); without it
-                                 # the session falls back to mask_baseline and says so
+method: hybrid                   # hybrid | neural_tse | mask_baseline | passthrough (step 07c: hybrid)
+                                 # hybrid needs the Waveformer checkpoint (neural_tse.yaml) or the
+                                 # speech enhancer (hybrid.yaml), neural_tse its checkpoint; without
+                                 # them the session falls back to mask_baseline and says so
 
 default_attenuation_db: 15       # how far non-target sound is turned down when nothing else is
                                  # asked for: the page's slider, a session, offline runs.

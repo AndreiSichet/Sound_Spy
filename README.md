@@ -107,12 +107,23 @@ soundspy evaluate detection --split test      # fine-tuned vs zero-shot
 soundspy detect data\raw\<file>.wav          # per-class timeline of a recording
 ```
 
-### Extraction (steps 06-07b)
+### Extraction (steps 06-07c)
 
-Two methods: **Neural** (`neural_tse`: a fine-tuned Waveformer, the default once it is trained,
-with an output gate that can be switched off) and **Baseline** (`mask_baseline`: the
-detector-gated filter of step 06). Without a trained neural model the app falls back to the
-baseline and says so.
+Three methods: **Hybrid** (`hybrid`, the default since step 07c: Speech alone goes through the
+speech enhancer DeepFilterNet3, every other selection through the Waveformer, and a gate that
+the detector closes and the extractor's output reopens), **Neural** (`neural_tse`: the
+fine-tuned Waveformer alone, with the step-07b output gate, off by default) and **Baseline**
+(`mask_baseline`: the detector-gated filter of step 06). A method whose model is missing falls
+back to the baseline and says so.
+
+```powershell
+soundspy data download deepfilternet                   # step 07c: the speech enhancer (8 MB) + its ONNX export
+soundspy evaluate hybrid-gate                          # choose the hybrid gate's settings on validation
+soundspy evaluate extraction --method hybrid --name ext_hybrid    # all hybrid systems + benchmarks
+soundspy record-benchmark --pop                        # record the real-room benchmark (about 3 min)
+soundspy evaluate extraction --method hybrid --benchmark real     # score it
+soundspy extract data\raw\<file>.wav --labels speech --method hybrid --attenuation-db 40
+```
 
 ```powershell
 pip install -e ".[api,data,ml,spatial,dev]"            # spatial = pyroomacoustics (simulated rooms for training)
@@ -126,7 +137,7 @@ soundspy evaluate gate                                 # choose the output gate'
 soundspy evaluate extraction --method neural_tse --name ext_neural_tse_v2   # all systems + benchmarks
 soundspy evaluate extraction --method mask_baseline    # the step-06 comparison alone (~4 min)
 soundspy extract data\raw\<file>.wav --labels speech   # keep speech, rest -15 dB -> outputs\processed
-soundspy extract data\raw\<file>.wav --labels speech --no-gate   # the network without its output gate
+soundspy extract data\raw\<file>.wav --labels speech --no-gate   # the default method without its gate
 soundspy extract data\raw\<file>.wav --labels speech --method mask_baseline --attenuation-db 30
 soundspy db rebuild                                    # the database is only an index: rebuild it from the sidecars
 ```

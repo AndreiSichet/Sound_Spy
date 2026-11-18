@@ -1,20 +1,23 @@
 // Extraction controls next to Listen:
-// - Method (step 07): Neural (the trained network) or Baseline (the detector-gated filter of
-//   step 06). It belongs to a session, so it can be changed only while stopped. A method that
-//   cannot run (no trained model yet) is greyed out, with the reason as its tooltip.
-// - Gate (step 07b, Neural only): a soft gate after the network turns its output further down
-//   while it holds almost nothing of the input (the selected sound is not there). Like the
-//   method it belongs to a session: switched while stopped.
+// - Method: Hybrid (step 07c: the speech enhancer for Speech alone, the Waveformer for other
+//   selections, and a gate the detector closes), Neural (the Waveformer alone, step 07) or
+//   Baseline (the detector-gated filter of step 06). It belongs to a session, so it can be
+//   changed only while stopped. A method that cannot run (no model yet) is greyed out, with
+//   the reason as its tooltip.
+// - Gate: Hybrid: the gate that silences the pauses (the detector closes it, the extractor's
+//   own output reopens it at once); Neural: the step-07b output gate (off by default). Each
+//   method starts with its own default; like the method it belongs to a session.
 // - Attenuation: how much everything that is NOT selected is turned down (0-40 dB). It is part
 //   of the target, so it is sent together with the selected classes (set_target).
 // - Bypass (A/B): hear the unprocessed sound instead, with the same delay, to compare at once.
 import { ApiError, api } from '../../api/client.ts'
-import { MAX_ATTENUATION_DB, isExtractionMethod, targetFor } from '../../api/target.ts'
+import { MAX_ATTENUATION_DB, hasGate, isExtractionMethod, targetFor } from '../../api/target.ts'
 import type { MethodInfo } from '../../api/types.ts'
 import { sendTarget } from '../../hooks/useSessionSocket.ts'
 import { useAppStore } from '../../store/appStore.ts'
 
 const FALLBACK_METHODS: MethodInfo[] = [
+  { name: 'hybrid', display_name: 'Hybrid', available: true, reason: null },
   { name: 'neural_tse', display_name: 'Neural', available: true, reason: null },
   { name: 'mask_baseline', display_name: 'Baseline', available: true, reason: null },
 ]
@@ -31,11 +34,12 @@ export function ExtractionControls() {
   const running = status?.state === 'running'
   const methods = config?.extraction_methods?.length ? config.extraction_methods : FALLBACK_METHODS
   // what sessions are started with; an unavailable choice shows what would really run
-  const chosen = status?.extraction_method ?? config?.default_method ?? 'neural_tse'
+  const chosen = status?.extraction_method ?? config?.default_method ?? 'hybrid'
   const usable = methods.find((m) => m.name === chosen)?.available !== false
   const method = usable ? chosen : (config?.default_method ?? chosen)
-  const gate = status?.extraction_gate ?? config?.default_gate ?? true
-  const gateUsable = method === 'neural_tse'
+  const gate =
+    status?.extraction_gate ?? config?.default_gates?.[method] ?? config?.default_gate ?? true
+  const gateUsable = hasGate(method)
 
   const changeMethod = async (value: string) => {
     if (!isExtractionMethod(value)) return
@@ -102,11 +106,14 @@ export function ExtractionControls() {
         aria-label="Output gate"
         title={
           !gateUsable
-            ? 'The gate belongs to the Neural method'
+            ? 'The gate belongs to the Hybrid and Neural methods'
             : running
               ? 'Stop the session to switch the gate'
-              : 'Neural: turn the output further down while the selected sound is not there ' +
-                '(switch off to hear the network alone)'
+              : method === 'hybrid'
+                ? 'Hybrid: silence while the detector is sure the selected sound is not there; ' +
+                  'opens again the moment the extractor hears it (switch off to compare)'
+                : 'Neural: turn the output further down while the selected sound is not ' +
+                  'there (switch off to hear the network alone)'
         }
         className={`rounded border px-3 py-1 text-sm disabled:opacity-60 ${
           gate && gateUsable ? 'border-sky-500 bg-sky-900/40 text-sky-100' : 'border-slate-700'

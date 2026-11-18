@@ -61,7 +61,7 @@ def test_latency_is_reported_and_constant(tiny_neural) -> None:
     bridged = make(tiny_neural, 48_000, target("speech"))
     waiting = int(np.ceil(15 * 3))  # the same wait in 48 kHz samples
     assert bridged.latency_samples > waiting  # + the two resampling filters
-    assert bridged.latency_samples == waiting + bridged._filter_delay
+    assert bridged.latency_samples == waiting + bridged.stream._filter_delay
     info = bridged.status_info()
     assert info["method"] == "neural_tse" and info["device"] == "cpu"
     assert info["latency_ms"] == round(1000 * bridged.latency_samples / 48_000, 2)

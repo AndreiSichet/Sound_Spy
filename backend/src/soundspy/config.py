@@ -294,7 +294,7 @@ class DetectionConfig:
 
 
 BACKBONES = ("efficientat_mn10_as", "stub")
-EXTRACTION_METHODS = ("mask_baseline", "neural_tse", "passthrough")
+EXTRACTION_METHODS = ("hybrid", "mask_baseline", "neural_tse", "passthrough")
 
 
 @dataclass(frozen=True)
@@ -384,6 +384,62 @@ class NeuralGateConfig:
     close_db: float = -22.0  # below this: ``depth_db`` of extra attenuation
     depth_db: float = 25.0
     hold_ms: float = 200.0
+
+
+@dataclass(frozen=True)
+class HybridGateConfig:
+    """The hybrid extractor's gate (step 07c): the detector closes it, the output reopens it."""
+
+    enabled: bool = True
+    close_prob_factor: float = 0.5  # "confidently absent": probability < factor x threshold
+    close_hold_ms: float = 400.0  # ... for this long, and no output rise for this long
+    close_ms: float = 150.0  # closing ramp
+    open_ms: float = 5.0  # opening ramp
+    reopen_ratio_db: float = -10.0  # estimate vs input above this: open at once
+    attack_ms: float = 5.0  # level envelopes
+    release_ms: float = 50.0
+    min_level_dbfs: float = -60.0  # input quieter than this: no "rise" (nothing to judge)
+    block_ms: float = 1.0  # decision grid
+    warmup_ms: float = 2000.0  # after the speech enhancer starts, its output cannot reopen
+    start_closed: bool = True  # a stream that starts with a selection (and a detector): closed
+
+
+@dataclass(frozen=True)
+class HybridSpeechConfig:
+    """The speech route: DeepFilterNet3 (``speech`` in ``hybrid.yaml``)."""
+
+    labels: tuple[str, ...]  # a selection of exactly these classes goes to this route
+    route: str  # enhancer | cascade
+    model_file: str
+    model_url: str
+    model_sha256: str
+    atten_lim_db: float | None
+    post_filter: bool
+    device: str  # cpu | cuda | auto
+    backend: str  # onnx | torch
+    cpu_threads: int
+    model_dir: Path | None = None  # None: <model_cache>/deepfilternet/<model_file stem> (tests
+    #                                point it elsewhere)
+
+
+@dataclass(frozen=True)
+class HybridConfig:
+    """``configs/extraction/hybrid.yaml`` (step 07c)."""
+
+    speech: HybridSpeechConfig
+    gate: HybridGateConfig
+    ramp_ms: float
+    performance_cores: bool
+    tuning: dict[str, tuple[float, ...]]  # gate parameter -> values tried on val
+    tuning_max_cost_db: float  # strongest suppression whose SI-SDRi cost stays within this
+
+
+def speech_model_dir(config: AppConfig) -> Path:
+    """Where the speech enhancer's unpacked model lives."""
+    speech = config.extraction.hybrid.speech
+    if speech.model_dir is not None:
+        return Path(speech.model_dir)
+    return Path(config.paths["model_cache"]) / "deepfilternet" / Path(speech.model_file).stem
 
 
 @dataclass(frozen=True)
@@ -481,6 +537,7 @@ class ExtractionConfig:
     evaluation: ExtractionEvalConfig
     mask_baseline: MaskBaselineConfig
     neural_tse: NeuralTSEConfig
+    hybrid: HybridConfig
 
 
 @dataclass(frozen=True)
@@ -1094,6 +1151,78 @@ def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> 
     )
 
 
+HYBRID_TUNABLE = ("close_prob_factor", "close_hold_ms", "reopen_ratio_db")
+
+
+def load_hybrid_config(path: Path, labels: LabelSet) -> HybridConfig:
+    """Load and validate ``configs/extraction/hybrid.yaml``."""
+    path = Path(path)
+    source = f"extraction/{path.name}"
+    top = _Section({"root": load_yaml(path)}, "root", ("speech", "gate", "live", "tuning"),
+                   source)
+    top.name = ""
+    sp = _Section(top.data, "speech", ("labels", "route", "model", "atten_lim_db",
+                                       "post_filter", "device", "backend", "cpu_threads"), source)
+    chosen = sp.data["labels"]
+    if (not isinstance(chosen, list) or not chosen
+            or not all(isinstance(c, str) and c in labels for c in chosen)):
+        raise sp._fail("labels", f"a non-empty list of classes from {list(labels)}")
+    model = sp.sub("model", ("file", "url", "sha256"))
+    sha = _text(model, "sha256").lower()
+    if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+        raise model._fail("sha256", "a 64-character hex SHA-256")
+    lim = sp.data["atten_lim_db"]
+    if lim is not None and (isinstance(lim, bool) or not isinstance(lim, int | float)
+                            or not 0 < lim <= 100):
+        raise sp._fail("atten_lim_db", "null or a number in (0, 100]")
+    g = _Section(top.data, "gate", ("enabled", "close_prob_factor", "close_hold_ms", "close_ms",
+                                    "open_ms", "reopen_ratio_db", "attack_ms", "release_ms",
+                                    "min_level_dbfs", "block_ms", "warmup_ms", "start_closed"),
+                 source)
+    gate = HybridGateConfig(
+        enabled=g.boolean("enabled"),
+        close_prob_factor=g.number("close_prob_factor", gt=0, le=1),
+        close_hold_ms=g.number("close_hold_ms", ge=0, le=10000),
+        close_ms=g.number("close_ms", ge=0, le=5000),
+        open_ms=g.number("open_ms", ge=0, le=1000),
+        reopen_ratio_db=g.number("reopen_ratio_db", ge=-80, le=20),
+        attack_ms=g.number("attack_ms", gt=0, le=1000),
+        release_ms=g.number("release_ms", gt=0, le=5000),
+        min_level_dbfs=g.number("min_level_dbfs", ge=-140, le=0),
+        block_ms=g.number("block_ms", gt=0, le=50),
+        warmup_ms=g.number("warmup_ms", ge=0, le=10000),
+        start_closed=g.boolean("start_closed"),
+    )
+    live = _Section(top.data, "live", ("ramp_ms", "performance_cores"), source)
+    tu = _Section(top.data, "tuning", (*HYBRID_TUNABLE, "max_cost_db"), source)
+    grid: dict[str, tuple[float, ...]] = {}
+    for key in HYBRID_TUNABLE:
+        values = tu.data[key]
+        if (not isinstance(values, list) or not values
+                or not all(isinstance(v, int | float) and not isinstance(v, bool) for v in values)):
+            raise tu._fail(key, "a non-empty list of numbers")
+        grid[key] = tuple(float(v) for v in values)
+    return HybridConfig(
+        speech=HybridSpeechConfig(
+            labels=tuple(chosen),
+            route=_choice(sp, "route", ("enhancer", "cascade")),
+            model_file=_text(model, "file"),
+            model_url=_text(model, "url"),
+            model_sha256=sha,
+            atten_lim_db=None if lim is None else float(lim),
+            post_filter=sp.boolean("post_filter"),
+            device=_choice(sp, "device", ("cpu", "cuda", "auto")),
+            backend=_choice(sp, "backend", ("onnx", "torch")),
+            cpu_threads=sp.integer("cpu_threads", ge=1),
+        ),
+        gate=gate,
+        ramp_ms=live.number("ramp_ms", ge=0, le=1000),
+        performance_cores=live.boolean("performance_cores"),
+        tuning=grid,
+        tuning_max_cost_db=tu.number("max_cost_db", ge=0, le=10),
+    )
+
+
 def load_extraction_config(directory: Path, project_root: Path, labels: LabelSet
                            ) -> ExtractionConfig:
     """Load ``configs/extraction/``: ``default.yaml`` and the per-method files."""
@@ -1145,6 +1274,7 @@ def load_extraction_config(directory: Path, project_root: Path, labels: LabelSet
         ),
         mask_baseline=load_mask_baseline_config(directory / "mask_baseline.yaml"),
         neural_tse=load_neural_tse_config(directory / "neural_tse.yaml", project_root, labels),
+        hybrid=load_hybrid_config(directory / "hybrid.yaml", labels),
     )
 
 

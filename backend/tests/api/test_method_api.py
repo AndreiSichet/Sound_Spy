@@ -142,14 +142,19 @@ def test_config_lists_the_methods(root_config, neural_config) -> None:
         body = client.get("/api/config").json()
     assert body["default_method"] == "neural_tse" and body["default_attenuation_db"] == 15.0
     assert body["extraction_methods"] == [
+        # step 07c: the hybrid can run with its Waveformer route alone
+        {"name": "hybrid", "display_name": "Hybrid", "available": True, "reason": None},
         {"name": "neural_tse", "display_name": "Neural", "available": True, "reason": None},
         {"name": "mask_baseline", "display_name": "Baseline", "available": True,
          "reason": None}]
+    assert body["default_gates"] == {"hybrid": True, "neural_tse": False,
+                                     "mask_baseline": False}
     with TestClient(create_app(no_checkpoint(root_config))) as client:
         body = client.get("/api/config").json()
         status = client.get("/api/session").json()
     assert body["default_method"] == "mask_baseline"  # what a session would really use
-    neural = body["extraction_methods"][0]
+    hybrid, neural = body["extraction_methods"][:2]
+    assert hybrid["available"] is False and "deepfilternet" in hybrid["reason"]
     assert neural["available"] is False and "soundspy train extraction" in neural["reason"]
     assert status["extraction_method"] == "neural_tse"  # the configured choice
 

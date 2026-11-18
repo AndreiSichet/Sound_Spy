@@ -1,0 +1,77 @@
+# Hybrid extraction (step 07c): silence when the selected sound is absent, separation when sounds
+# overlap. Three parts, each doing what it was measured to do best:
+#   * Speech selected alone -> a dedicated speech enhancer, DeepFilterNet3 (separates a voice
+#     from music and noise, which both earlier methods could not);
+#   * any other selection -> the Waveformer (neural_tse.yaml, the step-07 model v1);
+#   * after either: a gate that the DETECTOR closes when it is sure nothing selected is there
+#     (the baseline's silent pauses) and the EXTRACTOR's output reopens at once (word starts).
+
+speech:
+  labels: [speech]               # a selection of exactly these classes goes to the speech route;
+                                 # speech together with other classes goes to the Waveformer (two
+                                 # extractors summed would count the shared sound twice)
+  route: enhancer                # enhancer: DeepFilterNet3 on the input
+                                 # cascade: Waveformer (Speech), then DeepFilterNet3 (evaluated
+                                 # in step 07c; +40 ms more delay and both models per chunk)
+  model:                         # DeepFilterNet3, release 0.5.6 (Schroeter et al., MIT / Apache-2.0)
+    file: DeepFilterNet3.zip     # -> <model_cache>/deepfilternet/ (soundspy data download deepfilternet)
+    url: https://github.com/Rikorose/DeepFilterNet/raw/v0.5.6/models/DeepFilterNet3.zip
+    sha256: 49c52edc8947ae1f9bf50d81530beaf3a2c3245aeaf34b6f31ff535cd22284d2
+  atten_lim_db: null             # DeepFilterNet's own attenuation limit: none, so that the
+                                 # session's slider is the only attenuation control
+  post_filter: false             # DeepFilterNet's optional post-filter (a little extra noise
+                                 # reduction between harmonics)
+  device: cpu                    # cpu | cuda | auto (= cpu): the graphics card is the Waveformer's
+  backend: onnx                  # onnx: the streaming step exported once and run by ONNX Runtime
+                                 # (2.6 ms per 20 ms chunk on the laptop); torch: PyTorch (8-16 ms)
+  cpu_threads: 1                 # ONNX Runtime / PyTorch threads of the speech enhancer
+
+gate:                            # HybridGate (extraction/hybrid_gate.py)
+  enabled: true                  # the page's "Gate" switch turns it off for a session
+  close_prob_factor: 0.5         # close only when every selected class's smoothed detector
+                                 # probability is below this x its own threshold ("sure") ...
+  close_hold_ms: 400             # ... for this long, with no output rise for this long either
+  close_ms: 150                  # closing ramp
+  open_ms: 5                     # opening ramp (a word start must not wait)
+  reopen_ratio_db: -6            # the extractor's output this close to the input's level or
+                                 # closer: open at once, whatever the detector says
+                                 # close_prob_factor / close_hold_ms / reopen_ratio_db: chosen by
+                                 # `soundspy evaluate hybrid-gate` on validation (2026-11-18,
+                                 # 320 recipes, live detector, tuning rule below): SI-SDRi +4.68
+                                 # -> +3.77 dB (offline detector +4.69), target absent -12.6 ->
+                                 # -17.4 dB, music only with Speech selected -25.6 -> -34.8 dB
+                                 # (offline -44.3) at 30 dB
+  attack_ms: 5                   # level envelopes of output and input: rise ...
+  release_ms: 50                 # ... and fall
+  min_level_dbfs: -60            # an input quieter than this cannot reopen the gate
+  block_ms: 1                    # decision grid (no added latency: a decision applies to the
+                                 # next millisecond)
+  warmup_ms: 1000                # after the speech enhancer starts, its output does not reopen
+                                 # the gate for this long (only the detector does): it leaks
+                                 # until it has heard enough. Measured, DeepFilterNet3 on the
+                                 # owner's classical recording: estimate -9 dB against the input
+                                 # in the first second, -18 dB in the second, below -75 dB
+                                 # afterwards. (The Waveformer has no such start-up leak.)
+                                 # Validation (400 / 0.5 / -10): 2 s cost the speech route 2.2 dB
+                                 # SI-SDRi with the live detector (1 s: 0.8, 0 s: 0.5) for
+                                 # -44.3 / -43.0 / -40.6 dB on "music only, Speech selected"
+                                 # offline: 1 s
+  start_closed: true             # a stream that starts with a selection (offline runs, a
+                                 # session started with chips selected) starts closed; the
+                                 # detector or (after warmup_ms) the output opens it. Needs the
+                                 # detector: without one the gate starts open
+
+live:
+  ramp_ms: 20                    # crossfade between routes and pass-through
+  performance_cores: true        # keep the audio thread on the CPU's performance cores (Intel
+                                 # 12th gen and later have slower efficiency cores; measured on
+                                 # the laptop: DeepFilterNet step p95 11.5 -> 5.5 ms)
+
+tuning:                          # soundspy evaluate hybrid-gate (validation recipes, never test)
+  close_prob_factor: [0.3, 0.5, 0.8]
+  close_hold_ms: [200, 400, 800]
+  reopen_ratio_db: [-6, -10, -14]
+  max_cost_db: 1.0               # the strongest target-absent suppression (live detector)
+                                 # whose SI-SDRi cost against no gate stays within this. (0.3 as
+                                 # in step 07b is met by no setting with the live detector: its
+                                 # lag alone costs ~0.9 dB; offline the gate costs ~0.05 dB)

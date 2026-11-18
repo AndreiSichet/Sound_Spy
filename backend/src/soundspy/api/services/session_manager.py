@@ -77,7 +77,7 @@ class SessionManager:
         self.monitor = (False, config.output.default_gain_db, False)
         self.bypass = False
         self.method: str | None = None  # None = extraction.method from the configuration
-        self.gate: bool | None = None  # None = extraction.neural_tse.gate.enabled
+        self.gate: bool | None = None  # None = the chosen method's own default (step 07c)
         self._lock = threading.RLock()
 
     @property
@@ -96,8 +96,11 @@ class SessionManager:
 
     @property
     def selected_gate(self) -> bool:
-        """Whether sessions start with the neural extractor's output gate on."""
-        return self.config.extraction.neural_tse.gate.enabled if self.gate is None else self.gate
+        """Whether sessions start with the method's gate on: the hybrid gate (hybrid) or the
+        output gate (neural_tse); ``None`` chosen = that method's own default."""
+        from soundspy.extraction.offline import default_gate
+
+        return default_gate(self.config, self.selected_method) if self.gate is None else self.gate
 
     def _chosen(self, status: EngineStatus, **changes) -> EngineStatus:
         return dataclasses.replace(status, extraction_method=self.selected_method,
@@ -241,12 +244,15 @@ class SessionManager:
         with self._lock:
             if self.running:
                 raise ConflictError("stop the session to change the extraction method")
+            if method != self.selected_method:
+                self.gate = None  # each method starts with its own gate default (step 07c)
             self.method = method
             return self.status()
 
     def set_gate(self, enabled: bool) -> EngineStatus:
-        """Switch the neural output gate of the next session (like the method, not while one
-        runs: a session keeps the processing it was started with)."""
+        """Switch the gate of the next session: the hybrid gate (Hybrid) or the output gate
+        (Neural); like the method, not while one runs: a session keeps the processing it was
+        started with."""
         with self._lock:
             if self.running:
                 raise ConflictError("stop the session to switch the gate")

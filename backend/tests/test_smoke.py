@@ -17,7 +17,8 @@ import soundspy
 from soundspy.cli.main import main
 
 IMPLEMENTED_COMMANDS = [
-    "serve", "devices", "check-mic", "record", "record-dataset", "data", "train",
+    "serve", "devices", "check-mic", "record", "record-dataset", "record-benchmark", "data",
+    "train",
     "evaluate", "detect", "extract", "db",
 ]
 PLACEHOLDER_COMMANDS: dict[str, str] = {}
@@ -90,6 +91,10 @@ CHANNEL_INDEXING_ALLOWED = {
     # adapted third-party network (step 07): it slices (batch, time, feature) tensors, not
     # audio channels; kept as close to the original source as possible
     "extraction/models/waveformer/model.py",
+    # adapted DeepFilterNet3 (step 07c): (batch, channel, time, frequency) tensors and
+    # (frames, bins) spectra, not audio channels
+    "extraction/models/deepfilternet/model.py",
+    "extraction/models/deepfilternet/dsp.py",
 }
 CHANNEL_INDEXING = re.compile(r"\[\s*:\s*,|\.(mean|sum|average)\([^)]*axis\s*=\s*(1|-1)")
 
@@ -149,6 +154,7 @@ def test_configs_are_valid_yaml(configs_dir: Path) -> None:
         "devices/respeaker_xvf3800.yaml",
         "detection/default.yaml",
         "extraction/default.yaml",
+        "extraction/hybrid.yaml",
         "extraction/mask_baseline.yaml",
         "extraction/neural_tse.yaml",
     }

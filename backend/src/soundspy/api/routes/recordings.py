@@ -11,8 +11,8 @@ Step 06, offline extraction:
 
 - ``POST /api/recordings/{id}/process`` with ``{labels, attenuation_db?, method?}`` returns the
   new run (``pending``, HTTP 202); the background worker processes it, one job at a time.
-  ``method`` is ``neural_tse`` or ``mask_baseline`` (step 07; default: the configured method,
-  or the baseline while the neural model does not exist). 404 file gone, 413 longer than
+  ``method`` is ``hybrid``, ``neural_tse`` or ``mask_baseline`` (steps 07, 07c; default: the
+  configured method, or the baseline while its models do not exist). 404 file gone, 413 longer than
   ``extraction.offline.max_seconds``, 422 no / unknown labels, 503 the method's model is missing
   (the neural checkpoint, or the detection model for the baseline).
 - ``GET /api/recordings/{id}/runs``: the recording's runs, newest first.
@@ -31,7 +31,7 @@ from soundspy.api.deps import ConfigDep, DbDep
 from soundspy.api.schemas import DetectionTimelineModel, ProcessRequest, RecordingModel, RunModel
 from soundspy.api.services.index import sync_all
 from soundspy.api.services.recordings import absolute_path
-from soundspy.extraction.offline import neural_available, run_method
+from soundspy.extraction.offline import hybrid_available, neural_available, run_method
 
 router = APIRouter(prefix="/api/recordings", tags=["recordings"])
 
@@ -123,6 +123,11 @@ def process_recording(recording_id: int, body: ProcessRequest, request: Request,
         if reason is not None:
             raise HTTPException(status_code=503,
                                 detail=f"neural extraction is not available: {reason}")
+    elif method == "hybrid":  # its gate uses the detector when there is one (not required)
+        reason = hybrid_available(config)
+        if reason is not None:
+            raise HTTPException(status_code=503,
+                                detail=f"hybrid extraction is not available: {reason}")
     else:
         detection = config.detection
         if detection is None or detection.checkpoint is None or \

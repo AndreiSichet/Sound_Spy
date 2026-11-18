@@ -34,8 +34,10 @@ label_init:
   alarm: [Telephone, Microwave_oven]        # ringing and beeps
   traffic: [Bus]
 
-checkpoint: experiments/tse_waveformer_v2b/checkpoints/best.pt  # used live and by `extract`
-                                 # (step 07b; the step-07 model: tse_waveformer_v1)
+checkpoint: experiments/tse_waveformer_v1/checkpoints/best.pt  # used live and by `extract`
+                                 # step 07c: back to the step-07 model. v2b (step 07b,
+                                 # tse_waveformer_v2b) leaked less but was worse overall and
+                                 # for music under speech; it stays on disk as a negative result
 
 live:
   device: auto                   # auto | cuda | cpu
@@ -54,17 +56,20 @@ live:
                                  # one CPU thread, well inside its 250 ms hop.
 
 gate:                            # soft gate after the model, driven by the model's own output
-  enabled: true                  # (a session can switch it off: the page's "Gate" switch)
+  enabled: false                 # step 07c: off by default, replaced by the hybrid method's
+                                 # gate (hybrid.yaml); the page's "Gate" switch still turns it
+                                 # on for the Neural method
   attack_ms: 5                   # how fast the measured levels rise ...
   release_ms: 150                # ... and fall
-  open_db: -12                   # estimate at least this loud against the input: gate open
-  close_db: -18                  # estimate this far below the input or lower: gate closed
+  open_db: -8                    # estimate at least this loud against the input: gate open
+  close_db: -14                  # estimate this far below the input or lower: gate closed
   depth_db: 15                   # how much a closed gate turns the estimate down
-                                 # open / close / depth: `soundspy evaluate gate` on v2b (val,
+                                 # open / close / depth: `soundspy evaluate gate` on v1 (val,
                                  # 2026-11-18), the strongest suppression costing <= 0.3 dB:
-                                 # SI-SDRi +3.18 -> +2.88 dB, target absent -15.7 -> -17.1 dB at
-                                 # 30 dB. The strongest of the grid (-8/-14/35) reaches only
-                                 # -18.1 dB for -0.62 dB: the leaks that remain are the network
+                                 # SI-SDRi +3.73 -> +3.43 dB, target absent -12.8 -> -14.2 dB.
+                                 # (For v2b the rule gave -12 / -18 / 15.) The strongest of the
+                                 # v2b grid (-8/-14/35) reached only -18.1 dB for -0.62 dB: the
+                                 # leaks that remain are the network
                                  # keeping a wrong sound at full level, which no level gate sees
   hold_ms: 200                   # an open gate stays open this long before it may close
 

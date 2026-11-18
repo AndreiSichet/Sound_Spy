@@ -8,7 +8,7 @@
 // The browser only ever plays SAVED files; live sound goes to the speakers from the backend.
 import { useEffect, useState } from 'react'
 import { ApiError, api, recordingAudioUrl, runAudioUrl } from '../../api/client.ts'
-import { isExtractionMethod, methodName } from '../../api/target.ts'
+import { hasGate, isExtractionMethod, methodName } from '../../api/target.ts'
 import type { DetectionTimeline, ExtractionMethod, Recording, Run } from '../../api/types.ts'
 import { useAppStore } from '../../store/appStore.ts'
 import { OfflineTimeline } from '../detection/OfflineTimeline.tsx'
@@ -45,7 +45,7 @@ function RunRow({ run, recording }: { run: Run; recording: Recording }) {
         <span className="text-slate-400">rest −{run.attenuation_db} dB</span>
         <span className="rounded bg-slate-800 px-1.5 text-slate-300" title={run.method}>
           {methodName(run.method)}
-          {run.method === 'neural_tse' && typeof run.info?.gate === 'boolean'
+          {hasGate(run.method) && typeof run.info?.gate === 'boolean'
             ? run.info.gate
               ? ' · gate'
               : ' · no gate'
@@ -94,7 +94,13 @@ export function RecordingsList() {
   const methods = config?.extraction_methods ?? []
   const available = (name: string | null | undefined) =>
     methods.length === 0 || methods.find((m) => m.name === name)?.available === true
-  const followed = [sessionMethod, config?.default_method, 'neural_tse', 'mask_baseline'].find(
+  const followed = [
+    sessionMethod,
+    config?.default_method,
+    'hybrid',
+    'neural_tse',
+    'mask_baseline',
+  ].find(
     (name) => isExtractionMethod(name) && available(name),
   )
   // (a backend that lists no methods gets no `method`: it uses its own default)
@@ -142,7 +148,7 @@ export function RecordingsList() {
         labels: selected,
         attenuation_db: attenuation,
         ...(processMethod ? { method: processMethod } : {}),
-        ...(processMethod === 'neural_tse' && sessionGate != null ? { gate: sessionGate } : {}),
+        ...(hasGate(processMethod) && sessionGate != null ? { gate: sessionGate } : {}),
       })
       if (!isRun(run)) return
       upsertRun(run)

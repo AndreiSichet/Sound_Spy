@@ -4,7 +4,7 @@
 // model call takes and the delay it adds (step 07).
 import { useState } from 'react'
 import { ApiError, api } from '../../api/client.ts'
-import { methodName } from '../../api/target.ts'
+import { extractionSummary } from '../../api/target.ts'
 import type { SourceRequest } from '../../api/types.ts'
 import { liveFrames } from '../viz/liveFrames.ts'
 import { useAppStore } from '../../store/appStore.ts'
@@ -154,23 +154,12 @@ export function SessionBar() {
           {status?.extraction && (
             <Stat
               label="Extraction"
-              value={`${methodName(status.extraction.method)}${
-                status.extraction.device ? ` · ${status.extraction.device}` : ''
-              }${
-                status.extraction.method === 'neural_tse' && status.extraction.gate != null
-                  ? status.extraction.gate
-                    ? ' · gate'
-                    : ' · no gate'
-                  : ''
-              } · +${status.extraction.latency_ms} ms${
-                status.extraction.method === 'mask_baseline' && !status.extraction.gating
-                  ? ' · no gating'
-                  : ''
-              }${status.bypass ? ' · bypassed' : ''}`}
+              value={extractionSummary(status.extraction, status.bypass)}
               warn={status.extraction.method === 'mask_baseline' && !status.extraction.gating}
             />
           )}
-          {status?.extraction?.method === 'neural_tse' && (
+          {(status?.extraction?.method === 'neural_tse' ||
+            status?.extraction?.method === 'hybrid') && (
             <Stat
               label="Model time"
               value={

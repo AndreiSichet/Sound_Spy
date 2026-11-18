@@ -8,8 +8,8 @@
 | PUT  | /api/session/target | the stored target; 422 unknown label |
 | PUT  | /api/session/monitor | status; gain_db in [-40, +12]; 409 no output device |
 | PUT  | /api/session/bypass | status; ``{"enabled": bool}``: hear the unprocessed signal (A/B) |
-| PUT  | /api/session/method | status; ``{"method"}``: neural_tse or mask_baseline; 409 running |
-| PUT  | /api/session/gate | status; ``{"enabled": bool}``: the neural output gate; 409 running |
+| PUT  | /api/session/method | status; ``{"method"}``: hybrid / neural_tse / baseline; 409 running |
+| PUT  | /api/session/gate | status; ``{"enabled": bool}``: the method's gate; 409 running |
 | POST | /api/session/record/start | status; 409 no session / already recording |
 | POST | /api/session/record/stop | the new Recording; 409 not recording |
 """

@@ -2,15 +2,23 @@
 
 ``SEMANTIC``::
 
-    main:       ChannelReducer("mean")  ->  extractor (neural_tse | mask_baseline | passthrough:
-                                            ``method`` argument, default extraction.method)
+    main:       ChannelReducer("mean")  ->  extractor (hybrid | neural_tse | mask_baseline |
+                                            passthrough: ``method`` argument, default
+                                            extraction.method)
     side:       analyzer (input chunk, all channels; source="input")
                 detector (when a trained checkpoint is available)
     post_side:  output analyzer (the chain's output; source="output"; levels and spectrogram,
                 no waveform: nothing shows it)
 
-**Gate** (step 07b): ``gate`` switches the neural extractor's output gate on or off for this
-chain (``None``: ``extraction.neural_tse.gate.enabled``); the baseline ignores it.
+**Gate** (steps 07b, 07c): ``gate`` switches the method's gate on or off for this chain: the
+hybrid gate (``hybrid``) or the neural output gate (``neural_tse``); ``None``: the method's own
+setting. The baseline ignores it.
+
+**Hybrid** (step 07c) is built before the detector like the neural extractor (its Waveformer's
+device decides where the detector runs) and gets the detector's activity afterwards
+(``set_activity``, with the detector's per-class thresholds for "confidently absent"). A missing
+route is a ``hybrid_route_unavailable`` warning; neither route: the baseline with
+``extraction_fallback``.
 
 **Method** (step 07). ``neural_tse`` needs its checkpoint; without it the chain is built with the
 baseline instead and carries an ``extraction_fallback`` warning. The neural extractor does not
@@ -48,6 +56,10 @@ GATING_UNAVAILABLE = (
     "Selecting sounds cannot switch the rest off in this session: without the detection model "
     "the app does not know when a selected sound is present. Selected sounds only get steady-"
     "noise reduction.")
+HYBRID_GATING_UNAVAILABLE = (
+    "The hybrid method's gate cannot close in this session: without the detection model the app "
+    "is never sure that the selected sounds are absent. Extraction still works; pauses are only "
+    "as quiet as the extractor makes them.")
 
 
 class ModeUnavailableError(ValueError):
@@ -94,18 +106,23 @@ def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
     state = DetectionState()
     activity = None
 
-    # The neural extractor is built first: where it runs decides where the detector may run.
+    # The neural extractors are built first: where they run decides where the detector may run.
     method, fallback = resolve_method(config, method)
     fallbacks = [("extraction_fallback", fallback)] if fallback is not None else []
     extractor = None
-    if method == "neural_tse":
+    if method in ("neural_tse", "hybrid"):
         try:
             extractor = build_extractor(config, None, method=method, gate=gate)
         except ExtractionUnavailable as exc:  # e.g. the checkpoint cannot be loaded
+            name = "Hybrid" if method == "hybrid" else "Neural"
             fallbacks.append(("extraction_fallback",
-                              f"Neural extraction is not available: {exc} Using the baseline "
+                              f"{name} extraction is not available: {exc} Using the baseline "
                               "(detector-gated) method instead."))
             method = "mask_baseline"
+    if method == "hybrid" and extractor is not None:
+        for note in getattr(extractor, "notes", []):
+            fallbacks.append(("hybrid_route_unavailable",
+                              f"Hybrid extraction runs without one of its routes: {note}"))
 
     if with_detector and config.detection is not None:
         from soundspy.detection.inference import DetectorUnavailable, build_detector
@@ -120,13 +137,18 @@ def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
             side.append(detector)
             names["detector"] = detector
             activity = LiveDetectorActivity(
-                state, lag_s=config.extraction.mask_baseline.noise_guard_s)
+                state, lag_s=config.extraction.mask_baseline.noise_guard_s,
+                thresholds=getattr(getattr(detector, "core", None), "thresholds", None))
     warnings.extend(fallbacks)
     if extractor is None:
         extractor = build_extractor(config, activity, method=method)
+    elif method == "hybrid":
+        extractor.set_activity(activity)
     names["extractor"] = extractor
     if activity is None and method == "mask_baseline":
         warnings.append(("gating_unavailable", GATING_UNAVAILABLE))
+    if activity is None and method == "hybrid":
+        warnings.append(("gating_unavailable", HYBRID_GATING_UNAVAILABLE))
     chain = ProcessorChain([reducer, extractor], side, post_side=[output_analyzer], names=names,
                            dry_after="reducer")
     chain.detection_state = state

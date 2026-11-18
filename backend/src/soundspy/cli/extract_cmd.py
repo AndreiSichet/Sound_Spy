@@ -1,17 +1,20 @@
 """``soundspy extract``: keep the selected sound classes of a recording, attenuate the rest.
 
     soundspy extract <wav> --labels speech [music ...] [--attenuation-db 15] [--out out.wav]
-                     [--method neural_tse|mask_baseline] [--device auto|cuda|cpu]
+                     [--method hybrid|neural_tse|mask_baseline] [--device auto|cuda|cpu]
                      [--gate | --no-gate]
 
-Offline extraction. ``neural_tse`` (step 07, the default once its model is trained): the file
-goes through the neural extractor. ``mask_baseline`` (step 06): the detector first runs over the
+Offline extraction. ``hybrid`` (step 07c, the default): Speech alone goes through the speech
+enhancer, other selections through the Waveformer; the detector runs over the whole file first
+(centred windows) and drives the hybrid gate. ``neural_tse`` (step 07): the file goes through
+the Waveformer only. ``mask_baseline`` (step 06): the detector first runs over the
 whole file with windows centred on each moment (no lag, unlike live), then the gate uses that
 timeline. ``--attenuation-db`` defaults to ``extraction.default_attenuation_db``. The result is a
 **processing run** like the ones the website makes: ``outputs/processed/<run_id>.wav`` plus its
 ``.json`` sidecar (the API indexes it the next time it looks). ``--out`` additionally copies the
-processed audio to a path of your choice. ``--gate`` / ``--no-gate`` (step 07b) switch the
-neural extractor's output gate on or off (default: ``extraction.neural_tse.gate.enabled``).
+processed audio to a path of your choice. ``--gate`` / ``--no-gate`` switch the method's gate
+on or off: the hybrid gate (step 07c, default on) or the neural output gate (step 07b, default
+off since 07c).
 """
 
 from __future__ import annotations
@@ -34,12 +37,14 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
                              "extraction.default_attenuation_db, 15)")
     parser.add_argument("--out", type=Path, default=None,
                         help="also copy the processed WAV here")
-    parser.add_argument("--method", choices=("neural_tse", "mask_baseline"), default=None,
+    parser.add_argument("--method", choices=("hybrid", "neural_tse", "mask_baseline"),
+                        default=None,
                         help="extraction method (default: extraction.method if its model exists)")
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default=None,
                         help="where the model runs (default: from the configuration)")
     parser.add_argument("--gate", action=argparse.BooleanOptionalAction, default=None,
-                        help="neural method: the output gate on / off (default: as configured)")
+                        help="hybrid: its gate, neural: the output gate, on / off (default: "
+                             "the method's own setting)")
     parser.set_defaults(handler=run)
 
 

@@ -23,8 +23,8 @@ export interface ModeInfo {
   reason: string | null
 }
 
-/** How the selected sounds are extracted (step 07). */
-export type ExtractionMethod = 'neural_tse' | 'mask_baseline'
+/** How the selected sounds are extracted (step 07; hybrid: step 07c). */
+export type ExtractionMethod = 'hybrid' | 'neural_tse' | 'mask_baseline'
 
 export interface MethodInfo {
   name: ExtractionMethod
@@ -45,8 +45,10 @@ export interface ConfigResponse {
   default_method?: string
   /** Where the attenuation slider starts (live default: 15 dB). */
   default_attenuation_db?: number
-  /** Step 07b: whether the neural output gate is on unless switched off. */
+  /** Step 07b: whether the default method's gate is on unless switched off. */
   default_gate?: boolean
+  /** Step 07c: each method's own gate default (hybrid: on; neural: off). */
+  default_gates?: Record<string, boolean>
 }
 
 export interface Direction {
@@ -97,7 +99,7 @@ export interface EngineStatus {
   /** The method chosen for sessions (step 07); `extraction.method` can differ after a
    *  fallback (no neural model -> baseline). */
   extraction_method?: string | null
-  /** The neural output gate chosen for sessions (step 07b). */
+  /** The gate chosen for sessions: the hybrid gate or the neural output gate (07b / 07c). */
   extraction_gate?: boolean | null
 }
 
@@ -118,6 +120,24 @@ export interface ExtractionStatus {
   /** Step 07b: the output gate is on, and the share of model steps it was mostly closed. */
   gate?: boolean | null
   gate_closed?: number | null
+  /** Hybrid only (step 07c): the route in use, the gate right now, the parts' timings. */
+  route?: string | null
+  routes?: string[] | null
+  gate_state?: 'open' | 'closed' | 'off' | null
+  gate_reopened?: number | null
+  speech_enhancer?: PartStatus | null
+  waveformer?: PartStatus | null
+  performance_cores?: boolean | null
+  notes?: string[] | null
+}
+
+/** One network of the hybrid extractor (step 07c). */
+export interface PartStatus {
+  model?: string | null
+  device?: string | null
+  latency_ms?: number | null
+  model_ms?: number | null
+  model_ms_p95?: number | null
 }
 
 /** Which side of the processing chain a visual frame shows. */

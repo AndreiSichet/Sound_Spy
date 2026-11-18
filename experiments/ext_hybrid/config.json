@@ -1,0 +1,134 @@
+{
+  "method": "hybrid",
+  "systems": [
+    "mixture",
+    "timeline",
+    "live",
+    "oracle",
+    "irm",
+    "wf",
+    "wf_hgate",
+    "dfn",
+    "dfn_hgate",
+    "cascade",
+    "cascade_hgate",
+    "hybrid_offline",
+    "hybrid_stream",
+    "hybrid_live",
+    "hybrid_live_db",
+    "hybrid_high_db"
+  ],
+  "extraction": {
+    "n_fft": 1024,
+    "hop": 256,
+    "open_ms": 10.0,
+    "hold_ms": 300.0,
+    "close_ms": 200.0,
+    "noise_alpha": 0.95,
+    "noise_guard_s": 0.5,
+    "noise_max_age_s": 5.0,
+    "minstat_window_s": 1.5,
+    "minstat_smoothing": 0.85,
+    "minstat_bias": 1.6,
+    "dd_alpha": 0.98,
+    "gain_smoothing": 0.6
+  },
+  "hybrid": {
+    "speech": {
+      "labels": [
+        "speech"
+      ],
+      "route": "enhancer",
+      "model_file": "DeepFilterNet3.zip",
+      "model_url": "https://github.com/Rikorose/DeepFilterNet/raw/v0.5.6/models/DeepFilterNet3.zip",
+      "model_sha256": "49c52edc8947ae1f9bf50d81530beaf3a2c3245aeaf34b6f31ff535cd22284d2",
+      "atten_lim_db": null,
+      "post_filter": false,
+      "device": "cpu",
+      "backend": "onnx",
+      "cpu_threads": 1,
+      "model_dir": "D:\\SoundSpyData\\models\\deepfilternet\\DeepFilterNet3"
+    },
+    "gate": {
+      "enabled": true,
+      "close_prob_factor": 0.5,
+      "close_hold_ms": 400.0,
+      "close_ms": 150.0,
+      "open_ms": 5.0,
+      "reopen_ratio_db": -6.0,
+      "attack_ms": 5.0,
+      "release_ms": 50.0,
+      "min_level_dbfs": -60.0,
+      "block_ms": 1.0,
+      "warmup_ms": 1000.0,
+      "start_closed": true
+    },
+    "ramp_ms": 20.0,
+    "performance_cores": true,
+    "tuning": {
+      "close_prob_factor": [
+        0.3,
+        0.5,
+        0.8
+      ],
+      "close_hold_ms": [
+        200.0,
+        400.0,
+        800.0
+      ],
+      "reopen_ratio_db": [
+        -6.0,
+        -10.0,
+        -14.0
+      ]
+    },
+    "tuning_max_cost_db": 1.0,
+    "waveformer": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\tse_waveformer_v1\\checkpoints\\best.pt"
+  },
+  "neural_tse": null,
+  "evaluation": {
+    "n": 500,
+    "seed": 1234,
+    "sample_rate": 48000,
+    "attenuation_db": 30.0,
+    "examples": 10,
+    "example_ids": [
+      "test-000036",
+      "test-000030"
+    ],
+    "live_delay_s": 0.05,
+    "reverb_seed": 4242,
+    "compare_checkpoint": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\tse_waveformer_v1\\checkpoints\\best.pt",
+    "high_attenuation_db": 40.0,
+    "bench_seed": 707,
+    "bench_absent": 200,
+    "bench_pair": [
+      "speech",
+      "music"
+    ],
+    "bench_pair_n": 100,
+    "bench_pair_min_clip_s": 5.0,
+    "bench_librispeech": 100,
+    "bench_examples": 3
+  },
+  "detection": {
+    "checkpoint": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\det_mn10_v1\\checkpoints\\best.pt",
+    "hop_s": 0.25,
+    "ema_alpha": 0.5,
+    "hysteresis": 0.1
+  },
+  "labels": [
+    "speech",
+    "music",
+    "footsteps",
+    "dishes",
+    "chair_scrape",
+    "alarm",
+    "traffic"
+  ],
+  "app_version": "0.1.0",
+  "git": {
+    "commit": "60230a239f8ced0f94f9f6ab989d2143a3a1e84d",
+    "dirty": true
+  }
+}
