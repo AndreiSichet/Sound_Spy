@@ -155,11 +155,19 @@ def test_data_paths_and_data_config_loaded(config) -> None:
     for key in ("external", "processed", "mixtures", "model_cache", "custom"):
         assert config.paths[key].is_absolute()
     data = config.data
-    assert data.enabled == {"esc50": True, "fsd50k": True, "custom": True}
+    assert data.enabled == {"esc50": True, "fsd50k": True, "custom": True, "librispeech": True}
     assert data.esc50_folds == {"train": (1, 2, 3), "val": (4,), "test": (5,)}
     assert data.mixtures.counts == {"train": 20000, "val": 2000, "test": 2000}
     assert data.mixtures.n_foreground == (1, 3)
     assert data.mixtures.fg_gain_db == (-5.0, 5.0)
+    # step 07b: the frozen files keep the step-04 rules, dynamic mixing gets the new ones
+    assert (data.mixtures.empty_target_prob, data.mixtures.partial_target_prob) == (0.05, 0.0)
+    assert data.mixtures.hard_negative_prob == 0.0 and data.mixtures.lowpass_prob == 0.0
+    dyn = data.dynamic
+    assert (dyn.empty_target_prob, dyn.partial_target_prob) == (0.15, 0.25)
+    assert dyn.source_mix == {"speech": {"librispeech": 0.5}} and dyn.lowpass_prob == 0.3
+    assert dyn.hard_negative_pairs["speech"] == ("music",)
+    assert data.librispeech_class == "speech"
 
 
 @pytest.mark.parametrize(

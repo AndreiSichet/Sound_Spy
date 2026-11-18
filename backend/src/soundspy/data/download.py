@@ -12,6 +12,8 @@ Downloads are resumable: bytes go to ``<name>.part`` and an HTTP ``Range`` reque
 where the previous attempt stopped. A file gets its final name only after its checksum passed,
 so an existing final file is a verified file. Network errors are retried with exponential
 backoff. FSD50K's audio is a split zip (``.zip`` + ``.z01`` ...) that only 7-Zip extracts.
+LibriSpeech (step 07b) comes as ``.tar.gz`` files from OpenSLR; their MD5 sums are read from the
+site's ``md5sum.txt`` at download time.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 import zipfile
 from collections.abc import Callable, Iterable
@@ -39,7 +42,7 @@ USER_AGENT = "soundspy-data/0.1 (+research dataset download)"
 CHUNK_BYTES = 1 << 20
 GB = 1_000_000_000
 
-DATASETS = ("ontology", "esc50", "fsd50k")
+DATASETS = ("ontology", "esc50", "fsd50k", "librispeech")
 
 ONTOLOGY_URL = "https://raw.githubusercontent.com/audioset/ontology/master/ontology.json"
 ONTOLOGY_REPO = "audioset/ontology"
@@ -63,6 +66,17 @@ FSD50K_LICENSE = (
 )
 FSD50K_EXTRACTED_BYTES = 36 * GB
 """Extracted FSD50K (audio + metadata) measured ~34 GB; a little margin on top."""
+
+LIBRISPEECH_URL = "https://www.openslr.org/resources/12/"
+LIBRISPEECH_SUBSETS = ("train-clean-100", "dev-clean", "test-clean")
+LIBRISPEECH_DIR = "LibriSpeech"
+"""Top-level folder inside every LibriSpeech archive."""
+LIBRISPEECH_LICENSE = (
+    "CC BY 4.0 (LibriSpeech ASR corpus, V. Panayotov, G. Chen, D. Povey, S. Khudanpur, 2015; "
+    "read speech from LibriVox public-domain audiobooks; https://www.openslr.org/12)"
+)
+LIBRISPEECH_EXTRACT_FACTOR = 1.05
+"""FLAC inside a tar.gz does not shrink: the extracted tree is about as large as the archive."""
 
 SEVEN_ZIP_HINT = "Install 7-Zip: `winget install 7zip.7zip`"
 
@@ -347,6 +361,21 @@ def extract_zip(archive: Path, dest: Path) -> int:
     return count
 
 
+def extract_tar(archive: Path, dest: Path) -> int:
+    """Extract a ``.tar`` / ``.tar.gz`` with Python's "data" filter (no absolute paths, no
+    links or members that leave ``dest``, no device files). Returns the number of members."""
+    dest.mkdir(parents=True, exist_ok=True)
+    count = 0
+    try:
+        with tarfile.open(archive) as tf:
+            for member in tf:
+                tf.extract(member, dest, filter="data")
+                count += 1
+    except (tarfile.TarError, OSError) as exc:
+        raise DownloadError(f"{archive.name}: cannot extract ({exc})") from exc
+    return count
+
+
 def extract_with_7zip(archive: Path, dest: Path, seven_zip: Path) -> None:
     """Extract (split) zips with 7-Zip: give it the ``.zip``, it finds ``.z01`` ... itself."""
     dest.mkdir(parents=True, exist_ok=True)
@@ -374,6 +403,8 @@ class DownloadContext:
     github_api: str = "https://api.github.com"
     ontology_url: str = ONTOLOGY_URL
     esc50_url: str = ESC50_URL
+    librispeech_url: str = LIBRISPEECH_URL
+    librispeech_subsets: tuple[str, ...] = LIBRISPEECH_SUBSETS
 
 
 def dataset_dir(external: Path, dataset: str) -> Path:
@@ -406,7 +437,7 @@ def download(datasets: Iterable[str], ctx: DownloadContext) -> list[DatasetResul
             if item not in names:
                 names.append(item)
     handlers = {"ontology": download_ontology, "esc50": download_esc50,
-                "fsd50k": download_fsd50k}
+                "fsd50k": download_fsd50k, "librispeech": download_librispeech}
     return [handlers[name](ctx) for name in names]
 
 
@@ -591,6 +622,109 @@ def download_fsd50k(ctx: DownloadContext) -> DatasetResult:
     })
     _mark_done(root, {"clips": {k: v[1] for k, v in counts.items()}, "finished_at": _now()})
     return DatasetResult("fsd50k", "done", root, time.monotonic() - start, records)
+
+
+def librispeech_files(ctx: DownloadContext) -> list[RemoteFile]:
+    """The archives of the wanted subsets, with the MD5 sums and sizes the site publishes."""
+    base = ctx.librispeech_url.rstrip("/") + "/"
+    try:
+        resp = ctx.session.get(base + "md5sum.txt", timeout=30)
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        raise DownloadError(f"cannot read {base}md5sum.txt: {exc}") from exc
+    sums = {}
+    for line in resp.text.splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            sums[parts[1].lstrip("*")] = parts[0].lower()
+    files = []
+    for subset in ctx.librispeech_subsets:
+        name = f"{subset}.tar.gz"
+        if name not in sums:
+            raise DownloadError(f"{base}md5sum.txt does not list {name}")
+        size = None
+        try:
+            head = ctx.session.head(base + name, timeout=30, allow_redirects=True)
+            if head.ok and head.headers.get("Content-Length"):
+                size = int(head.headers["Content-Length"])
+        except (requests.RequestException, ValueError):
+            pass  # the size is only used for the free-space check and the progress bar
+        files.append(RemoteFile(name, base + name, size, sums[name]))
+    return files
+
+
+def count_librispeech(root: Path, subsets: Iterable[str] = LIBRISPEECH_SUBSETS
+                      ) -> dict[str, tuple[int, int, int]]:
+    """``{subset: (transcript lines, FLAC files, speakers)}``: every utterance has one line in
+    its chapter's ``*.trans.txt``, so the first two numbers must agree."""
+    out = {}
+    for subset in subsets:
+        folder = root / LIBRISPEECH_DIR / subset
+        if not folder.is_dir():
+            raise DownloadError(f"LibriSpeech: {folder} missing after extraction")
+        lines = 0
+        for transcript in folder.glob("*/*/*.trans.txt"):
+            with open(transcript, encoding="utf-8") as fh:
+                lines += sum(1 for line in fh if line.strip())
+        flacs = sum(1 for _ in folder.glob("*/*/*.flac"))
+        speakers = sum(1 for p in folder.iterdir() if p.is_dir())
+        out[subset] = (lines, flacs, speakers)
+    return out
+
+
+def download_librispeech(ctx: DownloadContext) -> DatasetResult:
+    root = dataset_dir(ctx.external, "librispeech")
+    if is_done(ctx.external, "librispeech"):
+        return DatasetResult("librispeech", "already done", root)
+    start = time.monotonic()
+    archives = root / "archives"
+    remotes = librispeech_files(ctx)
+    remaining = extract = 0
+    for remote in remotes:
+        final, part = archives / remote.name, archives / (remote.name + ".part")
+        size = remote.size or 0
+        if not (archives / f"{remote.name}.extracted").exists():
+            extract += int(size * LIBRISPEECH_EXTRACT_FACTOR)
+        if final.exists():
+            continue
+        have = part.stat().st_size if part.exists() else 0
+        remaining += max(0, size - have)
+    total = sum(r.size or 0 for r in remotes)
+    check_free_space(ctx.external, remaining + extract, "LibriSpeech (download + extraction)",
+                     free=ctx.free)
+    print(f"LibriSpeech: {len(remotes)} archives, {total / GB:.1f} GB in total, "
+          f"{remaining / GB:.1f} GB still to download; extracted ~{extract / GB:.1f} GB.",
+          flush=True)
+    if remaining and not ctx.confirm(f"Download {remaining / GB:.1f} GB to {archives}?"):
+        raise DownloadError("cancelled")
+
+    records = [download_file(ctx.session, remote, archives, sleep=ctx.sleep,
+                             progress=ctx.progress) for remote in remotes]
+    for remote in remotes:
+        marker = archives / f"{remote.name}.extracted"
+        if not marker.exists():
+            print(f"  extracting {remote.name} ...", flush=True)
+            extract_tar(archives / remote.name, root)
+            marker.write_text(_now(), encoding="utf-8")
+
+    counts = count_librispeech(root, ctx.librispeech_subsets)
+    for subset, (lines, flacs, _speakers) in counts.items():
+        if lines != flacs or not flacs:
+            raise DownloadError(f"LibriSpeech {subset}: the transcripts list {lines} utterances "
+                                f"but there are {flacs} FLAC files")
+    _write_source(root, {
+        "dataset": "LibriSpeech",
+        "url": ctx.librispeech_url,
+        "homepage": "https://www.openslr.org/12",
+        "downloaded_at": _now(),
+        "version": "SLR12",
+        "license": LIBRISPEECH_LICENSE,
+        "subsets": {s: {"utterances": c[1], "speakers": c[2]} for s, c in counts.items()},
+        "files": [asdict(r) for r in records],
+    })
+    _mark_done(root, {"utterances": {s: c[1] for s, c in counts.items()},
+                      "speakers": {s: c[2] for s, c in counts.items()}, "finished_at": _now()})
+    return DatasetResult("librispeech", "done", root, time.monotonic() - start, records)
 
 
 # --------------------------------------------------------------------------------------------

@@ -77,6 +77,7 @@ class SessionManager:
         self.monitor = (False, config.output.default_gain_db, False)
         self.bypass = False
         self.method: str | None = None  # None = extraction.method from the configuration
+        self.gate: bool | None = None  # None = extraction.neural_tse.gate.enabled
         self._lock = threading.RLock()
 
     @property
@@ -93,20 +94,26 @@ class SessionManager:
         """The extraction method sessions are started with."""
         return self.method or self.config.extraction.method
 
+    @property
+    def selected_gate(self) -> bool:
+        """Whether sessions start with the neural extractor's output gate on."""
+        return self.config.extraction.neural_tse.gate.enabled if self.gate is None else self.gate
+
+    def _chosen(self, status: EngineStatus, **changes) -> EngineStatus:
+        return dataclasses.replace(status, extraction_method=self.selected_method,
+                                   extraction_gate=self.selected_gate, **changes)
+
     def status(self) -> EngineStatus:
         """The running session's status, or, when idle, the stored Listen/volume settings that
         the next session will start with (so the page shows what the user chose)."""
         session = self.session
-        method = self.selected_method
         if session is not None and session.running:
-            return dataclasses.replace(session.status, extraction_method=method)
+            return self._chosen(session.status)
         enabled, gain_db, muted = self.monitor
         if session is not None:  # a stopped/failed session: keep its figures, show the settings
-            return dataclasses.replace(
-                session.status, monitoring=enabled, gain_db=gain_db, muted=muted,
-                bypass=self.bypass, extraction_method=method,
-            )
-        return EngineStatus(
+            return self._chosen(session.status, monitoring=enabled, gain_db=gain_db,
+                                muted=muted, bypass=self.bypass)
+        return self._chosen(EngineStatus(
             t=0.0,
             state="idle",
             message="no active session",
@@ -114,8 +121,7 @@ class SessionManager:
             gain_db=gain_db,
             muted=muted,
             bypass=self.bypass,
-            extraction_method=method,
-        )
+        ))
 
     # --- building ------------------------------------------------------------------------------
 
@@ -153,7 +159,8 @@ class SessionManager:
         """Build source, chain and output and start a session (one attempt)."""
         try:
             chain = build_chain(request.mode, self.config, self.labels,
-                                method=request.method or self.selected_method)
+                                method=request.method or self.selected_method,
+                                gate=self.selected_gate if request.gate is None else request.gate)
         except ModeUnavailableError as exc:
             raise BadRequestError(str(exc)) from exc
         source = self._build_source(request.source)
@@ -237,6 +244,15 @@ class SessionManager:
             self.method = method
             return self.status()
 
+    def set_gate(self, enabled: bool) -> EngineStatus:
+        """Switch the neural output gate of the next session (like the method, not while one
+        runs: a session keeps the processing it was started with)."""
+        with self._lock:
+            if self.running:
+                raise ConflictError("stop the session to switch the gate")
+            self.gate = bool(enabled)
+            return self.status()
+
     def set_bypass(self, enabled: bool) -> EngineStatus:
         """A/B listening: play the unprocessed (delay-matched) signal instead of the output."""
         self.bypass = bool(enabled)
@@ -296,8 +312,8 @@ class SessionManager:
 
     def _publish(self, event: Event) -> None:
         try:
-            if isinstance(event, EngineStatus):  # the session does not know the chosen method
-                event = dataclasses.replace(event, extraction_method=self.selected_method)
+            if isinstance(event, EngineStatus):  # the session does not know the choices
+                event = self._chosen(event)
             self.ws_manager.publish(event_message(event))
         except Exception:  # noqa: BLE001
             logger.exception("could not publish %s", type(event).__name__)

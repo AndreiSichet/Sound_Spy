@@ -9,6 +9,9 @@
     post_side:  output analyzer (the chain's output; source="output"; levels and spectrogram,
                 no waveform: nothing shows it)
 
+**Gate** (step 07b): ``gate`` switches the neural extractor's output gate on or off for this
+chain (``None``: ``extraction.neural_tse.gate.enabled``); the baseline ignores it.
+
 **Method** (step 07). ``neural_tse`` needs its checkpoint; without it the chain is built with the
 baseline instead and carries an ``extraction_fallback`` warning. The neural extractor does not
 use the detector; the detector still runs for the chips and the timeline, on the CPU when the
@@ -70,7 +73,8 @@ def detector_device(config: AppConfig, extractor) -> str | None:
 
 
 def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
-                with_detector: bool = True, method: str | None = None) -> ProcessorChain:
+                with_detector: bool = True, method: str | None = None,
+                gate: bool | None = None) -> ProcessorChain:
     try:
         mode = Mode(str(mode).lower())
     except ValueError:
@@ -96,7 +100,7 @@ def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
     extractor = None
     if method == "neural_tse":
         try:
-            extractor = build_extractor(config, None, method=method)
+            extractor = build_extractor(config, None, method=method, gate=gate)
         except ExtractionUnavailable as exc:  # e.g. the checkpoint cannot be loaded
             fallbacks.append(("extraction_fallback",
                               f"Neural extraction is not available: {exc} Using the baseline "

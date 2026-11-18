@@ -45,6 +45,8 @@ export interface ConfigResponse {
   default_method?: string
   /** Where the attenuation slider starts (live default: 15 dB). */
   default_attenuation_db?: number
+  /** Step 07b: whether the neural output gate is on unless switched off. */
+  default_gate?: boolean
 }
 
 export interface Direction {
@@ -85,6 +87,7 @@ export interface EngineStatus {
   output_underruns?: number
   dropped_chunks?: number
   output_dropped?: number
+  output_drained?: number
   /** Present while a detection model runs in the session (step 05). */
   detector?: DetectorStatus | null
   /** The speakers get the unprocessed (delay-matched) signal instead of the output (step 06). */
@@ -94,6 +97,8 @@ export interface EngineStatus {
   /** The method chosen for sessions (step 07); `extraction.method` can differ after a
    *  fallback (no neural model -> baseline). */
   extraction_method?: string | null
+  /** The neural output gate chosen for sessions (step 07b). */
+  extraction_gate?: boolean | null
 }
 
 export interface ExtractionStatus {
@@ -110,6 +115,9 @@ export interface ExtractionStatus {
   model_ms_p95?: number | null
   /** The network's step runs as a traced (TorchScript) module. */
   compiled?: boolean | null
+  /** Step 07b: the output gate is on, and the share of model steps it was mostly closed. */
+  gate?: boolean | null
+  gate_closed?: number | null
 }
 
 /** Which side of the processing chain a visual frame shows. */
@@ -171,6 +179,7 @@ export interface SessionStartRequest {
   source: SourceRequest
   monitor?: boolean
   method?: ExtractionMethod
+  gate?: boolean
 }
 
 export interface MonitorRequest {
@@ -203,6 +212,8 @@ export interface ProcessRequest {
   labels: string[]
   attenuation_db?: number
   method?: ExtractionMethod
+  /** Neural only (step 07b): the output gate on / off. */
+  gate?: boolean
 }
 
 /** One offline processing of a recording (step 06). */
@@ -277,6 +288,7 @@ export type ClientMessage =
   | Envelope<'set_target', TargetSpec>
   | Envelope<'set_bypass', { enabled: boolean }>
   | Envelope<'set_method', { method: ExtractionMethod }>
+  | Envelope<'set_gate', { enabled: boolean }>
 
 export type ServerMessageType = ServerMessage['type']
 

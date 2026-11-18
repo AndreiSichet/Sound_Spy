@@ -139,6 +139,7 @@ class EngineStatus(Event):
     output_underruns: int = 0
     dropped_chunks: int = 0  # input queue (consumer too slow)
     output_dropped: int = 0  # output queue (clock drift / bursts)
+    output_drained: int = 0  # times the output queue was emptied back to its cushion (07b)
     # {model, device, hop_s, latency_ms, skipped} while a detector runs, else None (step 05)
     detector: dict[str, Any] | None = None
     # step 06: the speaker gets the unprocessed (delay-matched) signal instead of the output
@@ -149,3 +150,4 @@ class EngineStatus(Event):
     # the method chosen for sessions (the next one, when idle); `extraction.method` is what the
     # running session really uses, which differs after a fallback (step 07)
     extraction_method: str | None = None
+    extraction_gate: bool | None = None  # the neural output gate chosen for sessions (07b)

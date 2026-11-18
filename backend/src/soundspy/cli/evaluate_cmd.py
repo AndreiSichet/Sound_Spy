@@ -1,8 +1,10 @@
 """``soundspy evaluate``: score the detection model or an extraction method.
 
     soundspy evaluate detection [--experiment det_mn10_v1] [--split test|val]
+    soundspy evaluate gate [--checkpoint experiments/tse_waveformer_v2/checkpoints/best.pt]
     soundspy evaluate extraction --method mask_baseline [--split test] [--n 500]
-                                 [--sample-rate 48000]
+                                 [--sample-rate 48000] [--name ext_neural_tse_v2]
+                                 [--no-reverb] [--no-benchmarks]
 
 **detection** scores the trained model against the zero-shot baseline, writes
 ``experiments/<name>/metrics.json`` and prints a per-class table (without a trained checkpoint
@@ -12,6 +14,10 @@ only the zero-shot baseline is scored).
 the baseline with the offline / live / true activity, and the ideal-ratio-mask upper bound),
 writes ``experiments/ext_<method>/`` (``metrics.json``, ``metrics.md``, ``per_recipe.csv``) and
 renders listening examples to ``outputs/eval/ext_<method>/``.
+
+**gate** (step 07b) tries a grid of output-gate settings on the validation set with the neural
+model (default: ``extraction.neural_tse.checkpoint``) and writes ``gate_tuning.json`` / ``.md``
+next to the checkpoint's experiment.
 """
 
 from __future__ import annotations
@@ -25,7 +31,9 @@ HELP = "evaluate the detection model or an extraction method"
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
-    parser.add_argument("task", choices=("detection", "extraction"))
+    parser.add_argument("task", choices=("detection", "extraction", "gate"))
+    parser.add_argument("--checkpoint", default=None,
+                        help="gate: the neural model (default: extraction.neural_tse.checkpoint)")
     parser.add_argument("--experiment", default=None, help="experiment name (default from config)")
     parser.add_argument("--split", choices=("val", "test"), default="test")
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
@@ -39,6 +47,12 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
                         help="extraction: number of recipes (default from config)")
     parser.add_argument("--sample-rate", type=int, default=None,
                         help="extraction: processing rate (default from config)")
+    parser.add_argument("--name", default=None,
+                        help="extraction: experiment / examples folder (default ext_<method>)")
+    parser.add_argument("--no-reverb", action="store_true",
+                        help="extraction, neural_tse: skip the reverberant copy")
+    parser.add_argument("--no-benchmarks", action="store_true",
+                        help="extraction, neural_tse: skip the benchmark sets")
     parser.set_defaults(handler=run)
 
 
@@ -79,6 +93,9 @@ def run_extraction(args: argparse.Namespace) -> int:
         config = load_config()
         result = evaluate_extraction(config, args.method, args.split, n=args.n,
                                      sample_rate=args.sample_rate, device=args.device,
+                                     name=args.name,
+                                     reverberant=False if args.no_reverb else None,
+                                     benchmarks=False if args.no_benchmarks else None,
                                      progress=lambda m: print(m, flush=True))
     except (ConfigError, ExtractionEvalError, PrepareError, RecipeError, ValueError) as exc:
         print(f"error: {exc}")
@@ -91,9 +108,39 @@ def run_extraction(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_gate(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from soundspy.config import ConfigError, load_config
+    from soundspy.data.cache import CacheError
+    from soundspy.extraction.neural_tse import NeuralUnavailable
+    from soundspy.training.tune_gate import format_table
+    from soundspy.training.tune_gate import run as tune
+
+    try:
+        config = load_config()
+        checkpoint = (Path(args.checkpoint) if args.checkpoint
+                      else config.extraction.neural_tse.checkpoint)
+        if checkpoint is None:
+            raise ConfigError("no neural checkpoint configured: pass --checkpoint")
+        result = tune(config, checkpoint, args.device, n=args.n,
+                      progress=lambda m: print(m, flush=True))
+    except (ConfigError, CacheError, NeuralUnavailable, ValueError) as exc:
+        print(f"error: {exc}")
+        return 1
+    print(format_table(result))
+    chosen = result["chosen"]
+    print("chosen (strongest suppression costing <= 0.3 dB SI-SDRi):",
+          chosen["gate"] if chosen else "none")
+    print(f"-> {result['path']}")
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     if args.task == "extraction":
         return run_extraction(args)
+    if args.task == "gate":
+        return run_gate(args)
 
     from soundspy.config import ConfigError, load_config
     from soundspy.data.mixtures import RecipeError

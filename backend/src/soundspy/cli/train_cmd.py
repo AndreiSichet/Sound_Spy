@@ -33,12 +33,17 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     parser.add_argument("--workers", type=int, default=None, help="DataLoader workers")
     parser.add_argument("--batch-size", type=int, default=None,
                         help="extraction: use this batch size instead of searching for one")
+    parser.add_argument("--time-budget-h", type=float, default=None,
+                        help="extraction: stop when this many hours are used (default: "
+                             "training.time_budget_h)")
     parser.set_defaults(handler=run)
 
 
 def run_extraction(args: argparse.Namespace) -> int:
     from soundspy.config import ConfigError, load_config
     from soundspy.data.cache import CacheError
+    from soundspy.data.mixtures import RecipeError
+    from soundspy.data.prepare import PrepareError
     from soundspy.extraction.neural_model import NeuralModelError
     from soundspy.training.datasets import LoaderStalled
     from soundspy.training.train import TrainingError
@@ -52,10 +57,10 @@ def run_extraction(args: argparse.Namespace) -> int:
         opts = ExtractionTrainOptions(
             name=name, epochs=args.epochs, smoke=args.smoke, resume=args.resume,
             device=args.device, allow_cpu=args.device == "cpu", workers=args.workers,
-            batch_size=args.batch_size)
+            batch_size=args.batch_size, time_budget_h=args.time_budget_h)
         result = train_extraction(config, opts, log=lambda m: print(m, flush=True))
     except (ConfigError, TrainingError, CacheError, NeuralModelError, LoaderStalled,
-            ValueError) as exc:
+            PrepareError, RecipeError, ValueError) as exc:
         print(f"error: {exc}")
         return 1
     except KeyboardInterrupt:

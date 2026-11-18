@@ -45,4 +45,5 @@ def app_config(config: ConfigDep) -> ConfigResponse:
     return ConfigResponse(
         classes=classes, modes=modes, device_profile=profile.name,
         extraction_methods=methods, default_method=resolve_method(config)[0],
+        default_gate=config.extraction.neural_tse.gate.enabled,
         default_attenuation_db=config.extraction.default_attenuation_db)

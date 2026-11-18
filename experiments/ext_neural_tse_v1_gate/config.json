@@ -1,0 +1,98 @@
+{
+  "method": "neural_tse",
+  "systems": [
+    "mixture",
+    "timeline",
+    "live",
+    "oracle",
+    "irm",
+    "neural_nogate",
+    "neural_offline",
+    "neural_stream",
+    "neural_live_db",
+    "neural_high_db"
+  ],
+  "extraction": {
+    "n_fft": 1024,
+    "hop": 256,
+    "open_ms": 10.0,
+    "hold_ms": 300.0,
+    "close_ms": 200.0,
+    "noise_alpha": 0.95,
+    "noise_guard_s": 0.5,
+    "noise_max_age_s": 5.0,
+    "minstat_window_s": 1.5,
+    "minstat_smoothing": 0.85,
+    "minstat_bias": 1.6,
+    "dd_alpha": 0.98,
+    "gain_smoothing": 0.6
+  },
+  "neural_tse": {
+    "checkpoint": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\tse_waveformer_v1\\checkpoints\\best.pt",
+    "model": "tse_waveformer_v1",
+    "live": {
+      "device": "auto",
+      "cpu_threads": 4,
+      "block_chunks": 1,
+      "on_target_change": "keep",
+      "ramp_ms": 20.0,
+      "compile": true,
+      "detector_on_cpu": true
+    },
+    "gate": {
+      "enabled": true,
+      "attack_ms": 5.0,
+      "release_ms": 150.0,
+      "open_db": -8.0,
+      "close_db": -14.0,
+      "depth_db": 15.0,
+      "hold_ms": 200.0
+    },
+    "compare_checkpoint": null
+  },
+  "evaluation": {
+    "n": 500,
+    "seed": 1234,
+    "sample_rate": 48000,
+    "attenuation_db": 30.0,
+    "examples": 10,
+    "example_ids": [
+      "test-000036",
+      "test-000030"
+    ],
+    "live_delay_s": 0.05,
+    "reverb_seed": 4242,
+    "compare_checkpoint": null,
+    "high_attenuation_db": 40.0,
+    "bench_seed": 707,
+    "bench_absent": 200,
+    "bench_pair": [
+      "speech",
+      "music"
+    ],
+    "bench_pair_n": 100,
+    "bench_pair_min_clip_s": 5.0,
+    "bench_librispeech": 100,
+    "bench_examples": 3
+  },
+  "detection": {
+    "checkpoint": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\det_mn10_v1\\checkpoints\\best.pt",
+    "hop_s": 0.25,
+    "ema_alpha": 0.5,
+    "hysteresis": 0.1
+  },
+  "labels": [
+    "speech",
+    "music",
+    "footsteps",
+    "dishes",
+    "chair_scrape",
+    "alarm",
+    "traffic"
+  ],
+  "app_version": "0.1.0",
+  "git": {
+    "commit": "8e02d34885d88ade335691e46194bbb28889832a",
+    "dirty": true
+  }
+}

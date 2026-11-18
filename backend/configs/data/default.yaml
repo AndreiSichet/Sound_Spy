@@ -5,6 +5,8 @@ datasets:
   esc50:  {enabled: true}
   fsd50k: {enabled: true}
   custom: {enabled: true}
+  librispeech: {enabled: true, class: speech}   # read speech (CC BY 4.0), step 07b: every
+                                     # utterance is a foreground clip of this class
 
 roles:
   min_fg_clips_warning: 100          # warn if a class has fewer train foreground clips
@@ -20,6 +22,8 @@ splits:
     # uploaders move to val until every class has at least this many val clips.
     min_val_clips_per_class: 40
   custom: {val_fraction: 0.15, test_fraction: 0.15, seed: 0}   # split by recording session
+  # LibriSpeech: split = official subset (their speakers are disjoint by construction)
+  librispeech: {train: train-clean-100, val: dev-clean, test: test-clean}
 
 mixtures:
   duration_s: 6.0
@@ -35,3 +39,38 @@ mixtures:
   target_to_rest_db: [-10, 10]       # target sum vs. everything else, sampled per mixture
   peak_limit: 0.99                   # rescale whole mixture (and target) if exceeded
   reference_rms_dbfs: -25            # every event is normalised to this RMS (active frames) before gain_db
+
+  # --- step 07b. The values here reproduce the recipe files generated before it (val and test
+  # stay frozen, so results remain comparable); training uses the `dynamic` overrides below.
+  partial_target_prob: 0.0           # share of recipes whose target sounds only before or only
+                                     # after one moment ("switch"), so that a training crop
+                                     # around it holds the target switching on or off
+  partial_switch: [0.3, 0.7]         # where that moment lies, as a share of the duration
+  hard_negative_prob: 0.0            # absent target: chance that one foreground event is
+                                     # replaced by a class the target is confused with
+  hard_negative_pairs: {}            # selected class -> classes mistaken for it
+  source_mix:                        # class -> {dataset: share of its clips from that dataset};
+    speech: {librispeech: 0.0}       # the rest comes from the other datasets. 0 = never
+  lowpass_prob: 0.0                  # per foreground event: random low-pass filter
+  lowpass_hz: [6000, 16000]          # its cut-off range (log-uniform)
+
+  dynamic:                           # mixtures made on the fly while training the extractor
+    empty_target_prob: 0.15          # 3x more "the selected class is not there" than before
+    partial_target_prob: 0.25
+    hard_negative_prob: 0.5
+    # From the step-07 failure analysis (project_insights.md, Chapter 14): which class the v1
+    # model kept instead of the selected one, in the 51 test mixtures it made worse by more than
+    # 5 dB and in the validation set; pairs seen in both. (Most often it kept a BACKGROUND clip,
+    # 33 of 51, which no class pair can express.) speech -> music: the owner's listening test
+    # (classical music audible under "Speech") and 2 validation cases.
+    hard_negative_pairs:
+      speech: [music]
+      music: [alarm, speech]
+      chair_scrape: [alarm, dishes, music]
+      dishes: [chair_scrape, music, alarm]
+      traffic: [footsteps]
+      footsteps: [traffic]
+    source_mix:
+      speech: {librispeech: 0.5}     # half read speech (LibriSpeech), half everyday speech (FSD50K)
+    lowpass_prob: 0.3                # LibriSpeech is 16 kHz (nothing above 8 kHz): without this
+                                     # the model could learn "band-limited = speech"

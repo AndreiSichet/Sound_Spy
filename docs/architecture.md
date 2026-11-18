@@ -127,7 +127,8 @@ Every message, in both directions, uses one envelope:
 
 ```json
 {"type": "status" | "levels" | "waveform" | "spectrogram" | "detections" | "sources"
-         | "run" | "warning" | "error" | "set_target" | "set_bypass" | "set_method",
+         | "run" | "warning" | "error" | "set_target" | "set_bypass" | "set_method"
+         | "set_gate",
  "t": 12.34,
  "payload": { ... }}
 ```
@@ -146,6 +147,7 @@ Every message, in both directions, uses one envelope:
 | `run` | server → client | `RunModel` (`run_id`, `recording_id`, `labels`, `attenuation_db`, `method`, `status`, `error`, `output_path`, `duration_s`, `processing_seconds`, `info`) | on every state change of an offline processing run (step 06); never dropped |
 | `set_bypass` | client → server | `{"enabled": bool}` | stored, forwarded to the session; replied with `status` (step 06) |
 | `set_method` | client → server | `{"method": "neural_tse" \| "mask_baseline"}` | the extraction method of the **next** session; replied with `status`, or `error` while a session runs (step 07) |
+| `set_gate` | client → server | `{"enabled": bool}` | the neural output gate of the **next** session; replied with `status`, or `error` while a session runs (step 07b) |
 | `warning` | server → client | `{"code", "message"}` (e.g. `rtf_high`) | when needed, ≤ 1 per `rtf_window_s` |
 | `error` | server → client | `{"message": "..."}` | reply to a bad client message |
 | `set_target` | client → server | `TargetSpec`: `labels[]`, `direction`, `source_id`, `attenuation_db` | validated against `LabelSet`, stored, forwarded; replied with `status` |
@@ -163,6 +165,11 @@ and `compiled`.
 `warning` code `extraction_fallback`: neural was chosen but its model is unavailable, the
 baseline runs. `set_target` without `attenuation_db` uses `extraction.default_attenuation_db`.
 
+Step 07b: `status` carries `extraction_gate` (the gate chosen for sessions) and
+`output_drained` (how often the speaker queue was emptied back to its cushion); for the neural
+method `extraction` also has `gate` (on / off) and `gate_closed` (share of model steps with more
+than half of the gate's depth applied).
+
 On connect the server sends a `status` message, then a `status` heartbeat every
 `api.ws_heartbeat_s` seconds (2 s). Unknown or malformed client messages get an `error` reply;
 the client ignores unknown types with a console warning. In step 01 only `status` and `error`
@@ -172,11 +179,11 @@ are produced (`set_target` answers "not implemented (step-03)").
 
 | Route | Step |
 |---|---|
-| `GET /api/health`, `GET /api/config` | 01 (implemented); step 07: config also returns `extraction_methods` (`[{name, display_name, available, reason}]`), `default_method` (after the fallback) and `default_attenuation_db` |
+| `GET /api/health`, `GET /api/config` | 01 (implemented); step 07: config also returns `extraction_methods` (`[{name, display_name, available, reason}]`), `default_method` (after the fallback) and `default_attenuation_db`; step 07b: `default_gate` |
 | `GET /api/devices` | 02 (implemented): 200 with `resolved_input: null` + `error` if the profile does not resolve; 503 if PortAudio is unavailable |
 | `GET /api/recordings` | 02 (implemented): re-indexes `data/raw`, newest first |
 | `GET /api/session` | 03 (implemented): status, idle if none |
-| `POST /api/session/start` | 03 (implemented): `{mode, source: {type: mic\|file, path, loop}, monitor, method?}`; 409 running, 400 bad mode/source (file paths must be inside the project root), 503 no audio backend. `method` (step 07) applies to this session only |
+| `POST /api/session/start` | 03 (implemented): `{mode, source: {type: mic\|file, path, loop}, monitor, method?}`; 409 running, 400 bad mode/source (file paths must be inside the project root), 503 no audio backend. `method` (step 07) and `gate` (07b) apply to this session only |
 | `POST /api/session/stop` | 03 (implemented): idempotent |
 | `PUT /api/session/target` | 03 (implemented): `TargetSpec`, 422 unknown label; `attenuation_db` optional (default 15, echoed back) |
 | `PUT /api/session/monitor` | 03 (implemented): `{enabled, gain_db ∈ [−40, 12], muted}`; 409 no output device |
@@ -185,7 +192,8 @@ are produced (`set_target` answers "not implemented (step-03)").
 | `POST /api/recordings/{id}/detect` | 05 (implemented): offline detection timeline; 413 above `detection.offline.max_seconds`, 503 no model |
 | `PUT /api/session/bypass` | 06 (implemented): `{enabled}`; kept between sessions |
 | `PUT /api/session/method` | 07 (implemented): `{method: neural_tse \| mask_baseline}`; kept between sessions; 409 while a session runs |
-| `POST /api/recordings/{id}/process` | 06 (implemented): `{labels (>= 1), attenuation_db?, method?}` → 202 + `RunModel` (`pending`), processed by the one-job worker; 404 file gone, 413 above `extraction.offline.max_seconds`, 422 unknown label, 503 the method's model is missing (neural checkpoint, or the detection model for the baseline). Step 07: `method` = `neural_tse` \| `mask_baseline`, default = the configured method if it can run, else the baseline |
+| `PUT /api/session/gate` | 07b (implemented): `{enabled}`: the neural output gate; kept between sessions; 409 while a session runs |
+| `POST /api/recordings/{id}/process` | 06 (implemented): `{labels (>= 1), attenuation_db?, method?}` → 202 + `RunModel` (`pending`), processed by the one-job worker; 404 file gone, 413 above `extraction.offline.max_seconds`, 422 unknown label, 503 the method's model is missing (neural checkpoint, or the detection model for the baseline). Step 07: `method` = `neural_tse` \| `mask_baseline`, default = the configured method if it can run, else the baseline. Step 07b: `gate?` (neural; default `extraction.neural_tse.gate.enabled`) |
 | `GET /api/recordings/{id}/runs` | 06 (implemented): runs of a recording, newest first |
 | `GET /api/runs/{run_id}`, `GET /api/runs/{run_id}/audio` | 06 (implemented): 404 unknown; audio 409 unless `done` |
 
@@ -375,6 +383,71 @@ recipes; breakdowns as in step 06 plus one / several target classes; a second pa
 **reverberant copy** of the same recipes (rooms from `evaluation.reverb_seed`). Outputs in
 `experiments/ext_neural_tse/` and `outputs/eval/ext_neural_tse/`.
 
+## Neural extraction v2 (step 07b)
+
+**Output gate** (`extraction/gate.py`, `gate` in `neural_tse.yaml`): `OutputGate(cfg, model_rate,
+block=hop)` works per model step on the estimate `y` and the model input `x` of the same samples:
+block mean squares → one-pole envelopes (rise `attack_ms`, fall `release_ms`) → `r = L_y − L_x`
+(dB) → wanted gain `0` (`r ≥ open_db`) … `−depth_db` (`r ≤ close_db`), linear in dB → the gain
+follows upwards with the attack coefficient, downwards with the release coefficient after
+`hold_ms` without a reason to close → linear ramp inside the block. In `NeuralTSEExtractor` it
+sits between the model and the up-resampler (no latency); reset with the model state.
+`whole_estimates(core, x, sr, labels, gates)` runs the model once and returns the ungated
+estimate plus one per gate setting (same filters as streaming); `extract_whole(…, gate)` and
+`residual_mix` build the evaluation's whole-file outputs. `build_neural_extractor(config,
+gate=None|bool)`, `build_extractor(..., gate=)`, `build_chain(..., gate=)`,
+`SessionManager.set_gate`, `start_run(..., gate=)`; run sidecars' `parameters` hold
+`model_name` and the full `gate` settings.
+
+**Speaker queue draining** (`io/speaker_sink.py`): after each `write`, if the queue has been
+longer than `prebuffer_chunks + 1` for `output.drain_after_s` (1 s), the oldest chunks are
+dropped down to `prebuffer_chunks`, the first kept chunk's first `drain_fade_ms` (5 ms) are
+crossfaded from the chunk that would have played, and `drained` / `drained_chunks` count it.
+
+**Loss** (`training/extraction_data.py`): `quality_sum / B + leak_weight · Σ_silent-frames
+(max(10·log10(E_out/E_mix), leak_floor_db) − leak_floor_db) / (B · F)`, frames of
+`leak_frame_ms`, a frame is silent when the target's mean square is below `leak_silence_dbfs`;
+quality as in step 07 for examples whose target sounds. Validation adds `leak_frames_db` (the
+same frame measure over the silent frames of examples with a target, floor −60) and
+`val_empty_examples` target-absent examples; the start model is validated as epoch 0;
+`require_leak_not_worse`: an epoch becomes `best.pt` only if its target-absent leak is ≤ the
+start's + 0.25 dB; `time_budget_h` (or `--time-budget-h`) stops before an epoch that would not
+fit; resumed time is counted.
+
+**Data.** LibriSpeech (`data/collectors/librispeech.py`, alias `librispeech://` →
+`<external>/librispeech/LibriSpeech`; `fg:<datasets.librispeech.class>`, split = official
+subset from `splits.librispeech`, group = speaker; not counted in the FSD50K validation
+rebalance). `data/clip_cache.py`: `soundspy data cache --task clips` writes
+`<processed>/cache/clips_<rate>/<dataset>/<path>.wav` (PCM_16, mono) for
+`neural_tse.data.clip_cache` datasets/splits; `ClipLibrary.load_segment` reads such a copy when
+it exists for the wanted rate. Room bank (`data/reverb.py`): `soundspy data cache --task rirs`
+→ `rir_bank_<rate>.npz` (offsets, room facts, signature) + `.npy` (float16 responses, tails cut
+at `trim_db`); `RirBank.draw(rng, n)` = one room, distinct positions. Recipe sampling
+(`data/mixtures.py`): `RecipeSampler(library, labels, mix, split).sample(rng, id, spec)` is the
+only sampler (`generate_recipes` = a seeded loop over it; the frozen files are reproduced
+exactly); `MixtureConfig` adds `partial_target_prob` / `partial_switch` (`Recipe.switch_s`),
+`hard_negative_prob` / `hard_negative_pairs`, `source_mix` and `lowpass_prob` / `lowpass_hz`;
+`DataConfig.dynamic` = `mixtures` + `mixtures.dynamic`. `render(..., lowpass_hz=)` filters
+events before levelling; `meta["class_energy"]`. `data/dynamic.py: DynamicMixer.example(epoch,
+index)` (seeded by `(seed, epoch, index)`; crop around a random active target moment, or around
+the switch of a partial target); `training/datasets.py: DynamicExtractionSet`.
+
+**Evaluation** (`--name`, `--no-reverb`, `--no-benchmarks`): extra systems `neural_v1`
+(`evaluation.compare_checkpoint`, whole file), `neural_nogate`, `neural_high_db`
+(`evaluation.high_attenuation_db`); `worse` (count of SI-SDRi < −5 dB) and `dominant` (loudest
+non-selected class, from `class_energy`) per recipe; benchmark sets `absent`, `pair_absent`,
+`pair_a`, `pair_b`, `librispeech` (`evaluation.benchmarks`), frozen in
+`<mixtures>/bench_<name>.jsonl` (first line = the settings). `soundspy evaluate gate`
+(`training/tune_gate.py`): the model once over the validation set, a grid of gate settings,
+SI-SDRi / worse / suppression at 30 and 40 dB, `gate_tuning.json|md` next to the checkpoint.
+
+Result: `experiments/tse_waveformer_v2` (`leak_floor_db` −50) stopped at epoch 15, val +2.32 dB;
+`experiments/tse_waveformer_v2b` (`leak_floor_db` −30, the configured checkpoint) best epoch 20 of
+30, val SI-SDRi +3.17 dB, target-absent leak −17.8 dB (v1 +3.72 / −14.1). Gate −12 / −18 / 15 dB
+(tuned on val, cost 0.30 dB). Test (`experiments/ext_neural_tse_v2/`): +2.51 dB with the gate,
++2.88 without, suppression −17.1 / −15.6 dB (v1 +3.28 / −12.5; v1 + gate,
+`experiments/ext_neural_tse_v1_gate/`: +2.97 / −14.0); streaming = offline.
+
 ## Training data (step 04, `soundspy.data`)
 
 Storage (`paths` in `default.yaml`; large data never inside the repository):
@@ -388,7 +461,8 @@ Storage (`paths` in `default.yaml`; large data never inside the repository):
 | `custom` | `data/custom` | `<class>/<class>_NNNN.wav` + sidecar (`class`, `session_id`) |
 
 Path aliases (`data/aliases.py`): `esc50://` → `<external>/esc50/ESC-50-master`,
-`fsd50k://` → `<external>/fsd50k`, `custom://` → `<custom>`. The index stores only aliases.
+`fsd50k://` → `<external>/fsd50k`, `custom://` → `<custom>`, `librispeech://` →
+`<external>/librispeech/LibriSpeech` (07b). The index stores only aliases.
 
 Clip index columns: `clip_id, dataset, path, duration_s, sample_rate, channels, mids (list),
 raw_labels (list), role, split, group, license`. `role` ∈ `fg:<class_key>` | `bg` | `excluded`.
@@ -492,6 +566,7 @@ report is given in chat; `project_insights.md` is updated every step.
 | 05 | Detection: features, multi-label fine-tuning of a pretrained model, chunked inference, detections over WS — **done** (EfficientAT mn10_as, `detection/`, `training/`) | 1 |
 | 06 | Extraction baseline (detector-guided masking) + SI-SDR metrics; offline processing with A/B playback — **done** (detector-gated Wiener filter, `extraction/`, run sidecars, rebuildable DB) | 1 |
 | 07 | Neural TSE (Waveformer fine-tuned, label-conditioned, streaming); live extraction in the Semantic tab — **done** (`extraction/neural_tse.py`, cache + reverb, method selector) | 1 |
+| 07b | Neural extraction v2: silent-frame loss, output gate, LibriSpeech, dynamic mixing, speaker-queue draining — **done** | 1 |
 | 08 | End-to-end evaluation, robustness, polish, documentation for the university report | 1 |
 | module-3/4 | Simulated array (pyroomacoustics), DOA, beamforming, Spatial tab | 2 |
 | module-5 | Source tracking + detection fusion, Sources tab | 3 |

@@ -15,14 +15,33 @@ not asked to remove the room, only the other sounds).
 * :func:`recipe_rirs`: deterministic per recipe: whether it is reverberant at all (``prob``) and
   with which room, from ``(seed, recipe id)`` only, so caches can be rebuilt identically.
 
+**The bank** (step 07b). Simulating a room takes ~0.15 s, too slow to do for every training
+example made on the fly. :func:`build_rir_bank` therefore simulates ``rooms`` rooms once, each
+with ``positions`` source positions, and stores all impulse responses::
+
+    <processed>/cache/rir_bank_<rate>.npz    the index: where each response starts, the rooms
+    <processed>/cache/rir_bank_<rate>.npy    all responses one after the other, float16
+
+Each response is cut where less than ``trim_db`` (−60 dB) of its energy is left, then scaled to
+unit energy again. :class:`RirBank` opens the ``.npy`` memory-mapped (every DataLoader worker
+shares the same pages) and :meth:`RirBank.draw` hands out one random room with a different
+position for every event.
+
 ``TODO(module-3)``: the multi-channel version (one RIR per microphone of the array, from the
 device profile's geometry) replaces the single microphone here.
 """
 
 from __future__ import annotations
 
+import dataclasses
+import json
+import os
+import time
 import zlib
+from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -113,3 +132,180 @@ def recipe_rirs(recipe_id: str, n_events: int, sample_rate: int, cfg: ReverbConf
     if n_events == 0 or rng.random() >= cfg.prob:
         return None
     return simulate_rirs(sample_room(rng, cfg, n_events), sample_rate, cfg.max_order)
+
+
+# --------------------------------------------------------------------------------------------
+# The bank of precomputed rooms (step 07b)
+
+BANK_VERSION = 1
+THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+
+
+class RirBankError(RuntimeError):
+    pass
+
+
+def rir_bank_path(processed: Path, sample_rate: int) -> Path:
+    return Path(processed) / "cache" / f"rir_bank_{sample_rate}.npz"
+
+
+def _data_path(index_path: Path) -> Path:
+    return Path(index_path).with_suffix(".npy")
+
+
+def trim_tail(rir: np.ndarray, trim_db: float) -> np.ndarray:
+    """``rir`` without the end that holds less than ``trim_db`` of its energy (unit energy)."""
+    energy = np.cumsum(np.square(rir, dtype=np.float64)[::-1])[::-1]  # energy from i to the end
+    total = float(energy[0]) if energy.size else 0.0
+    if total <= 0.0:
+        return rir.astype(np.float32)
+    keep = int(np.searchsorted(-energy, -total * 10.0 ** (trim_db / 10.0)))
+    return unit_energy(rir[:max(1, keep)])
+
+
+def bank_signature(cfg: ReverbConfig, sample_rate: int, rooms: int, positions: int, seed: int,
+                   trim_db: float) -> dict:
+    reverb = dataclasses.asdict(cfg)
+    reverb.pop("prob", None)  # how often a room is used does not change the rooms
+    return json.loads(json.dumps({
+        "version": BANK_VERSION, "sample_rate": sample_rate, "rooms": rooms,
+        "positions": positions, "seed": seed, "trim_db": trim_db, "reverb": reverb}))
+
+
+def _simulate_rooms(numbers: list[int], cfg: ReverbConfig, sample_rate: int, positions: int,
+                    seed: int, trim_db: float):
+    out = []
+    for number in numbers:
+        rng = np.random.default_rng([seed, number])
+        room = sample_room(rng, cfg, positions)
+        rirs = [trim_tail(r, trim_db).astype(np.float16)
+                for r in simulate_rirs(room, sample_rate, cfg.max_order)]
+        out.append((number, rirs, (*room.dims, room.rt60_s)))
+    return out
+
+
+def build_rir_bank(cfg: ReverbConfig, sample_rate: int, path: Path, *, rooms: int,
+                   positions: int, seed: int, trim_db: float = -60.0,
+                   workers: int | None = None, force: bool = False,
+                   progress: Callable[[str], None] = print) -> dict:
+    """Simulate the bank (nothing is done when a bank with the same settings exists)."""
+    path = Path(path)
+    signature = bank_signature(cfg, sample_rate, rooms, positions, seed, trim_db)
+    if path.is_file() and _data_path(path).is_file():
+        with np.load(path, allow_pickle=False) as npz:
+            same = json.loads(str(npz["signature"])) == signature
+        if same:
+            return {"path": path, "built": False, "rooms": rooms, "positions": positions,
+                    "bytes": _data_path(path).stat().st_size, "seconds": 0.0}
+        if not force:
+            raise RirBankError(f"the room bank at {path} was made with other settings; "
+                               "run again with --force to rebuild it")
+    started = time.perf_counter()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workers = max(1, min(workers or max(1, (os.cpu_count() or 2) - 2), rooms))
+    size = max(1, min(25, rooms // (workers * 2) or 1))
+    batches = [list(range(i, min(rooms, i + size))) for i in range(0, rooms, size)]
+    progress(f"simulating {rooms} rooms x {positions} positions at {sample_rate} Hz "
+             f"({workers} processes)")
+    results: dict[int, tuple[list[np.ndarray], tuple[float, ...]]] = {}
+
+    def gather(batch_results) -> None:
+        for batch in batch_results:
+            for number, rirs, facts in batch:
+                results[number] = (rirs, facts)
+            if len(results) % max(100, rooms // 10) < size or len(results) == rooms:
+                progress(f"  {len(results)}/{rooms} rooms "
+                         f"({time.perf_counter() - started:.0f} s)")
+
+    args = (cfg, sample_rate, positions, seed, trim_db)
+    if workers == 1:
+        gather(_simulate_rooms(batch, *args) for batch in batches)
+    else:
+        saved = {key: os.environ.get(key) for key in THREAD_ENV}
+        os.environ.update({key: "1" for key in THREAD_ENV})
+        try:
+            with ProcessPoolExecutor(workers) as pool:
+                futures = [pool.submit(_simulate_rooms, batch, *args) for batch in batches]
+                gather(f.result() for f in futures)
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+    mean_length = write_rir_bank(path, [results[n][0] for n in range(rooms)],
+                                 [results[n][1] for n in range(rooms)], signature)
+    return {"path": path, "built": True, "rooms": rooms, "positions": positions,
+            "bytes": _data_path(path).stat().st_size,
+            "seconds": time.perf_counter() - started,
+            "mean_length_s": mean_length / sample_rate}
+
+
+def write_rir_bank(path: Path, rirs: list[list[np.ndarray]], facts: list[tuple[float, ...]],
+                   signature: dict) -> float:
+    """Write a bank from ``rirs[room][position]``; returns the mean response length (samples).
+    ``signature`` must hold ``sample_rate``."""
+    path = Path(path)
+    positions = len(rirs[0])
+    if any(len(room) != positions for room in rirs):
+        raise RirBankError("every room needs the same number of positions")
+    lengths = np.array([len(r) for room in rirs for r in room], dtype=np.int64)
+    offsets = np.zeros(lengths.size + 1, dtype=np.int64)
+    offsets[1:] = np.cumsum(lengths)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    part = _data_path(path).with_name(_data_path(path).name + ".part")
+    data = np.lib.format.open_memmap(part, mode="w+", dtype=np.float16, shape=(int(offsets[-1]),))
+    k = 0
+    for room in rirs:
+        for rir in room:
+            data[offsets[k]:offsets[k + 1]] = rir
+            k += 1
+    data.flush()
+    del data
+    os.replace(part, _data_path(path))
+    tmp = path.with_name(path.stem + ".tmp.npz")
+    np.savez(tmp, offsets=offsets, signature=np.array(json.dumps(signature)),
+             rooms=np.array(facts, dtype=np.float32), positions=np.int64(positions))
+    os.replace(tmp, path)
+    return float(lengths.mean())
+
+
+class RirBank:
+    """A finished bank: ``rir(room, position)`` returns a float32 copy from the memory map."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        if not self.path.is_file() or not _data_path(self.path).is_file():
+            raise RirBankError(f"no room bank at {self.path}: run "
+                               "`soundspy data cache --task rirs` first")
+        with np.load(self.path, allow_pickle=False) as npz:
+            self.offsets = npz["offsets"]
+            self.room_facts = npz["rooms"]  # (rooms, 4): length, width, height, RT60
+            self.positions = int(npz["positions"])
+            self.signature = json.loads(str(npz["signature"]))
+        self.rooms = int(self.room_facts.shape[0])
+        self.sample_rate = int(self.signature["sample_rate"])
+        self._data: np.ndarray | None = None
+
+    def rir(self, room: int, position: int) -> np.ndarray:
+        if not (0 <= room < self.rooms and 0 <= position < self.positions):
+            raise IndexError((room, position))
+        if self._data is None:
+            self._data = np.load(_data_path(self.path), mmap_mode="r")
+        k = room * self.positions + position
+        return np.asarray(self._data[self.offsets[k]:self.offsets[k + 1]], dtype=np.float32)
+
+    def draw(self, rng: np.random.Generator, n_events: int) -> list[np.ndarray]:
+        """One random room; every event gets its own position in it (reused only when there
+        are more events than positions)."""
+        room = int(rng.integers(self.rooms))
+        chosen = rng.choice(self.positions, size=n_events, replace=n_events > self.positions)
+        return [self.rir(room, int(p)) for p in chosen]
+
+    def close(self) -> None:
+        self._data = None
+
+    def __getstate__(self) -> dict:  # the memory map is reopened in worker processes
+        state = dict(self.__dict__)
+        state["_data"] = None
+        return state

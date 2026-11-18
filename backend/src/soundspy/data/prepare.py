@@ -1,12 +1,15 @@
 """``soundspy data prepare``: build the unified clip index and the activity maps.
 
 1. Load the AudioSet ontology and check every ``audioset`` name in ``classes.yaml``.
-2. Run the collectors of the enabled, downloaded datasets (ESC-50, FSD50K, custom).
+2. Run the collectors of the enabled, downloaded datasets (ESC-50, FSD50K, custom,
+   LibriSpeech).
 3. Read every new clip once, in parallel: header facts + RMS envelope (``activity.py``).
    Already analysed clips are skipped, so a second run takes seconds.
 4. Decide each clip's role (``roles.py``), rebalance validation (whole FSD50K training
    uploaders -> val until every class has ``splits.fsd50k.min_val_clips_per_class``; logged in
-   ``val_rebalance.json``) and check that no leakage group spans two splits.
+   ``val_rebalance.json``) and check that no leakage group spans two splits. Datasets that come
+   with official, speaker-disjoint subsets (LibriSpeech) are not counted in the rebalance: the
+   FSD50K assignment, and with it the recipe files already generated, stays what it was.
 5. Write ``<processed>/clip_index.parquet`` and a CSV copy for inspection.
 
 Index columns: ``clip_id, dataset, path, duration_s, sample_rate, channels, mids, raw_labels,
@@ -33,6 +36,7 @@ INDEX_FILE = "clip_index.parquet"
 INDEX_CSV = "clip_index.csv"
 REBALANCE_FILE = "val_rebalance.json"
 ACTIVITY_DIR = "activity"
+OFFICIAL_SPLITS = frozenset({"librispeech"})  # not counted when validation is rebalanced
 COLUMNS = ("clip_id", "dataset", "path", "duration_s", "sample_rate", "channels", "mids",
            "raw_labels", "role", "split", "group", "license")
 
@@ -101,7 +105,7 @@ def load_ontology(config: AppConfig) -> Ontology:
 def collect_rows(
     config: AppConfig, ontology: Ontology, summary: PrepareSummary
 ) -> list[ClipRow]:
-    from soundspy.data.collectors import custom, esc50, fsd50k
+    from soundspy.data.collectors import custom, esc50, fsd50k, librispeech
 
     data, paths = config.data, config.paths
     try:
@@ -127,6 +131,16 @@ def collect_rows(
             rows += custom.collect(
                 paths, config.labels, mids, val_fraction=data.custom_val_fraction,
                 test_fraction=data.custom_test_fraction, seed=data.custom_seed)
+        if data.enabled.get("librispeech"):
+            key = data.librispeech_class
+            if key not in config.labels:
+                raise PrepareError(f"datasets.librispeech.class names the unknown class {key!r}; "
+                                   f"classes: {list(config.labels)}")
+            if is_done(paths["external"], "librispeech"):
+                rows += librispeech.collect(paths, data.librispeech_subsets, key, mids[key])
+            else:
+                summary.skipped.append(
+                    "librispeech not downloaded (soundspy data download librispeech)")
     except (CollectorError, OntologyError) as exc:
         raise PrepareError(str(exc)) from exc
     return rows
@@ -236,7 +250,8 @@ def apply_val_rebalance(records: list[dict], config: AppConfig,
     """Move whole FSD50K training uploaders to val until every class has enough val clips."""
     classes = list(config.labels)
     moved, val = rebalance_val(
-        ((r["dataset"] + ":" + r["group"], r["split"], role_class(r["role"])) for r in records),
+        ((r["dataset"] + ":" + r["group"], r["split"], role_class(r["role"])) for r in records
+         if r["dataset"] not in OFFICIAL_SPLITS),
         classes,
         min_per_class=config.data.fsd50k_min_val_clips_per_class,
         movable=lambda g: g.startswith("fsd50k:uploader:"),
@@ -265,7 +280,7 @@ def load_clip_index(processed: Path):
     return frame
 
 
-def load_activity(processed: Path, datasets=("esc50", "fsd50k", "custom")
+def load_activity(processed: Path, datasets=("esc50", "fsd50k", "custom", "librispeech")
                   ) -> dict[str, ActivityStore]:
     """Activity stores per dataset (only the ones that exist)."""
     out = {}

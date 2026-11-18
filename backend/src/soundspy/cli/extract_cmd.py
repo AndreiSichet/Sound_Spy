@@ -2,6 +2,7 @@
 
     soundspy extract <wav> --labels speech [music ...] [--attenuation-db 15] [--out out.wav]
                      [--method neural_tse|mask_baseline] [--device auto|cuda|cpu]
+                     [--gate | --no-gate]
 
 Offline extraction. ``neural_tse`` (step 07, the default once its model is trained): the file
 goes through the neural extractor. ``mask_baseline`` (step 06): the detector first runs over the
@@ -9,7 +10,8 @@ whole file with windows centred on each moment (no lag, unlike live), then the g
 timeline. ``--attenuation-db`` defaults to ``extraction.default_attenuation_db``. The result is a
 **processing run** like the ones the website makes: ``outputs/processed/<run_id>.wav`` plus its
 ``.json`` sidecar (the API indexes it the next time it looks). ``--out`` additionally copies the
-processed audio to a path of your choice.
+processed audio to a path of your choice. ``--gate`` / ``--no-gate`` (step 07b) switch the
+neural extractor's output gate on or off (default: ``extraction.neural_tse.gate.enabled``).
 """
 
 from __future__ import annotations
@@ -36,6 +38,8 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
                         help="extraction method (default: extraction.method if its model exists)")
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default=None,
                         help="where the model runs (default: from the configuration)")
+    parser.add_argument("--gate", action=argparse.BooleanOptionalAction, default=None,
+                        help="neural method: the output gate on / off (default: as configured)")
     parser.set_defaults(handler=run)
 
 
@@ -50,7 +54,7 @@ def run(args: argparse.Namespace) -> int:
     try:
         config = load_config()
         run = start_run(config, args.wav, args.labels, attenuation_db=args.attenuation_db,
-                        method=args.method)
+                        method=args.method, gate=args.gate)
     except (ConfigError, ValueError) as exc:
         print(f"error: {exc}")
         return 1

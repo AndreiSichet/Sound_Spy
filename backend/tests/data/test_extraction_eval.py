@@ -233,7 +233,8 @@ def test_subset_bins_and_summary_helpers(recipe_env) -> None:
     summary = summarize(records)
     assert (summary["n"], summary["n_empty"]) == (2, 1)
     assert summary["live"] == {"si_sdr": 1.0, "si_sdr_i": -4.0, "si_sdr_i_median": -4.0,
-                               "snr_i": 3.0, "missed": 0.5, "suppression_db": -20.0}
+                               "snr_i": 3.0, "missed": 0.5, "suppression_db": -20.0,
+                               "worse": 1}  # the -10 dB recipe
     assert summarize([])["live"]["si_sdr_i"] is None
 
 
@@ -318,3 +319,63 @@ def test_reverberant_copy_of_the_evaluation(eval_config, neural_kit, tmp_path) -
     again = evaluate_extraction(config, "neural_tse", "test", n=4, sample_rate=SR,
                                 device="cpu", examples=0, progress=lambda m: None)
     assert again["reverberant"]["overall"] == reverb["overall"]
+
+
+def test_evaluation_with_the_gate_an_earlier_model_and_benchmarks(eval_config, neural_kit,
+                                                                  tmp_path) -> None:
+    """Step 07b rows (previous model, model without its gate, 40 dB) and the benchmark sets."""
+    from soundspy.training.evaluate_extraction import NEURAL_SYSTEMS, bench_path
+
+    config = neural_kit.make(eval_config, tmp_path)
+    previous = neural_kit.make(eval_config, tmp_path / "old", seed=1)
+    neural = config.extraction.neural_tse
+    # thresholds the random tiny model's output really crosses
+    gate = dataclasses.replace(neural.gate, enabled=True, open_db=10.0, close_db=-5.0)
+    ev = dataclasses.replace(
+        config.extraction.evaluation, bench_absent=5, bench_pair=("speech", "music"),
+        bench_pair_n=2, bench_pair_min_clip_s=2.0, bench_librispeech=2, bench_examples=1,
+        compare_checkpoint=previous.extraction.neural_tse.checkpoint)
+    config = dataclasses.replace(config, extraction=dataclasses.replace(
+        config.extraction, evaluation=ev,
+        neural_tse=dataclasses.replace(neural, gate=gate)))
+    logs: list[str] = []
+    result = evaluate_extraction(config, "neural_tse", "test", n=4, sample_rate=SR,
+                                 device="cpu", examples=1, reverberant=False,
+                                 name="ext_v2_test", progress=logs.append)
+    assert result["systems"] == [*SYSTEMS, "neural_v1", "neural_nogate", *NEURAL_SYSTEMS]
+    overall = result["overall"]
+    assert overall["neural_stream"]["si_sdr_i"] == pytest.approx(
+        overall["neural_offline"]["si_sdr_i"], abs=0.05)  # streaming == whole file, gate on
+    assert overall["neural_nogate"] != overall["neural_offline"]  # the gate changes the output
+    assert all(isinstance(overall[s]["worse"], int) for s in result["systems"])
+    assert result["high_attenuation_db"] == 40.0 and result["compared_with"]["model"] == "tse_tiny"
+    assert any("output gate on" in m for m in logs)
+
+    benches = result["benchmarks"]
+    assert set(benches) == {"absent", "pair_absent", "pair_a", "pair_b"}  # no LibriSpeech here
+    assert any("benchmark librispeech skipped" in m for m in logs)
+    assert benches["absent"]["overall"]["n_empty"] == 5 and benches["absent"]["overall"]["n"] == 0
+    assert benches["pair_absent"]["overall"]["n_empty"] == 2
+    assert benches["pair_a"]["overall"]["n"] == 2 and benches["pair_b"]["overall"]["n"] == 2
+    assert benches["absent"]["empty_by_target_class"]  # per selected class
+    assert benches["absent"]["empty_by_dominant_other"]  # per loudest other sound
+    path = bench_path(config, "absent")
+    header = json.loads(path.read_text("utf-8").splitlines()[0])
+    assert header["benchmark"] == "absent" and header["count"] == 5
+    exp = config.paths["experiments"] / "ext_v2_test"
+    for name in ("per_recipe_absent.csv", "per_recipe_pair_a.csv", "metrics.md"):
+        assert (exp / name).is_file(), name
+    table = (exp / "metrics.md").read_text("utf-8")
+    assert "Benchmark `absent`" in table and "Worse than input" in table
+    examples = config.paths["outputs"] / "eval" / "ext_v2_test"
+    index = json.loads((examples / "index.json").read_text("utf-8"))
+    assert {e.get("benchmark") for e in index["examples"]} >= {"absent", "pair_a"}
+    first = next(e for e in index["examples"] if e.get("benchmark") is None)
+    assert {"neural_v1", "neural_nogate", "neural_high_db"} <= set(first["files"])
+    # the benchmark files are frozen: a second evaluation reads the same recipes
+    before = path.read_text("utf-8")
+    again = evaluate_extraction(config, "neural_tse", "test", n=2, sample_rate=SR, device="cpu",
+                                examples=0, reverberant=False, name="ext_v2_test",
+                                progress=lambda m: None)
+    assert path.read_text("utf-8") == before
+    assert again["benchmarks"]["absent"]["overall"] == benches["absent"]["overall"]

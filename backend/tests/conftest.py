@@ -389,15 +389,19 @@ def config():
     """The real project configuration (laptop profile), without the trained models.
 
     ``detection.checkpoint = None`` and ``extraction.neural_tse.checkpoint = None`` with the
-    baseline as the method: once the trained files exist, chains built from the real config
-    would otherwise load them (on the GPU if there is one, against rule 11). Tests that need a
-    model use ``stub_experiment`` (detection) or ``tiny_neural`` (extraction).
+    baseline as the method (and no ``evaluation.compare_checkpoint``, no benchmark sets): once
+    the trained files exist, chains built from the real config would otherwise load them (on
+    the GPU if there is one, against rule 11). Tests that need a model use ``stub_experiment``
+    (detection) or ``tiny_neural`` (extraction).
     """
     from soundspy.config import load_config
 
     config = load_config()
+    evaluation = dataclasses.replace(  # no earlier model, no benchmark sets (step 07b)
+        config.extraction.evaluation, compare_checkpoint=None, bench_absent=0, bench_pair_n=0,
+        bench_librispeech=0)
     extraction = dataclasses.replace(
-        config.extraction, method="mask_baseline",
+        config.extraction, method="mask_baseline", evaluation=evaluation,
         neural_tse=dataclasses.replace(config.extraction.neural_tse, checkpoint=None))
     return dataclasses.replace(
         config, extraction=extraction,
@@ -426,7 +430,8 @@ def make_tiny_neural(config, folder: Path, *, seed: int = 0, method: str = "neur
     neural = config.extraction.neural_tse
     neural = dataclasses.replace(
         neural, model=model, checkpoint=checkpoint,
-        live=dataclasses.replace(neural.live, device="cpu", cpu_threads=1, compile=False))
+        live=dataclasses.replace(neural.live, device="cpu", cpu_threads=1, compile=False),
+        gate=dataclasses.replace(neural.gate, enabled=False))  # tests that need it switch it on
     extraction = dataclasses.replace(config.extraction, method=method, neural_tse=neural)
     return dataclasses.replace(config, extraction=extraction)
 

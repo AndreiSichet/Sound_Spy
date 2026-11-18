@@ -13,6 +13,9 @@ esc50     ``<external>/esc50/ESC-50-master``               ``esc50://audio/1-100
 fsd50k    ``<external>/fsd50k``                            ``fsd50k://FSD50K.dev_audio/64760.wav``
 custom    ``<custom>``                                     ``custom://speech/speech_001.wav``
 ========  ===============================================  =========================
+
+``librispeech`` (step 07b) lives in ``<external>/librispeech/LibriSpeech``; an alias looks like
+``librispeech://train-clean-100/19/198/19-198-0000.flac``.
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ _ROOTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "esc50": ("external", ("esc50", ESC50_ARCHIVE_DIR)),
     "fsd50k": ("external", ("fsd50k",)),
     "custom": ("custom", ()),
+    "librispeech": ("external", ("librispeech", "LibriSpeech")),
 }
 
 

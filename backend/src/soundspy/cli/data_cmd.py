@@ -5,6 +5,7 @@ Subcommands::
     soundspy data paths                      resolved data folders and free space
     soundspy data download ontology esc50    download + verify + extract (resumable)
     soundspy data download fsd50k [--yes]
+    soundspy data download librispeech [--yes]   train-clean-100, dev-clean, test-clean (7 GB)
     soundspy data cleanup-archives [--yes]   delete downloaded archives of finished datasets
     soundspy data prepare                    clip index + activity maps
     soundspy data stats                      coverage table (class x split x dataset)
@@ -12,7 +13,9 @@ Subcommands::
     soundspy data preview [--split val] [--n 5]   render a few recipes to outputs/previews
     soundspy data cache --task extraction [--sample-rate 44100] [--split all]
                                              render every recipe once into arrays on D:
-                                             (training then reads them at memory speed)
+                                             (validation and test of the extractor)
+    soundspy data cache --task clips         LibriSpeech training clips at the model's rate
+    soundspy data cache --task rirs          the bank of simulated rooms (dynamic mixing)
 """
 
 from __future__ import annotations
@@ -36,7 +39,8 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     p.set_defaults(handler=run_paths)
 
     p = sub.add_parser("download", help="download, verify and extract datasets (resumable)")
-    p.add_argument("datasets", nargs="+", choices=("ontology", "esc50", "fsd50k", "all"),
+    p.add_argument("datasets", nargs="+",
+                   choices=("ontology", "esc50", "fsd50k", "librispeech", "all"),
                    help="what to download")
     p.add_argument("--yes", action="store_true", help="do not ask before large downloads")
     p.add_argument("--no-progress", action="store_true", help="no progress bars")
@@ -67,7 +71,7 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     p.set_defaults(handler=run_preview)
 
     p = sub.add_parser("cache", help="pre-render the mixtures for training (resumable)")
-    p.add_argument("--task", choices=("extraction",), required=True)
+    p.add_argument("--task", choices=("extraction", "clips", "rirs"), required=True)
     p.add_argument("--sample-rate", type=int, default=None,
                    help="default: the extraction model's rate (44100)")
     p.add_argument("--split", choices=("train", "val", "test", "all"), default="all")
@@ -235,6 +239,10 @@ def run_cache(args: argparse.Namespace) -> int:
         config = _config()
     except ConfigError as exc:
         return _fail(str(exc))
+    if args.task == "clips":
+        return _cache_clips(config, args)
+    if args.task == "rirs":
+        return _cache_rirs(config, args)
     splits = ("train", "val", "test") if args.split == "all" else (args.split,)
     started = time.perf_counter()
     total = 0
@@ -251,4 +259,56 @@ def run_cache(args: argparse.Namespace) -> int:
     except (CacheError, RecipeError, PrepareError, ReverbUnavailable) as exc:
         return _fail(str(exc))
     print(f"cache: {total / 1e9:.2f} GB in {time.perf_counter() - started:.0f} s")
+    return 0
+
+
+def _cache_clips(config: AppConfig, args: argparse.Namespace) -> int:
+    from soundspy.data.cache import CacheError
+    from soundspy.data.clip_cache import ClipCacheError, build_clip_cache
+    from soundspy.data.prepare import PrepareError
+
+    data = config.extraction.neural_tse.data
+    if not data.clip_cache_datasets:
+        print("extraction.neural_tse.data.clip_cache.datasets is empty: nothing to convert")
+        return 0
+    try:
+        for dataset in data.clip_cache_datasets:
+            summary = build_clip_cache(
+                config, dataset, sample_rate=args.sample_rate, workers=args.workers,
+                limit=args.limit, progress=lambda m: print(m, flush=True))
+            state = (f"converted {summary.built} in {summary.seconds:.0f} s"
+                     if summary.built else "already complete")
+            print(f"{dataset}: {summary.clips} clips, {summary.bytes / 1e9:.2f} GB, {state} "
+                  f"-> {summary.directory}", flush=True)
+    except (ClipCacheError, CacheError, PrepareError) as exc:
+        return _fail(str(exc))
+    return 0
+
+
+def _cache_rirs(config: AppConfig, args: argparse.Namespace) -> int:
+    from soundspy.data.reverb import (
+        ReverbUnavailable,
+        RirBankError,
+        build_rir_bank,
+        rir_bank_path,
+    )
+
+    cfg = config.extraction.neural_tse
+    rate = args.sample_rate or cfg.model.sample_rate
+    if cfg.data.rir_bank_rooms <= 0:
+        print("extraction.neural_tse.data.rir_bank.rooms is 0: no bank to build")
+        return 0
+    try:
+        info = build_rir_bank(
+            cfg.data.reverb, rate, rir_bank_path(config.paths["processed"], rate),
+            rooms=cfg.data.rir_bank_rooms if args.limit is None else args.limit,
+            positions=cfg.data.rir_bank_positions, seed=cfg.data.seed,
+            trim_db=cfg.data.rir_trim_db, workers=args.workers, force=args.force,
+            progress=lambda m: print(m, flush=True))
+    except (RirBankError, ReverbUnavailable) as exc:
+        return _fail(str(exc))
+    state = (f"simulated in {info['seconds']:.0f} s, mean length "
+             f"{info['mean_length_s'] * 1000:.0f} ms" if info["built"] else "already complete")
+    print(f"rooms: {info['rooms']} x {info['positions']} positions, "
+          f"{info['bytes'] / 1e9:.2f} GB, {state} -> {info['path']}")
     return 0

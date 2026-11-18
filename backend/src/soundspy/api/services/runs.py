@@ -155,11 +155,12 @@ class RunManager:
         return self._queue.qsize()
 
     def submit(self, db: Session, recording: Recording, labels: list[str], *,
-               attenuation_db: float | None, method: str | None) -> ProcessingRun:
+               attenuation_db: float | None, method: str | None,
+               gate: bool | None = None) -> ProcessingRun:
         """Create, index and queue a run. Raises ``ValueError`` for bad labels or method."""
         path = absolute_path(recording.path, self.config.project_root)
         data = offline.start_run(self.config, path, labels, attenuation_db=attenuation_db,
-                                 method=method)
+                                 method=method, gate=gate)
         row = self._index(db, data["run_id"])
         self._ensure_thread()
         self._queue.put(data["run_id"])

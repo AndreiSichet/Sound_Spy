@@ -1,34 +1,40 @@
 """PyTorch datasets over the pre-rendered extraction cache (``data/cache.py``), and the loss.
 
 **Training items** are random crops: ``train_crop_s`` seconds out of the 6 s example (a full
-example does not fit the 4 GB card at a useful batch size). A crop is addressed by
-``(index, epoch)`` and its position comes from a generator seeded with ``(seed, index, epoch)``,
-so every epoch sees new crops and a run can be repeated exactly. With probability
-``crop_target_prob`` the crop is placed so that it overlaps the stretch where the target sounds;
-otherwise anywhere. Without that, short targets would mostly fall outside the crop and most
-training examples would ask for silence.
+example does not fit the 4 GB card at a useful batch size). With the cached training set of
+step 07 (``ExtractionTrainSet``) a crop is addressed by ``(index, epoch)`` and its position comes
+from a generator seeded with ``(seed, index, epoch)``; with dynamic mixing (step 07b,
+``training/datasets.py: DynamicExtractionSet``) the whole mixture is new for every
+``(index, epoch)``. With probability ``crop_target_prob`` the crop is placed so that it overlaps
+the stretch where the target sounds; otherwise anywhere.
 
 **Validation items** are whole examples, always the same ones.
 
-**The loss** (:func:`extraction_loss`), per example, in dB::
+**The loss** (:func:`extraction_loss`) has two parts, both in dB::
 
-    target sounds:     -( snr_weight * SNR(est, target) + si_snr_weight * SI-SNR(est, target) )
-    target is silent:   max( 10 log10( |est|^2 / |mixture|^2 ), empty_floor_db )
+    quality (examples whose target sounds):
+        -( snr_weight * SNR(est, target) + si_snr_weight * SI-SNR(est, target) )
+    leakage (every frame of every example in which the target is silent):
+        max( 10 log10( E_out / E_mix ), leak_floor_db ) - leak_floor_db
 
-and the batch loss is ``(sum of the first + empty_weight * sum of the second) / batch size``.
+    loss = sum(quality) / batch  +  leak_weight * sum(leakage over silent frames) / (batch * frames)
+
+The leakage of a frame is therefore 0 for a silent output (or one at least ``-leak_floor_db``
+= 50 dB below the mixture) and 50 for an output that simply copies the mixture.
 
 * *SNR* compares the estimate with the target sample by sample: both shape and **level** must be
   right. *SI-SNR* ignores the level and is what the evaluation reports. Sound Spy uses mostly
   SI-SNR (0.8) with a share of SNR (0.2): the SNR share is what fixes the level of the estimate
   (SI-SNR alone leaves it free, and the attenuation slider mixes the estimate with the input).
-  The published Waveformer was trained with 0.9 SNR / 0.1 SI-SNR; that was tried first and
-  left a tail of badly wrong outputs: extracting the *wrong* sound costs only ~3 dB of SNR
-  (staying quiet is the safe choice) but 20-40 dB of SI-SNR, so the SI-SNR-heavy loss pushes
-  much harder on exactly those cases.
-* For a silent target neither ratio exists (division by zero energy). The correct output is
-  silence, so the loss is the output's energy relative to the mixture's, in dB: lower is
-  better. Below ``empty_floor_db`` (−40 dB) there is no further reward, otherwise the easiest
-  way to lower the loss would be to push already inaudible outputs towards minus infinity.
+* **Leakage, frame by frame (step 07b).** SI-SNR over a 3 s crop is decided by the loud part: a
+  model that keeps humming the background during the target's pauses loses almost nothing. So
+  the crop is cut into ``leak_frame_ms`` frames; in every frame whose *true target* is below
+  ``leak_silence_dbfs`` the correct output is silence, and the output's energy relative to the
+  mixture's in that frame is penalised. Below ``leak_floor_db`` (−50 dB) there is no further
+  reward, otherwise the easiest way to lower the loss would be to push already inaudible
+  outputs towards minus infinity. An example whose target class is absent is simply all silent
+  frames: it gets ``leak_weight`` times its mean leakage (step 07 used one whole-crop ratio for
+  those examples only, and nothing for the silent stretches of the others).
 """
 
 from __future__ import annotations
@@ -41,26 +47,10 @@ from torch.utils.data import Dataset
 
 from soundspy.config import ExtractionLossConfig
 from soundspy.data.cache import ExtractionCache
+from soundspy.data.dynamic import crop_start
 
 SILENT_POWER = 1e-7  # mean square below this (-70 dBFS): the target does not sound in the crop
-MIN_OVERLAP_S = 0.25  # a "target" crop holds at least this much of the target's stretch
 _EPS = 1e-8
-
-
-def crop_start(rng: np.random.Generator, samples: int, crop: int, target_start: int,
-               target_end: int, sample_rate: int, target_prob: float) -> int:
-    """Where a crop of ``crop`` samples starts inside an example of ``samples``."""
-    last = samples - crop
-    if last <= 0:
-        return 0
-    span = target_end - target_start
-    if span > 0 and rng.random() < target_prob:
-        overlap = min(span, crop, int(MIN_OVERLAP_S * sample_rate))
-        low = max(0, target_start + overlap - crop)
-        high = min(last, target_end - overlap)
-        if high >= low:
-            return int(rng.integers(low, high + 1))
-    return int(rng.integers(0, last + 1))
 
 
 class ExtractionTrainSet(Dataset):
@@ -142,20 +132,50 @@ def is_silent(reference: torch.Tensor) -> torch.Tensor:
     return reference.pow(2).mean(dim=-1) < SILENT_POWER
 
 
+MIX_FLOOR_POWER = 1e-9  # a mixture frame is never taken to be quieter than -90 dBFS
+
+
+def frame_power(x: torch.Tensor, frame: int) -> torch.Tensor:
+    """Mean square per frame: ``(batch, samples)`` -> ``(batch, frames)`` (a rest is dropped)."""
+    frames = x.shape[-1] // frame
+    return x[..., :frames * frame].reshape(*x.shape[:-1], frames, frame).pow(2).mean(dim=-1)
+
+
+def frame_leakage(estimate: torch.Tensor, target: torch.Tensor, mixture: torch.Tensor,
+                  frame: int, silence_dbfs: float, floor_db: float
+                  ) -> tuple[torch.Tensor, torch.Tensor]:
+    """``(leak_db, silent)``, both ``(batch, frames)``: the output's level against the
+    mixture's in every frame in dB (not below ``floor_db``), and where the true target is
+    silent."""
+    frame = max(1, min(frame, estimate.shape[-1]))
+    silent = frame_power(target, frame) < 10.0 ** (silence_dbfs / 10.0)
+    ratio = frame_power(estimate, frame) / frame_power(mixture, frame).clamp_min(MIX_FLOOR_POWER)
+    leak = 10.0 * torch.log10(ratio + _EPS)
+    return torch.clamp(leak, min=floor_db), silent
+
+
 def extraction_loss(estimate: torch.Tensor, target: torch.Tensor, mixture: torch.Tensor,
-                    cfg: ExtractionLossConfig) -> tuple[torch.Tensor, dict[str, float]]:
+                    cfg: ExtractionLossConfig, sample_rate: int
+                    ) -> tuple[torch.Tensor, dict[str, float]]:
     """The batch loss (see the module docstring) and its parts for logging."""
     estimate, target, mixture = estimate.float(), target.float(), mixture.float()
-    silent = is_silent(target)
+    empty = is_silent(target)
     quality = -(cfg.snr_weight * snr_db(estimate, target)
                 + cfg.si_snr_weight * si_snr_db(estimate, target))
-    leak = torch.clamp(_db(energy(estimate), energy(mixture)), min=cfg.empty_floor_db)
-    per_example = torch.where(silent, cfg.empty_weight * leak, quality)
+    quality_sum = torch.where(empty, torch.zeros_like(quality), quality).sum()
+    frame = round(cfg.leak_frame_ms * sample_rate / 1000.0)
+    leak, silent = frame_leakage(estimate, target, mixture, frame, cfg.leak_silence_dbfs,
+                                 cfg.leak_floor_db)
+    penalty = leak - cfg.leak_floor_db  # 0 = silent (or below the floor)
+    leak_sum = torch.where(silent, penalty, torch.zeros_like(penalty)).sum()
+    batch = estimate.shape[0]
+    loss = quality_sum / batch + cfg.leak_weight * leak_sum / (batch * leak.shape[-1])
+    n_empty = int(empty.sum())
     n_silent = int(silent.sum())
-    n_sound = silent.numel() - n_silent
     parts = {
-        "quality": float(quality[~silent].mean().detach()) if n_sound else float("nan"),
+        "quality": float(quality[~empty].mean().detach()) if n_empty < batch else float("nan"),
         "leak_db": float(leak[silent].mean().detach()) if n_silent else float("nan"),
-        "silent": n_silent / max(1, silent.numel()),
+        "silent": n_silent / max(1, silent.numel()),  # share of target-silent frames
+        "empty": n_empty / max(1, batch),  # share of examples without any target
     }
-    return per_example.mean(), parts
+    return loss, parts

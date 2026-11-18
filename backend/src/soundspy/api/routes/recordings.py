@@ -133,7 +133,8 @@ def process_recording(recording_id: int, body: ProcessRequest, request: Request,
                        "extractor needs it to find the selected sounds")
     try:
         return request.app.state.run_manager.submit(
-            db, row, body.labels, attenuation_db=body.attenuation_db, method=method)
+            db, row, body.labels, attenuation_db=body.attenuation_db, method=method,
+            gate=body.gate)
     except ValueError as exc:  # unknown label
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

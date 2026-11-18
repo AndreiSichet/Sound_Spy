@@ -192,10 +192,44 @@ def build_tree(root: Path, base: AppConfig) -> DataEnv:
              "outputs": root / "outputs", "raw": root / "raw"}
     mix = dataclasses.replace(base.data.mixtures, counts={"train": 50, "val": 20, "test": 20},
                               duration_s=4.0)
+    # the hard-negative pairs of the real config, limited to the five test classes
+    known = set(LABELS)
+    pairs = {k: tuple(c for c in v if c in known)
+             for k, v in base.data.dynamic.hard_negative_pairs.items() if k in known}
+    dynamic = dataclasses.replace(base.data.dynamic,
+                                  hard_negative_pairs={k: v for k, v in pairs.items() if v})
     # no validation rebalance by default: the fake tree is far below the real target of 40
-    data = dataclasses.replace(base.data, mixtures=mix, fsd50k_min_val_clips_per_class=0)
-    config = dataclasses.replace(base, paths=paths, labels=LABELS, configs_dir=configs, data=data)
+    data = dataclasses.replace(base.data, mixtures=mix, dynamic=dynamic,
+                               fsd50k_min_val_clips_per_class=0)
+    # no earlier neural model and no benchmark sets unless a test asks for them (step 07b)
+    evaluation = dataclasses.replace(base.extraction.evaluation, compare_checkpoint=None,
+                                     bench_absent=0, bench_pair_n=0, bench_librispeech=0)
+    extraction = dataclasses.replace(base.extraction, evaluation=evaluation)
+    config = dataclasses.replace(base, paths=paths, labels=LABELS, configs_dir=configs, data=data,
+                                 extraction=extraction)
     return DataEnv(root, config, external)
+
+
+# (subset, speaker, chapter, utterances) of the fake LibriSpeech tree (16 kHz FLAC)
+LIBRI = [("train-clean-100", "19", "198", 3), ("train-clean-100", "26", "495", 2),
+         ("dev-clean", "84", "121", 2), ("test-clean", "61", "70", 2)]
+
+
+def add_librispeech(env: DataEnv) -> None:
+    """A fake LibriSpeech tree (official subsets, speakers, chapters, transcripts) + ``.done``."""
+    base = env.external / "librispeech" / "LibriSpeech"
+    for k, (subset, speaker, chapter, count) in enumerate(LIBRI):
+        folder = base / subset / speaker / chapter
+        folder.mkdir(parents=True)
+        lines = []
+        for u in range(count):
+            stem = f"{speaker}-{chapter}-{u:04d}"
+            samples = burst(2.5, SR, start=0.1, stop=2.4, freq=150 + 40 * k + 10 * u, seed=k + u)
+            sf.write(str(folder / f"{stem}.flac"), samples, SR, format="FLAC")
+            lines.append(f"{stem} SOME WORDS")
+        (folder / f"{speaker}-{chapter}.trans.txt").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8")
+    (env.external / "librispeech" / ".done").write_text("{}", encoding="utf-8")
 
 
 @pytest.fixture
@@ -215,7 +249,8 @@ def prepared_env(data_env: DataEnv) -> DataEnv:
 def kit() -> SimpleNamespace:
     """Constants and helpers of this module (tests cannot import conftest directly)."""
     return SimpleNamespace(SR=SR, ONTOLOGY=ONTOLOGY, LABELS=LABELS, VOCABULARY=VOCABULARY,
-                           burst=burst, write_wav=write_wav, build_tree=build_tree)
+                           burst=burst, write_wav=write_wav, build_tree=build_tree,
+                           add_librispeech=add_librispeech, LIBRI=LIBRI)
 
 
 @pytest.fixture(scope="module")
@@ -225,5 +260,17 @@ def shared_prepared_env(tmp_path_factory: pytest.TempPathFactory) -> DataEnv:
     from soundspy.data.prepare import prepare
 
     env = build_tree(tmp_path_factory.mktemp("shared") / "soundspy-data", load_config())
+    prepare(env.config, workers=1, progress=False)
+    return env
+
+
+@pytest.fixture(scope="module")
+def shared_libri_env(tmp_path_factory: pytest.TempPathFactory) -> DataEnv:
+    """Like ``shared_prepared_env``, plus the fake LibriSpeech tree (step 07b)."""
+    from soundspy.config import load_config
+    from soundspy.data.prepare import prepare
+
+    env = build_tree(tmp_path_factory.mktemp("libri") / "soundspy-data", load_config())
+    add_librispeech(env)
     prepare(env.config, workers=1, progress=False)
     return env

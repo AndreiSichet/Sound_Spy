@@ -75,6 +75,7 @@ export const api = {
   setBypass: (enabled: boolean) => send<EngineStatus>('PUT', '/session/bypass', { enabled }),
   setMethod: (method: ExtractionMethod) =>
     send<EngineStatus>('PUT', '/session/method', { method }),
+  setGate: (enabled: boolean) => send<EngineStatus>('PUT', '/session/gate', { enabled }),
   processRecording: (id: number, body: ProcessRequest) =>
     send<Run>('POST', `/recordings/${id}/process`, body),
   recordingRuns: (id: number) => apiFetch<Run[]>(`/recordings/${id}/runs`),

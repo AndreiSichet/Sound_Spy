@@ -12,6 +12,8 @@ detector lag and it can separate sounds that overlap.
        │                                                                    Waveformer with its
        │                                                                    three state buffers
        │                                                                          │
+       │                                                         output gate (step 07b)
+       │                                                                          │
        └─► delay line (same latency) = "dry"        resample 44.1 -> 48 kHz ◄─────┘
                     │                                        │
                     └────────►  y = est + g * (dry - est) ◄──┘ "est"
@@ -38,6 +40,10 @@ detector lag and it can separate sounds that overlap.
 * **Where it runs.** In the audio thread (it is in the audio path). ``start()`` warms the model
   up on that thread before the first chunk: CUDA initialises per thread (step 05). On the CPU
   the thread uses ``cpu_threads`` PyTorch threads.
+* **Output gate** (step 07b, ``extraction/gate.py``, ``gate`` in ``neural_tse.yaml``): turns the
+  estimate further down while it holds only a small fraction of the input, i.e. while the model
+  itself finds no target. It works on the model's own output step by step: no added latency, no
+  detector lag. ``gate.enabled`` (or the session's ``gate`` switch) turns it off.
 * **Compiled steps.** A step of this network is ~200 small operations, and most of its time is
   PyTorch's bookkeeping between them, not arithmetic. With ``compile: true`` the step is
   *traced* once per number of steps per call (TorchScript, in ``start()``, never in the audio
@@ -51,6 +57,7 @@ sessions and offline runs share one copy in memory.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import threading
 import time
@@ -60,11 +67,12 @@ from typing import Any
 
 import numpy as np
 
-from soundspy.config import NeuralLiveConfig
+from soundspy.config import NeuralGateConfig, NeuralLiveConfig
 from soundspy.core.audio import AudioBuffer
 from soundspy.core.target import TargetSpec
 from soundspy.dsp.resample import StreamingResampler, taps_for_whole_delay
 from soundspy.extraction.base import Extractor
+from soundspy.extraction.gate import OutputGate
 
 
 class NeuralUnavailable(RuntimeError):
@@ -260,9 +268,13 @@ class _Fifo:
 class NeuralTSEExtractor(Extractor):
     method = "neural_tse"
 
-    def __init__(self, core: NeuralCore, live: NeuralLiveConfig) -> None:
+    def __init__(self, core: NeuralCore, live: NeuralLiveConfig,
+                 gate: NeuralGateConfig | None = None) -> None:
         self.core = core
         self.live = live
+        self.gate_config = gate if gate is not None and gate.enabled else None
+        self._gate = (OutputGate(self.gate_config, core.sample_rate, core.hop)
+                      if self.gate_config is not None else None)
         self._latency = 0
         self._times: deque[float] = deque(maxlen=200)
         self._model_reset = True
@@ -317,6 +329,8 @@ class NeuralTSEExtractor(Extractor):
         self._state = None
         self._model_reset = True
         self._times.clear()
+        if self._gate is not None:
+            self._gate.reset()
 
     def set_target(self, target: TargetSpec) -> None:
         previous = self.target
@@ -367,12 +381,18 @@ class NeuralTSEExtractor(Extractor):
                 if self._model_reset or self._state is None:
                     self._state = core.init_state()
                     self._model_reset = False
+                    if self._gate is not None:
+                        self._gate.reset()
                 if processing:
                     self._labels = self.target.labels
                 # while fading out after a deselection, keep extracting the last selection
                 started = time.perf_counter()
-                out, self._state = core.step(self._model_in.peek(size),
-                                             core.label_vector(self._labels), self._state)
+                window = self._model_in.peek(size)
+                out, self._state = core.step(window, core.label_vector(self._labels),
+                                             self._state)
+                if self._gate is not None:  # the model input of exactly these output samples
+                    out = self._gate.process(
+                        out, window[core.context:core.context + steps * core.hop])
                 self._times.append(time.perf_counter() - started)
             else:  # pass-through: the model rests and starts fresh when it is needed again
                 out = np.zeros(steps * core.hop, dtype=np.float32)
@@ -406,6 +426,9 @@ class NeuralTSEExtractor(Extractor):
             target_active=self._processing(),
             device=str(self.core.device),
             model=self.core.name,
+            gate=self._gate is not None,
+            gate_closed=(round(self._gate.closed_share, 3) if self._gate is not None
+                         else None),
             compiled=bool(self.live.compile and any(
                 v is not None for v in self.core._compiled.values())),
             model_ms=round(1000.0 * float(np.mean(times)), 2) if times else None,
@@ -414,36 +437,64 @@ class NeuralTSEExtractor(Extractor):
         return info
 
 
-def extract_whole(core: NeuralCore, samples: np.ndarray, sample_rate: int, labels,
-                  attenuation_db: float) -> np.ndarray:
-    """The causal model over a **whole** signal in one call, without chunking or state hand-over.
-
-    Same resampling filters and the same residual mixing as ``NeuralTSEExtractor``; the result
-    is aligned with the input and equally long. Used by the evaluation to show that streaming
-    gives the same output.
-    """
+def whole_estimates(core: NeuralCore, samples: np.ndarray, sample_rate: int, labels,
+                    gates=()) -> list[np.ndarray]:
+    """The causal model over a **whole** signal in one call (no chunking, no state hand-over):
+    the estimate without a gate, then one estimate per gate configuration in ``gates`` (the
+    model runs once). Same resampling filters as ``NeuralTSEExtractor``; every estimate is
+    aligned with the input and equally long."""
     x = np.asarray(samples, dtype=np.float32).reshape(-1)
     n = x.shape[0]
     label = core.label_vector(labels)
     if sample_rate == core.sample_rate:
-        estimate = core.whole(x, label)[:n]
+        model_in = x
+        model_out = core.whole(x, label)
     else:
         down = StreamingResampler(sample_rate, core.sample_rate)
-        up = StreamingResampler(core.sample_rate, sample_rate,
-                                taps=taps_for_whole_delay(down, sample_rate, core.sample_rate))
-        delay = round(down.delay * sample_rate / core.sample_rate + up.delay)
+        taps = taps_for_whole_delay(down, sample_rate, core.sample_rate)
+        delay = round(down.delay * sample_rate / core.sample_rate
+                      + StreamingResampler(core.sample_rate, sample_rate, taps=taps).delay)
         padded = np.concatenate((x, np.zeros(2 * delay + 64, dtype=np.float32)))
-        model_out = core.whole(down.push(padded.reshape(-1, 1)).reshape(-1), label)
-        estimate = up.push(model_out.reshape(-1, 1)).reshape(-1)[delay:delay + n]
+        model_in = down.push(padded.reshape(-1, 1)).reshape(-1)
+        model_out = core.whole(model_in, label)
+    outputs = [model_out]
+    for cfg in gates:
+        gate = OutputGate(cfg, core.sample_rate, core.hop)
+        outputs.append(gate.process(model_out, model_in[:model_out.shape[0]]))
+    if sample_rate == core.sample_rate:
+        return [out[:n].astype(np.float32) for out in outputs]
+    estimates = []
+    for out in outputs:
+        up = StreamingResampler(core.sample_rate, sample_rate, taps=taps)
+        estimates.append(up.push(out.reshape(-1, 1)).reshape(-1)[delay:delay + n])
+    return estimates
+
+
+def residual_mix(estimate: np.ndarray, samples: np.ndarray, attenuation_db: float) -> np.ndarray:
+    """``y = est + g * (x - est)``: the attenuation slider."""
+    x = np.asarray(samples, dtype=np.float32).reshape(-1)
     g = 10.0 ** (-attenuation_db / 20.0)
     return (estimate + g * (x - estimate)).astype(np.float32)
 
 
-def build_neural_extractor(config, *, device: str | None = None) -> NeuralTSEExtractor:
-    """The neural extractor from the configuration; ``NeuralUnavailable`` says why not."""
+def extract_whole(core: NeuralCore, samples: np.ndarray, sample_rate: int, labels,
+                  attenuation_db: float, gate: NeuralGateConfig | None = None) -> np.ndarray:
+    """The whole-signal counterpart of ``NeuralTSEExtractor`` (same filters, the same gate
+    when ``gate`` is given and enabled, the same residual mixing). Used by the evaluation to
+    show that streaming gives the same output."""
+    gates = (gate,) if gate is not None and gate.enabled else ()
+    estimate = whole_estimates(core, samples, sample_rate, labels, gates)[-1]
+    return residual_mix(estimate, samples, attenuation_db)
+
+
+def build_neural_extractor(config, *, device: str | None = None,
+                           gate: bool | None = None) -> NeuralTSEExtractor:
+    """The neural extractor from the configuration; ``NeuralUnavailable`` says why not.
+    ``gate``: switch the output gate on or off (``None``: ``gate.enabled`` of the config)."""
     cfg = config.extraction.neural_tse
     if cfg.checkpoint is None:
         raise NeuralUnavailable("no neural extraction checkpoint is configured "
                                 "(extraction.neural_tse.checkpoint)")
     core = load_neural_core(Path(cfg.checkpoint), device or cfg.live.device)
-    return NeuralTSEExtractor(core, cfg.live)
+    gate_cfg = cfg.gate if gate is None else dataclasses.replace(cfg.gate, enabled=bool(gate))
+    return NeuralTSEExtractor(core, cfg.live, gate_cfg)

@@ -11,6 +11,13 @@ separate clocks, so they never line up perfectly. Between them sits a small queu
   ``prebuffer_chunks`` are queued (a jitter buffer). If the queue runs dry while playing, the
   missing frames are silence and an **underrun** is counted; playback then waits for the
   prebuffer again rather than crackling chunk by chunk.
+- **Draining (step 07b).** After a stall the chunks that piled up arrive in a burst and the
+  queue fills. Input and output then run at the same speed again, so nothing would ever empty
+  it: the latency stayed at its maximum until the session was restarted. Now, when the queue has
+  been above ``prebuffer_chunks + 1`` for ``drain_after_s`` without a break, the oldest chunks
+  are dropped down to the prebuffer level and the event is counted (``drained``). The jump is
+  hidden by a ``drain_fade_ms`` crossfade from the audio that would have played next into the
+  newer audio that plays instead, so there is no click.
 
 **Safety limiter.** The laptop microphone can deliver samples up to +7.44 dBFS (Windows adds gain
 after the converter), and the user can add up to +12 dB. Before anything reaches the speakers, a
@@ -25,7 +32,9 @@ from __future__ import annotations
 
 import math
 import threading
+import time
 from collections import deque
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -66,7 +75,8 @@ class PeakLimiter:
 
 
 class SpeakerSink(AudioSink):
-    def __init__(self, device: OutputDevice, output: OutputConfig, *, blocksize: int = 0) -> None:
+    def __init__(self, device: OutputDevice, output: OutputConfig, *, blocksize: int = 0,
+                 clock: Callable[[], float] = time.perf_counter) -> None:
         self.device = device
         self.config = output
         self.blocksize = blocksize
@@ -74,6 +84,10 @@ class SpeakerSink(AudioSink):
         self.muted = False
         self.underruns = 0
         self.dropped_chunks = 0
+        self.drained = 0  # times the queue was emptied back to the prebuffer level
+        self.drained_chunks = 0
+        self._clock = clock
+        self._above_since: float | None = None  # since when the queue is above its cushion
         self.frames_played = 0
         self.sample_rate: int | None = None
         self.in_channels: int | None = None
@@ -135,6 +149,7 @@ class SpeakerSink(AudioSink):
         with self._lock:
             self._queue.clear()
             self._current, self._offset, self._playing = None, 0, False
+            self._above_since = None
 
     # --- producer side (session worker) --------------------------------------------------------
 
@@ -165,8 +180,38 @@ class SpeakerSink(AudioSink):
             while len(self._queue) > self.config.max_queue_chunks:
                 self._queue.popleft()
                 self.dropped_chunks += 1
+            self._drain_if_stuck()
             if not self._playing and len(self._queue) >= self.config.prebuffer_chunks:
                 self._playing = True
+
+    def _drain_if_stuck(self) -> None:
+        """Called with the lock held, after a chunk was queued (see the module docstring)."""
+        cfg = self.config
+        if len(self._queue) <= cfg.prebuffer_chunks + 1:
+            self._above_since = None
+            return
+        now = self._clock()
+        if self._above_since is None:
+            self._above_since = now
+            return
+        if now - self._above_since < cfg.drain_after_s:
+            return
+        old = self._queue[0]  # what would have played next
+        dropped = 0
+        while len(self._queue) > max(1, cfg.prebuffer_chunks):
+            self._queue.popleft()
+            dropped += 1
+        new = self._queue[0]
+        fade = min(old.shape[0], new.shape[0],
+                   round(cfg.drain_fade_ms * (self.sample_rate or 0) / 1000.0))
+        if fade > 1:
+            ramp = np.linspace(0.0, 1.0, fade, dtype=np.float32).reshape(-1, 1)
+            head = new.copy()
+            head[:fade] = (1.0 - ramp) * old[:fade] + ramp * new[:fade]
+            self._queue[0] = head
+        self.drained += 1
+        self.drained_chunks += dropped
+        self._above_since = None
 
     # --- consumer side (PortAudio callback) ----------------------------------------------------
 

@@ -24,3 +24,16 @@ evaluation:                      # soundspy evaluate extraction
   live_delay_s: 0.05             # baseline, causal simulation: window end -> its result is in use
                                  # (inference ~30 ms on the GPU + up to one 20 ms chunk)
   reverb_seed: 4242              # rooms of the reverberant copy of the test subset
+  # --- step 07b
+  compare_checkpoint: experiments/tse_waveformer_v1/checkpoints/best.pt
+                                 # the previous neural model, as its own row (null = none)
+  high_attenuation_db: 40        # the neural method is also reported at this slider setting
+  benchmarks:                    # fixed extra recipe sets made from the test clips
+    seed: 707
+    absent: 200                  # target-absent: every class in turn "selected but not there"
+    pair: [speech, music]        # the owner's scenario: someone talks while music plays.
+                                 # (B only, A selected) / (A + B, A selected) / (A + B, B selected)
+    pair_n: 100                  # recipes per scenario
+    pair_min_clip_s: 5.0         # class-B clips at least this long (sustained music)
+    librispeech: 100             # recipes whose target is LibriSpeech test-clean speech
+    examples: 3                  # listening examples written per benchmark

@@ -11,6 +11,11 @@ cuts ``windows`` windows of ``window_s`` from it and labels each from the per-cl
 
 The dataset is picklable (Windows DataLoader workers are *spawned*: each gets a pickled copy of
 the clip library, ~27 MB, once per worker thanks to ``persistent_workers``).
+
+``DynamicExtractionSet`` (step 07b) is the training set of the neural extractor with dynamic
+mixing: item ``(index, epoch)`` is a mixture that is drawn and rendered when it is asked for
+(``data/dynamic.py``). It carries only the configuration; every worker builds its own mixer
+(clip library, room bank) the first time it is used.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
 
+from soundspy.config import AppConfig
 from soundspy.core.labels import LabelSet
 from soundspy.data.mixtures import ClipLibrary, Recipe, render
 from soundspy.detection.windows import window_labels, window_starts
@@ -80,6 +86,47 @@ class DetectionDataset(Dataset):
         index, epoch = (key if isinstance(key, tuple) else (key, EVAL_EPOCH))
         waves, labels = self.item(int(index), int(epoch))
         return torch.from_numpy(waves), torch.from_numpy(labels)
+
+
+class DynamicExtractionSet(Dataset):
+    """``(mixture, target, label)`` crops made on the fly; items are ``(index, epoch)`` pairs."""
+
+    def __init__(self, config: AppConfig, per_epoch: int, *, split: str = "train") -> None:
+        self.config = config
+        self.per_epoch = int(per_epoch)
+        self.split = split
+        cfg = config.extraction.neural_tse
+        duration = round(config.data.dynamic.duration_s * cfg.model.sample_rate)
+        self.crop = min(duration, round(cfg.training.train_crop_s * cfg.model.sample_rate))
+        self._mixer = None
+
+    def mixer(self):
+        if self._mixer is None:
+            from soundspy.data.dynamic import DynamicMixer
+            from soundspy.data.reverb import RirBank, rir_bank_path
+
+            cfg = self.config.extraction.neural_tse
+            bank = None
+            if cfg.data.reverb.prob > 0 and cfg.data.rir_bank_rooms > 0:
+                bank = RirBank(rir_bank_path(self.config.paths["processed"],
+                                             cfg.model.sample_rate))
+            self._mixer = DynamicMixer.from_config(self.config, self.split, rir_bank=bank)
+        return self._mixer
+
+    def __len__(self) -> int:
+        return self.per_epoch
+
+    def __getitem__(self, key: int | tuple[int, int]
+                    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        index, epoch = key if isinstance(key, tuple) else (key, 0)
+        example = self.mixer().example(int(epoch), int(index))
+        return (torch.from_numpy(example.mixture), torch.from_numpy(example.target),
+                torch.from_numpy(example.target_hot))
+
+    def __getstate__(self) -> dict:  # each worker builds its own mixer
+        state = dict(self.__dict__)
+        state["_mixer"] = None
+        return state
 
 
 def collate_windows(batch: list[tuple[torch.Tensor, torch.Tensor]]

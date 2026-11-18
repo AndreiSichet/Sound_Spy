@@ -606,3 +606,89 @@ describe('processing a recording', () => {
     expect(screen.queryByTestId(`ab-original-${RUN.run_id}`)).toBeNull()
   })
 })
+
+describe('the neural output gate (step 07b)', () => {
+  const METHODS: ConfigResponse = {
+    ...CONFIG,
+    extraction_methods: [
+      { name: 'neural_tse', display_name: 'Neural', available: true, reason: null },
+      { name: 'mask_baseline', display_name: 'Baseline', available: true, reason: null },
+    ],
+    default_method: 'neural_tse',
+    default_attenuation_db: 15,
+    default_gate: true,
+  }
+  const IDLE: EngineStatus = {
+    state: 'idle', mode: null, device: null, sample_rate: null, channels: null, message: '',
+    extraction_method: 'neural_tse', extraction_gate: true,
+  }
+
+  it('is switched while stopped and sent to the backend', async () => {
+    const fetchMock = vi.fn(async () => json({ ...IDLE, extraction_gate: false }))
+    vi.stubGlobal('fetch', fetchMock)
+    useAppStore.setState({ config: METHODS, status: IDLE })
+    render(<ExtractionControls />)
+    const button = screen.getByLabelText('Output gate')
+    expect(button).toHaveTextContent('Gate on')
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(button)
+    await waitFor(() => expect(button).toHaveTextContent('Gate off'))
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/api/session/gate')
+    expect(init.method).toBe('PUT')
+    expect(JSON.parse(String(init.body))).toEqual({ enabled: false })
+  })
+
+  it('cannot be switched during a session or for the baseline', () => {
+    useAppStore.setState({ config: METHODS, status: { ...RUNNING, extraction_method: 'neural_tse' } })
+    const { unmount } = render(<ExtractionControls />)
+    expect(screen.getByLabelText('Output gate')).toBeDisabled()
+    unmount()
+    useAppStore.setState({ status: { ...IDLE, extraction_method: 'mask_baseline' } })
+    render(<ExtractionControls />)
+    expect(screen.getByLabelText('Output gate')).toBeDisabled()
+    expect(screen.getByLabelText('Output gate')).toHaveAttribute(
+      'title', 'The gate belongs to the Neural method',
+    )
+  })
+
+  it('the session bar says whether the gate is on', () => {
+    useAppStore.setState({
+      status: {
+        ...RUNNING,
+        extraction_method: 'neural_tse',
+        extraction: {
+          method: 'neural_tse', latency_ms: 10.6, gating: false, target_active: true,
+          device: 'cuda', model: 'tse_waveformer_v2', model_ms: 6.1, gate: true, gate_closed: 0.4,
+        },
+      },
+    })
+    render(<SessionBar />)
+    expect(screen.getByTestId('session-stats')).toHaveTextContent('Neural · cuda · gate · +10.6 ms')
+  })
+
+  it('applies to neural processing runs too, which show it', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/recordings') return json([RECORDING])
+      if (url === '/api/recordings/3/runs') return json([])
+      if (url === '/api/recordings/3/process' && init?.method === 'POST') {
+        return json({ ...RUN, run_id: 'run_g', method: 'neural_tse', status: 'done',
+                      info: { gate: false } }, 202)
+      }
+      return json({}, 404)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    useAppStore.setState({
+      ws: 'connected', config: METHODS, selected: ['speech'], attenuation: 40,
+      status: { ...IDLE, extraction_gate: false },
+    })
+    render(<RecordingsList />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Process speech_1.wav' }))
+    await waitFor(() => expect(screen.getByTestId('run-run_g')).toBeInTheDocument())
+    const call = fetchMock.mock.calls.find(([u]) => u === '/api/recordings/3/process')
+    const body = JSON.parse(String((call as unknown as [string, RequestInit])[1].body))
+    expect(body).toEqual({ labels: ['speech'], attenuation_db: 40, method: 'neural_tse',
+                           gate: false })
+    expect(screen.getByTestId('run-run_g')).toHaveTextContent('Neural · no gate')
+  })
+})

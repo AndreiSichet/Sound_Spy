@@ -8,8 +8,9 @@ configs are resolved against the **project root** (the folder that contains ``ba
 
 from __future__ import annotations
 
+import dataclasses
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -165,6 +166,8 @@ class OutputConfig:
     limiter_ceiling_dbfs: float
     limiter_release_ms: float
     default_gain_db: float
+    drain_after_s: float = 1.0  # queue above prebuffer + 1 for this long -> drop the oldest
+    drain_fade_ms: float = 5.0  # crossfade that hides the jump
 
 
 @dataclass(frozen=True)
@@ -180,7 +183,7 @@ class AnalysisConfig:
 
 
 SPLITS: tuple[str, ...] = ("train", "val", "test")
-DATASETS: tuple[str, ...] = ("esc50", "fsd50k", "custom")
+DATASETS: tuple[str, ...] = ("esc50", "fsd50k", "custom", "librispeech")
 
 
 @dataclass(frozen=True)
@@ -198,6 +201,16 @@ class MixtureConfig:
     target_to_rest_db: tuple[float, float]
     peak_limit: float
     reference_rms_dbfs: float
+    # step 07b. The defaults reproduce the recipes generated before it (the frozen val / test
+    # files); training draws its mixtures with the ``dynamic`` overrides.
+    partial_target_prob: float = 0.0  # the target sounds only before or after ``switch_s``
+    partial_switch: tuple[float, float] = (0.3, 0.7)  # where, as a share of the duration
+    hard_negative_prob: float = 0.0  # absent target: put one of its confusable classes in
+    hard_negative_pairs: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    source_mix: dict[str, dict[str, float]] = field(default_factory=dict)
+    # ^ class -> {dataset: share of that class's clips drawn from that dataset}
+    lowpass_prob: float = 0.0  # per foreground event: a random low-pass (augmentation)
+    lowpass_hz: tuple[float, float] = (6000.0, 16000.0)
 
 
 @dataclass(frozen=True)
@@ -214,6 +227,9 @@ class DataConfig:
     custom_seed: int
     fsd50k_min_val_clips_per_class: int
     mixtures: MixtureConfig
+    librispeech_subsets: dict[str, str] = field(default_factory=dict)  # split -> subset folder
+    librispeech_class: str = ""  # the class every LibriSpeech utterance is foreground for
+    dynamic: MixtureConfig | None = None  # ``mixtures`` + ``mixtures.dynamic`` (training)
 
 
 @dataclass(frozen=True)
@@ -310,6 +326,16 @@ class ExtractionEvalConfig:
     example_ids: tuple[str, ...]  # recipes that are always among the listening examples
     live_delay_s: float
     reverb_seed: int  # rooms of the reverberant copy of the test subset
+    # step 07b
+    compare_checkpoint: Path | None = None  # an earlier model, shown as its own row
+    high_attenuation_db: float = 40.0  # the neural method is also reported at this setting
+    bench_seed: int = 0
+    bench_absent: int = 0  # recipes of the target-absent benchmark
+    bench_pair: tuple[str, str] | None = None  # (class A, class B) of the pair benchmark
+    bench_pair_n: int = 0  # recipes per scenario of the pair benchmark
+    bench_pair_min_clip_s: float = 0.0  # class B clips at least this long (sustained)
+    bench_librispeech: int = 0  # recipes with LibriSpeech test speech as the target
+    bench_examples: int = 0  # listening examples per benchmark
 
 
 @dataclass(frozen=True)
@@ -348,6 +374,19 @@ class NeuralLiveConfig:
 
 
 @dataclass(frozen=True)
+class NeuralGateConfig:
+    """The output-driven soft gate of the neural extractor (step 07b)."""
+
+    enabled: bool = True
+    attack_ms: float = 5.0
+    release_ms: float = 150.0
+    open_db: float = -12.0  # estimate vs input level above this: fully open
+    close_db: float = -22.0  # below this: ``depth_db`` of extra attenuation
+    depth_db: float = 25.0
+    hold_ms: float = 200.0
+
+
+@dataclass(frozen=True)
 class ReverbConfig:
     prob: float
     rt60_s: tuple[float, float]
@@ -362,14 +401,21 @@ class ExtractionCacheConfig:
     seed: int
     min_free_gb: float
     reverb: ReverbConfig
+    clip_cache_datasets: tuple[str, ...] = ()  # datasets converted once to the model rate
+    clip_cache_splits: tuple[str, ...] = ("train",)
+    rir_bank_rooms: int = 0  # precomputed rooms for dynamic mixing (0 = no bank)
+    rir_bank_positions: int = 6
+    rir_trim_db: float = -60.0
 
 
 @dataclass(frozen=True)
 class ExtractionLossConfig:
     snr_weight: float
     si_snr_weight: float
-    empty_weight: float
-    empty_floor_db: float
+    leak_weight: float = 0.0  # frame-wise leakage term (target-silent frames)
+    leak_frame_ms: float = 50.0
+    leak_floor_db: float = -50.0  # no reward for suppressing a frame below this
+    leak_silence_dbfs: float = -70.0  # a frame whose target is below this is "silent"
 
 
 @dataclass(frozen=True)
@@ -401,6 +447,11 @@ class ExtractionTrainingConfig:
     smoke_epochs: int
     smoke_train_recipes: int
     smoke_val_examples: int
+    # step 07b
+    dynamic: bool = False  # mixtures made on the fly instead of the cached training set
+    init_checkpoint: Path | None = None  # start from this checkpoint (None: published weights)
+    val_empty_examples: int = 0  # extra target-absent validation examples
+    require_leak_not_worse: bool = False  # "best" must suppress at least as well as the start
 
 
 @dataclass(frozen=True)
@@ -414,6 +465,7 @@ class NeuralTSEConfig:
     label_init: dict[str, tuple[str, ...]]  # our class -> pretrained classes ((), = mean of all)
     checkpoint: Path | None  # absolute (resolved against the project root)
     live: NeuralLiveConfig
+    gate: NeuralGateConfig
     data: ExtractionCacheConfig
     training: ExtractionTrainingConfig
 
@@ -559,7 +611,7 @@ def _engine(data: dict[str, Any]) -> EngineConfig:
 
 def _output(data: dict[str, Any]) -> OutputConfig:
     keys = ("device", "prebuffer_chunks", "max_queue_chunks", "limiter_ceiling_dbfs",
-            "limiter_release_ms", "default_gain_db")
+            "limiter_release_ms", "default_gain_db", "drain_after_s", "drain_fade_ms")
     s = _Section(data, "output", keys)
     device = s.data["device"]
     if isinstance(device, bool) or not (device is None or isinstance(device, int | str)):
@@ -575,6 +627,8 @@ def _output(data: dict[str, Any]) -> OutputConfig:
         limiter_ceiling_dbfs=s.number("limiter_ceiling_dbfs", le=0),
         limiter_release_ms=s.number("limiter_release_ms", gt=0),
         default_gain_db=s.number("default_gain_db", ge=-40, le=12),
+        drain_after_s=s.number("drain_after_s", gt=0, le=60),
+        drain_fade_ms=s.number("drain_fade_ms", ge=0, le=20),
     )
 
 
@@ -608,10 +662,16 @@ def load_data_config(path: Path) -> DataConfig:
         return _Section(top.data, key, keys, source)
 
     datasets = section("datasets", DATASETS)
-    enabled = {ds: datasets.sub(ds, ("enabled",)).boolean("enabled") for ds in DATASETS}
+    enabled = {ds: datasets.sub(ds, ("enabled", "class") if ds == "librispeech"
+                                else ("enabled",)).boolean("enabled") for ds in DATASETS}
+    libri_class = _text(datasets.sub("librispeech", ("enabled", "class")), "class")
     roles = section("roles", ("min_fg_clips_warning",))
     activity = section("activity", ("hop_s", "threshold_db_below_peak"))
-    splits = section("splits", ("esc50", "fsd50k", "custom"))
+    splits = section("splits", ("esc50", "fsd50k", "custom", "librispeech"))
+    libri = splits.sub("librispeech", SPLITS)
+    subsets = {split: _text(libri, split) for split in SPLITS}
+    if len(set(subsets.values())) != len(SPLITS):
+        raise ConfigError(f"{source}: 'splits.librispeech' uses a subset for more than one split")
     esc = splits.sub("esc50", SPLITS)
     folds = {split: esc.int_list(split, ge=1, le=5) for split in SPLITS}
     all_folds = [f for fs in folds.values() for f in fs]
@@ -625,29 +685,28 @@ def load_data_config(path: Path) -> DataConfig:
 
     mix_keys = ("duration_s", "counts", "seed", "n_foreground", "n_background", "target_size",
                 "empty_target_prob", "event_min_s", "fg_gain_db", "bg_gain_db",
-                "target_to_rest_db", "peak_limit", "reference_rms_dbfs")
+                "target_to_rest_db", "peak_limit", "reference_rms_dbfs", "partial_target_prob",
+                "partial_switch", "hard_negative_prob", "hard_negative_pairs", "source_mix",
+                "lowpass_prob", "lowpass_hz", "dynamic")
     mix = section("mixtures", mix_keys)
     counts = mix.sub("counts", SPLITS)
     seeds = mix.sub("seed", SPLITS)
-    duration = mix.number("duration_s", gt=0, le=120)
-    event_min = mix.number("event_min_s", gt=0)
-    if event_min > duration:
-        raise ConfigError(f"{source}: 'mixtures.event_min_s' must be <= duration_s")
+    readers = _mixture_readers(source)
+    values = {key: read(mix) for key, read in readers.items()}
     mixtures = MixtureConfig(
-        duration_s=duration,
         counts={s: counts.integer(s, ge=0) for s in SPLITS},
         seed={s: seeds.integer(s, ge=0) for s in SPLITS},
-        n_foreground=mix.pair("n_foreground", integer=True, ge=1),
-        n_background=mix.pair("n_background", integer=True, ge=0),
-        target_size=mix.pair("target_size", integer=True, ge=1),
-        empty_target_prob=mix.number("empty_target_prob", ge=0, le=1),
-        event_min_s=event_min,
-        fg_gain_db=mix.pair("fg_gain_db", ge=-60, le=20),
-        bg_gain_db=mix.pair("bg_gain_db", ge=-60, le=20),
-        target_to_rest_db=mix.pair("target_to_rest_db", ge=-60, le=60),
-        peak_limit=mix.number("peak_limit", gt=0, le=1),
-        reference_rms_dbfs=mix.number("reference_rms_dbfs", ge=-80, le=0),
+        **values,
     )
+    if mixtures.event_min_s > mixtures.duration_s:
+        raise ConfigError(f"{source}: 'mixtures.event_min_s' must be <= duration_s")
+    overrides = mix.data["dynamic"]
+    if not isinstance(overrides, dict) or set(overrides) - set(readers):
+        raise ConfigError(f"{source}: 'mixtures.dynamic' may only override {sorted(readers)}")
+    dyn = _Section({"dynamic": overrides}, "mixtures.dynamic", tuple(overrides), source)
+    dynamic = dataclasses.replace(mixtures, **{key: readers[key](dyn) for key in overrides})
+    if dynamic.event_min_s > dynamic.duration_s:
+        raise ConfigError(f"{source}: 'mixtures.dynamic.event_min_s' must be <= duration_s")
     return DataConfig(
         enabled=enabled,
         min_fg_clips_warning=roles.integer("min_fg_clips_warning", ge=0),
@@ -660,7 +719,57 @@ def load_data_config(path: Path) -> DataConfig:
         fsd50k_min_val_clips_per_class=splits.sub(
             "fsd50k", ("min_val_clips_per_class",)).integer("min_val_clips_per_class", ge=0),
         mixtures=mixtures,
+        librispeech_subsets=subsets,
+        librispeech_class=libri_class,
+        dynamic=dynamic,
     )
+
+
+def _mixture_readers(source: str) -> dict[str, Any]:
+    """``key -> reader(section)`` for every mixture setting that ``mixtures.dynamic`` may also
+    set (everything but ``counts`` and ``seed``)."""
+
+    def pairs(sec: _Section) -> dict[str, tuple[str, ...]]:
+        raw = sec.data["hard_negative_pairs"]
+        ok = isinstance(raw, dict) and all(
+            isinstance(k, str) and isinstance(v, list) and v
+            and all(isinstance(x, str) and x != k for x in v) for k, v in raw.items())
+        if not ok:
+            raise sec._fail("hard_negative_pairs",
+                            "a mapping class -> non-empty list of other classes")
+        return {k: tuple(v) for k, v in raw.items()}
+
+    def sources(sec: _Section) -> dict[str, dict[str, float]]:
+        raw = sec.data["source_mix"]
+        ok = isinstance(raw, dict) and all(
+            isinstance(k, str) and isinstance(v, dict) and all(
+                d in DATASETS and isinstance(p, int | float) and not isinstance(p, bool)
+                and 0 <= p <= 1 for d, p in v.items()) for k, v in raw.items())
+        if not ok:
+            raise sec._fail("source_mix", f"a mapping class -> {{dataset: share in [0, 1]}} "
+                                          f"with datasets from {list(DATASETS)}")
+        return {k: {d: float(p) for d, p in v.items()} for k, v in raw.items()}
+
+    return {
+        "duration_s": lambda s: s.number("duration_s", gt=0, le=120),
+        "n_foreground": lambda s: s.pair("n_foreground", integer=True, ge=1),
+        "n_background": lambda s: s.pair("n_background", integer=True, ge=0),
+        "target_size": lambda s: s.pair("target_size", integer=True, ge=1),
+        "empty_target_prob": lambda s: s.number("empty_target_prob", ge=0, le=1),
+        "event_min_s": lambda s: s.number("event_min_s", gt=0),
+        "fg_gain_db": lambda s: s.pair("fg_gain_db", ge=-60, le=20),
+        "bg_gain_db": lambda s: s.pair("bg_gain_db", ge=-60, le=20),
+        "target_to_rest_db": lambda s: s.pair("target_to_rest_db", ge=-60, le=60),
+        "peak_limit": lambda s: s.number("peak_limit", gt=0, le=1),
+        "reference_rms_dbfs": lambda s: s.number("reference_rms_dbfs", ge=-80, le=0),
+        "partial_target_prob": lambda s: s.number("partial_target_prob", ge=0, le=1),
+        "partial_switch": lambda s: s.pair("partial_switch", ge=0.05, le=0.95),
+        "hard_negative_prob": lambda s: s.number("hard_negative_prob", ge=0, le=1),
+        "hard_negative_pairs": pairs,
+        "source_mix": sources,
+        "lowpass_prob": lambda s: s.number("lowpass_prob", ge=0, le=1),
+        "lowpass_hz": lambda s: s.pair("lowpass_hz", ge=500, le=24000),
+    }
 
 
 def load_detection_config(path: Path, project_root: Path) -> DetectionConfig:
@@ -802,7 +911,7 @@ def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> 
     path = Path(path)
     source = f"extraction/{path.name}"
     top = _Section({"root": load_yaml(path)}, "root",
-                   ("model", "pretrained", "label_init", "checkpoint", "live", "data",
+                   ("model", "pretrained", "label_init", "checkpoint", "live", "gate", "data",
                     "training"), source)
     top.name = ""
     d = top.data
@@ -852,7 +961,27 @@ def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> 
 
     live = sub("live", ("device", "cpu_threads", "block_chunks", "on_target_change", "ramp_ms",
                         "compile", "detector_on_cpu"))
-    data = sub("data", ("shard_size", "seed", "min_free_gb", "reverb"))
+    gate = sub("gate", ("enabled", "attack_ms", "release_ms", "open_db", "close_db",
+                        "depth_db", "hold_ms"))
+    gate_cfg = NeuralGateConfig(
+        enabled=gate.boolean("enabled"),
+        attack_ms=gate.number("attack_ms", gt=0, le=1000),
+        release_ms=gate.number("release_ms", gt=0, le=5000),
+        open_db=gate.number("open_db", ge=-80, le=0),
+        close_db=gate.number("close_db", ge=-120, le=0),
+        depth_db=gate.number("depth_db", ge=0, le=80),
+        hold_ms=gate.number("hold_ms", ge=0, le=5000),
+    )
+    if gate_cfg.close_db >= gate_cfg.open_db:
+        raise gate._fail("close_db", f"below open_db ({gate_cfg.open_db})")
+    data = sub("data", ("shard_size", "seed", "min_free_gb", "reverb", "clip_cache",
+                        "rir_bank"))
+    clips = data.sub("clip_cache", ("datasets", "splits"))
+    for key, allowed in (("datasets", DATASETS), ("splits", SPLITS)):
+        value = clips.data[key]
+        if not isinstance(value, list) or any(v not in allowed for v in value):
+            raise clips._fail(key, f"a list from {list(allowed)}")
+    bank = data.sub("rir_bank", ("rooms", "positions", "trim_db"))
     rv = data.sub("reverb", ("prob", "rt60_s", "room_m", "wall_margin_m", "max_order"))
     rooms = rv.data["room_m"]
     ok = (isinstance(rooms, list) and len(rooms) == 3 and all(
@@ -870,8 +999,13 @@ def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> 
         "batch_size",
         "max_batch_size", "effective_batch_size", "num_workers", "loader_timeout_s",
         "lr_backbone", "lr_label", "weight_decay", "warmup_epochs", "grad_clip", "amp", "seed",
-        "val_examples", "patience", "time_budget_h", "loss", "augment", "smoke"))
-    loss = tr.sub("loss", ("snr_weight", "si_snr_weight", "empty_weight", "empty_floor_db"))
+        "val_examples", "patience", "time_budget_h", "loss", "augment", "smoke", "dynamic",
+        "init_checkpoint", "val_empty_examples", "require_leak_not_worse"))
+    loss = tr.sub("loss", ("snr_weight", "si_snr_weight", "leak_weight", "leak_frame_ms",
+                           "leak_floor_db", "leak_silence_dbfs"))
+    init = tr.data["init_checkpoint"]
+    if init is not None and (not isinstance(init, str) or not init):
+        raise tr._fail("init_checkpoint", "a path or null")
     aug = tr.sub("augment", ("gain_db", "mic_noise_db"))
     smoke = tr.sub("smoke", ("epochs", "train_recipes", "val_examples"))
     batch = tr.integer("batch_size", ge=1)
@@ -881,8 +1015,10 @@ def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> 
     loss_cfg = ExtractionLossConfig(
         snr_weight=loss.number("snr_weight", ge=0),
         si_snr_weight=loss.number("si_snr_weight", ge=0),
-        empty_weight=loss.number("empty_weight", ge=0),
-        empty_floor_db=loss.number("empty_floor_db", le=0),
+        leak_weight=loss.number("leak_weight", ge=0),
+        leak_frame_ms=loss.number("leak_frame_ms", gt=0, le=1000),
+        leak_floor_db=loss.number("leak_floor_db", le=0),
+        leak_silence_dbfs=loss.number("leak_silence_dbfs", le=0),
     )
     if loss_cfg.snr_weight + loss_cfg.si_snr_weight <= 0:
         raise loss._fail("si_snr_weight", "> 0 together with snr_weight")
@@ -903,6 +1039,7 @@ def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> 
             compile=live.boolean("compile"),
             detector_on_cpu=live.boolean("detector_on_cpu"),
         ),
+        gate=gate_cfg,
         data=ExtractionCacheConfig(
             shard_size=data.integer("shard_size", ge=1),
             seed=data.integer("seed", ge=0),
@@ -914,6 +1051,11 @@ def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> 
                 wall_margin_m=margin,
                 max_order=rv.integer("max_order", ge=0),
             ),
+            clip_cache_datasets=tuple(clips.data["datasets"]),
+            clip_cache_splits=tuple(clips.data["splits"]),
+            rir_bank_rooms=bank.integer("rooms", ge=0),
+            rir_bank_positions=bank.integer("positions", ge=1),
+            rir_trim_db=bank.number("trim_db", le=-20),
         ),
         training=ExtractionTrainingConfig(
             name=_text(tr, "name"),
@@ -944,6 +1086,10 @@ def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> 
             smoke_epochs=smoke.integer("epochs", ge=1),
             smoke_train_recipes=smoke.integer("train_recipes", ge=1),
             smoke_val_examples=smoke.integer("val_examples", ge=1),
+            dynamic=tr.boolean("dynamic"),
+            init_checkpoint=resolve_path(init, project_root) if init else None,
+            val_empty_examples=tr.integer("val_empty_examples", ge=0),
+            require_leak_not_worse=tr.boolean("require_leak_not_worse"),
         ),
     )
 
@@ -959,10 +1105,20 @@ def load_extraction_config(directory: Path, project_root: Path, labels: LabelSet
     off = _Section(top.data, "offline", ("max_seconds", "chunk_frames"), source)
     ev = _Section(top.data, "evaluation", ("n", "seed", "sample_rate", "attenuation_db",
                                            "examples", "example_ids", "live_delay_s",
-                                           "reverb_seed"), source)
+                                           "reverb_seed", "compare_checkpoint",
+                                           "high_attenuation_db", "benchmarks"), source)
     ids = ev.data["example_ids"]
     if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
         raise ev._fail("example_ids", "a list of recipe ids")
+    compare = ev.data["compare_checkpoint"]
+    if compare is not None and (not isinstance(compare, str) or not compare):
+        raise ev._fail("compare_checkpoint", "a path or null")
+    bench = ev.sub("benchmarks", ("seed", "absent", "pair", "pair_n", "pair_min_clip_s",
+                                  "librispeech", "examples"))
+    pair = bench.data["pair"]
+    if pair is not None and not (isinstance(pair, list) and len(pair) == 2
+                                 and all(p in labels for p in pair) and pair[0] != pair[1]):
+        raise bench._fail("pair", f"null or two different classes from {list(labels)}")
     return ExtractionConfig(
         method=_choice(top, "method", EXTRACTION_METHODS),
         default_attenuation_db=top.number("default_attenuation_db", ge=0, le=60),
@@ -977,6 +1133,15 @@ def load_extraction_config(directory: Path, project_root: Path, labels: LabelSet
             example_ids=tuple(ids),
             live_delay_s=ev.number("live_delay_s", ge=0, le=5),
             reverb_seed=ev.integer("reverb_seed", ge=0),
+            compare_checkpoint=resolve_path(compare, project_root) if compare else None,
+            high_attenuation_db=ev.number("high_attenuation_db", ge=0, le=120),
+            bench_seed=bench.integer("seed", ge=0),
+            bench_absent=bench.integer("absent", ge=0),
+            bench_pair=tuple(pair) if pair else None,
+            bench_pair_n=bench.integer("pair_n", ge=0),
+            bench_pair_min_clip_s=bench.number("pair_min_clip_s", ge=0),
+            bench_librispeech=bench.integer("librispeech", ge=0),
+            bench_examples=bench.integer("examples", ge=0),
         ),
         mask_baseline=load_mask_baseline_config(directory / "mask_baseline.yaml"),
         neural_tse=load_neural_tse_config(directory / "neural_tse.yaml", project_root, labels),

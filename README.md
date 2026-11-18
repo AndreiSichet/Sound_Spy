@@ -107,20 +107,26 @@ soundspy evaluate detection --split test      # fine-tuned vs zero-shot
 soundspy detect data\raw\<file>.wav          # per-class timeline of a recording
 ```
 
-### Extraction (steps 06-07)
+### Extraction (steps 06-07b)
 
-Two methods: **Neural** (`neural_tse`: a fine-tuned Waveformer, the default once it is trained)
-and **Baseline** (`mask_baseline`: the detector-gated filter of step 06). Without a trained
-neural model the app falls back to the baseline and says so.
+Two methods: **Neural** (`neural_tse`: a fine-tuned Waveformer, the default once it is trained,
+with an output gate that can be switched off) and **Baseline** (`mask_baseline`: the
+detector-gated filter of step 06). Without a trained neural model the app falls back to the
+baseline and says so.
 
 ```powershell
 pip install -e ".[api,data,ml,spatial,dev]"            # spatial = pyroomacoustics (simulated rooms for training)
-soundspy data cache --task extraction --split all      # render the mixtures once to D: (~25 GB, ~18 min)
+soundspy data cache --task extraction --split all      # render the val/test mixtures once to D: (~25 GB with train)
+soundspy data download librispeech; soundspy data prepare   # step 07b: extra speech (7 GB, CC BY 4.0)
+soundspy data cache --task clips                       # LibriSpeech train at 44.1 kHz (~32 GB, ~11 min)
+soundspy data cache --task rirs                        # 2,000 simulated rooms (0.6 GB, ~3 min)
 soundspy train extraction --smoke                      # 1 short epoch, end-to-end check (~1 min)
 soundspy train extraction                              # full run (hours); --resume continues
-soundspy evaluate extraction --method neural_tse       # neural vs baseline vs oracles on 500 test mixtures
+soundspy evaluate gate                                 # choose the output gate's thresholds on validation
+soundspy evaluate extraction --method neural_tse --name ext_neural_tse_v2   # all systems + benchmarks
 soundspy evaluate extraction --method mask_baseline    # the step-06 comparison alone (~4 min)
 soundspy extract data\raw\<file>.wav --labels speech   # keep speech, rest -15 dB -> outputs\processed
+soundspy extract data\raw\<file>.wav --labels speech --no-gate   # the network without its output gate
 soundspy extract data\raw\<file>.wav --labels speech --method mask_baseline --attenuation-db 30
 soundspy db rebuild                                    # the database is only an index: rebuild it from the sidecars
 ```

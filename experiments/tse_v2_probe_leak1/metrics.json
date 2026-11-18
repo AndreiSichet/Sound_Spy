@@ -1,0 +1,22 @@
+{
+  "best_epoch": 4,
+  "best_val_si_sdri": 2.131682947464676,
+  "epochs_run_total": 4,
+  "stopped_early": false,
+  "out_of_time": false,
+  "batch_size": 4,
+  "accumulate": 4,
+  "start_leak_db": -14.080387019849086,
+  "hours": 0.31,
+  "val": {
+    "si_sdri": 2.131682947464676,
+    "snri": 5.258382623435809,
+    "si_sdr": 2.672137229940572,
+    "leak_db": -22.336024884339217,
+    "with_target": 479,
+    "without_target": 91,
+    "leak_frames_db": -51.45451029330105,
+    "epoch": 4
+  },
+  "val_attenuation_db": 30.0
+}

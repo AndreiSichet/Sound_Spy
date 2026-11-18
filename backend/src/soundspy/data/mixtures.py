@@ -22,10 +22,30 @@ active frames), gets its ``gain_db``, and is added either to the *target* sum or
 The target is then scaled so that target vs. rest is ``target_to_rest_db``; ``mixture = target +
 rest`` exactly. If the mixture peak exceeds ``peak_limit``, target and rest (and so the mixture)
 are scaled by the same factor.
+
+Step 07b: one sampler for everything (:class:`RecipeSampler`). The JSONL files of validation and
+test are a frozen sample of it (made with the ``mixtures`` settings, which still reproduce them
+exactly); training draws new recipes all the time (``data/dynamic.py``) with the
+``mixtures.dynamic`` settings, which add:
+
+* **more absent targets** and, for those, **hard negatives**: with ``hard_negative_prob`` one
+  foreground event is replaced by a class that the selected class is confused with
+  (``hard_negative_pairs``), so the model practises staying silent exactly where it leaks;
+* **partial targets** (``partial_target_prob``): every target event lies either after or before
+  one moment (``Recipe.switch_s``), so a training crop around it contains the target switching
+  on or off;
+* a **source mix** per class (``source_mix``): e.g. half of the speech clips from LibriSpeech,
+  half from the other datasets, whatever their sizes;
+* a random **low-pass** on some foreground events when rendering (``lowpass_hz`` of
+  :func:`render`).
+
+A :class:`RecipeSpec` pins parts of a recipe (which classes, which selection, how much
+background) for the fixed benchmark sets of the evaluation.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 import random
@@ -42,7 +62,7 @@ from soundspy.config import AppConfig, MixtureConfig
 from soundspy.core.audio import AudioBuffer
 from soundspy.core.labels import LabelSet
 from soundspy.data.activity import ActivityStore, active_regions
-from soundspy.data.aliases import resolve_alias
+from soundspy.data.aliases import resolve_alias, split_alias
 from soundspy.data.roles import BG, role_class
 from soundspy.dsp.channels import ChannelReducer
 from soundspy.dsp.resample import resample_array
@@ -90,13 +110,14 @@ class Recipe:
     present: tuple[str, ...]
     target: tuple[str, ...]
     target_to_rest_db: float
+    switch_s: float | None = None  # partial target: it sounds only after or only before this
 
     @property
     def empty_target(self) -> bool:
         return not set(self.target) & set(self.present)
 
     def to_json(self) -> dict[str, Any]:
-        return {
+        d = {
             "id": self.id,
             "duration_s": self.duration_s,
             "events": [e.to_json() for e in self.events],
@@ -104,12 +125,17 @@ class Recipe:
             "target": list(self.target),
             "target_to_rest_db": self.target_to_rest_db,
         }
+        if self.switch_s is not None:
+            d["switch_s"] = self.switch_s
+        return d
 
     @classmethod
     def from_json(cls, d: Mapping[str, Any]) -> Recipe:
+        switch = d.get("switch_s")
         return cls(str(d["id"]), float(d["duration_s"]),
                    tuple(Event.from_json(e) for e in d["events"]),
-                   tuple(d["present"]), tuple(d["target"]), float(d["target_to_rest_db"]))
+                   tuple(d["present"]), tuple(d["target"]), float(d["target_to_rest_db"]),
+                   None if switch is None else float(switch))
 
 
 def recipes_path(mixtures_dir: Path, split: str) -> Path:
@@ -161,10 +187,15 @@ class ClipLibrary:
         paths: Mapping[str, Path],
         *,
         threshold_db: float,
+        clip_cache: Path | None = None,
     ) -> None:
         self.paths = paths
         self.activity = activity
         self.threshold_db = threshold_db
+        # ``<clip_cache>/clips_<rate>/<dataset>/...wav``: clips already converted to a rate
+        # (``data/clip_cache.py``); used instead of the original file when it is there
+        self.clip_cache = Path(clip_cache) if clip_cache is not None else None
+        self._cached_roots: dict[tuple[str, int], Path | None] = {}
         self.clips: dict[str, ClipInfo] = {}
         for rec in index[["clip_id", "path", "duration_s", "sample_rate", "role",
                           "split"]].itertuples(index=False):
@@ -178,7 +209,8 @@ class ClipLibrary:
 
         processed = config.paths["processed"]
         return cls(load_clip_index(processed), load_activity(processed), config.paths,
-                   threshold_db=config.data.activity_threshold_db)
+                   threshold_db=config.data.activity_threshold_db,
+                   clip_cache=Path(processed) / "cache")
 
     def info(self, clip_id: str) -> ClipInfo:
         try:
@@ -211,7 +243,7 @@ class ClipLibrary:
         Always exactly ``round(dur_s * sample_rate)`` samples (zero-padded past the clip end).
         """
         info = self.info(clip_id)
-        path = resolve_alias(info.path, self.paths)
+        path = self.cached_file(info, sample_rate) or resolve_alias(info.path, self.paths)
         with sf.SoundFile(str(path)) as fh:
             native = fh.samplerate
             start = min(round(offset_s * native), fh.frames)
@@ -226,6 +258,27 @@ class ClipLibrary:
         if out.shape[0] < n:
             out = np.concatenate([out, np.zeros(n - out.shape[0], np.float32)])
         return out[:n].astype(np.float32, copy=False)
+
+
+    def cached_file(self, info: ClipInfo, sample_rate: int) -> Path | None:
+        """The clip's copy at ``sample_rate`` in the clip cache, if there is one."""
+        if self.clip_cache is None or info.sample_rate == sample_rate:
+            return None
+        dataset, relative = split_alias(info.path)
+        key = (dataset, sample_rate)
+        if key not in self._cached_roots:
+            root = self.clip_cache / f"clips_{sample_rate}" / dataset
+            self._cached_roots[key] = root if root.is_dir() else None
+        root = self._cached_roots[key]
+        if root is None:
+            return None
+        path = root.joinpath(*relative.with_suffix(".wav").parts)
+        return path if path.is_file() else None
+
+
+def clip_dataset(clip_id: str) -> str:
+    """``"fsd50k:64760"`` -> ``"fsd50k"``."""
+    return clip_id.split(":", 1)[0]
 
 
 @dataclass
@@ -292,6 +345,170 @@ def _place(
     return _r(offset), onset, dur
 
 
+@dataclass(frozen=True)
+class RecipeSpec:
+    """What is fixed in a sampled recipe (benchmark sets); ``None`` = the usual random choice."""
+
+    present: tuple[str, ...] | None = None  # exactly these foreground classes
+    target: tuple[str, ...] | None = None  # exactly this selection (may be absent classes)
+    absent_target: bool | None = None  # True: the selection is a class that is not present
+    n_background: tuple[int, int] | None = None
+    fill: frozenset[str] = frozenset()  # classes whose event is made as long as possible
+    min_clip_s: Mapping[str, float] = field(default_factory=dict)  # class -> clips this long
+    target_to_rest_db: tuple[float, float] | None = None
+
+
+class RecipeSampler:
+    """Draws recipes for one split: the single code path behind the frozen recipe files
+    (:func:`generate_recipes`), the dynamic training mixtures and the benchmark sets.
+
+    With the settings the files were made with (no partial targets, no hard negatives, a
+    source mix that never takes the named dataset) the random numbers are consumed exactly as
+    before step 07b, so the files can still be regenerated identically.
+    """
+
+    def __init__(self, library: ClipLibrary, labels: LabelSet, mix: MixtureConfig,
+                 split: str) -> None:
+        self.library, self.labels, self.mix, self.split = library, labels, mix, split
+        self.pool = SplitPool.from_library(library, split, labels)
+        self.classes = list(self.pool.fg)
+        if not self.classes:
+            raise RecipeError(
+                f"split {split!r} has no foreground clips: run `soundspy data prepare`")
+        if mix.n_background[1] > 0 and not self.pool.bg and mix.n_background[0] > 0:
+            raise RecipeError(f"split {split!r} has no background clips")
+        self.order = list(labels)
+        unknown = sorted((set(mix.source_mix) | set(mix.hard_negative_pairs)
+                          | {c for v in mix.hard_negative_pairs.values() for c in v})
+                         - set(self.order))
+        if unknown:
+            raise RecipeError(f"mixtures: source_mix / hard_negative_pairs name unknown "
+                              f"class(es) {unknown}; classes: {self.order}")
+        # per class: the clips of every dataset named in source_mix, and all the others
+        self._named: dict[str, dict[str, list[str]]] = {}
+        self._rest: dict[str, list[str]] = {}
+        for key, clips in self.pool.fg.items():
+            named = {d: [c for c in clips if clip_dataset(c) == d]
+                     for d in mix.source_mix.get(key, {})}
+            rest = [c for c in clips if clip_dataset(c) not in named]
+            self._named[key] = {d: v for d, v in named.items() if v}
+            self._rest[key] = rest
+        self._long: dict[tuple[str, str, float], list[str]] = {}
+
+    def _at_least(self, key: str, source: str, clips: list[str], seconds: float) -> list[str]:
+        if seconds <= 0:
+            return clips
+        cache_key = (key, source, seconds)
+        if cache_key not in self._long:
+            self._long[cache_key] = [c for c in clips
+                                     if self.library.info(c).duration_s >= seconds]
+        return self._long[cache_key] or clips
+
+    def pick_clip(self, rng: random.Random, key: str, min_clip_s: float = 0.0) -> str:
+        """A clip of class ``key``, honouring the source mix."""
+        for dataset, share in self.mix.source_mix.get(key, {}).items():
+            named = self._named[key].get(dataset)
+            if not named or share <= 0.0:
+                continue
+            if share >= 1.0 or not self._rest[key] or rng.random() < share:
+                return rng.choice(self._at_least(key, dataset, named, min_clip_s))
+        rest = self._rest[key] or self.pool.fg[key]
+        return rng.choice(self._at_least(key, "", rest, min_clip_s))
+
+    def _fg_event(self, rng: random.Random, key: str, spec: RecipeSpec) -> Event:
+        mix = self.mix
+        clip = self.pick_clip(rng, key, float(spec.min_clip_s.get(key, 0.0)))
+        offset, onset, dur = _place(rng, self.library, clip, duration_s=mix.duration_s,
+                                    event_min_s=mix.event_min_s, fill=key in spec.fill)
+        return Event(clip, "fg", key, offset, onset, dur, _r(rng.uniform(*mix.fg_gain_db)))
+
+    def sample(self, rng: random.Random, recipe_id: str,
+               spec: RecipeSpec | None = None) -> Recipe:
+        mix, pool, order = self.mix, self.pool, self.order
+        spec = spec or RecipeSpec()
+        if spec.present is not None:
+            missing = [c for c in spec.present if c not in pool.fg]
+            if missing:
+                raise RecipeError(f"split {self.split!r} has no clips of {missing}")
+            chosen = list(spec.present)
+        else:
+            classes = self.classes
+            if spec.absent_target and spec.target:  # the selection must not be there
+                classes = [c for c in classes if c not in spec.target]
+            hi = min(mix.n_foreground[1], len(classes))
+            n_fg = rng.randint(min(mix.n_foreground[0], hi), hi)
+            chosen = rng.sample(classes, n_fg)
+        events = [self._fg_event(rng, key, spec) for key in chosen]
+        bg_range = spec.n_background or mix.n_background
+        n_bg = rng.randint(*bg_range) if pool.bg else 0
+        for _ in range(n_bg):
+            clip = rng.choice(pool.bg)
+            offset, onset, dur = _place(rng, self.library, clip, duration_s=mix.duration_s,
+                                        event_min_s=mix.event_min_s, fill=True)
+            events.append(Event(clip, "bg", None, offset, onset, dur,
+                                _r(rng.uniform(*mix.bg_gain_db))))
+        absent = [k for k in order if k not in chosen]
+        if spec.target is not None:
+            target = sorted(spec.target, key=order.index)
+            empty = not set(target) & set(chosen)
+        else:
+            if spec.absent_target is None:
+                empty = bool(absent) and rng.random() < mix.empty_target_prob
+            else:
+                empty = spec.absent_target and bool(absent)
+            if empty:
+                target = [rng.choice(absent)]
+            else:
+                k = rng.randint(mix.target_size[0], min(mix.target_size[1], len(chosen)))
+                target = sorted(rng.sample(sorted(chosen, key=order.index),
+                                           max(1, min(k, len(chosen)))), key=order.index)
+        switch = None
+        if empty and spec.present is None and len(target) == 1:
+            self._hard_negative(rng, target[0], chosen, events, spec)
+        elif not empty and mix.partial_target_prob > 0 \
+                and rng.random() < mix.partial_target_prob:
+            switch = self._make_partial(rng, set(target), events)
+        return Recipe(
+            id=recipe_id,
+            duration_s=mix.duration_s,
+            events=tuple(events),
+            present=tuple(sorted(chosen, key=order.index)),
+            target=tuple(target),
+            target_to_rest_db=_r(rng.uniform(*(spec.target_to_rest_db
+                                               or mix.target_to_rest_db))),
+            switch_s=switch,
+        )
+
+    def _hard_negative(self, rng: random.Random, target: str, chosen: list[str],
+                       events: list[Event], spec: RecipeSpec) -> None:
+        """Absent target: maybe swap one foreground event for a class it is confused with."""
+        mix = self.mix
+        hard = [c for c in mix.hard_negative_pairs.get(target, ()) if c in self.pool.fg]
+        if not hard or mix.hard_negative_prob <= 0 or set(hard) & set(chosen):
+            return
+        if rng.random() >= mix.hard_negative_prob:
+            return
+        candidates = [c for c in hard if c not in chosen]
+        slot = rng.randrange(len(chosen))
+        chosen[slot] = rng.choice(candidates)
+        events[slot] = self._fg_event(rng, chosen[slot], spec)
+
+    def _make_partial(self, rng: random.Random, target: set[str],
+                      events: list[Event]) -> float:
+        """Move every target event to one side of a random moment; returns that moment."""
+        mix = self.mix
+        switch = _r(rng.uniform(*mix.partial_switch) * mix.duration_s)
+        late = rng.random() < 0.5  # the target starts at the moment / ends at it
+        room = mix.duration_s - switch if late else switch
+        for i, event in enumerate(events):
+            if event.role != "fg" or event.cls not in target:
+                continue
+            dur = _r(min(event.dur_s, room))
+            onset = switch if late else _r(switch - dur)
+            events[i] = dataclasses.replace(event, onset_s=_r(max(0.0, onset)), dur_s=dur)
+        return switch
+
+
 def generate_recipes(
     library: ClipLibrary,
     labels: LabelSet,
@@ -299,52 +516,19 @@ def generate_recipes(
     split: str,
     count: int,
     seed: int,
+    *,
+    spec: RecipeSpec | Sequence[RecipeSpec] | None = None,
+    prefix: str | None = None,
 ) -> list[Recipe]:
-    """``count`` recipes for ``split``, deterministic for ``seed``."""
-    pool = SplitPool.from_library(library, split, labels)
-    classes = list(pool.fg)
-    if not classes:
-        raise RecipeError(f"split {split!r} has no foreground clips: run `soundspy data prepare`")
-    if mix.n_background[1] > 0 and not pool.bg and mix.n_background[0] > 0:
-        raise RecipeError(f"split {split!r} has no background clips")
-    order = list(labels)
+    """``count`` recipes for ``split``, deterministic for ``seed``. ``spec``: one for all, or a
+    sequence that is cycled through (benchmark sets); ``prefix``: the id prefix (the split)."""
+    sampler = RecipeSampler(library, labels, mix, split)
     rng = random.Random(seed)
-    recipes = []
     width = max(6, len(str(count)))
-    for i in range(count):
-        hi = min(mix.n_foreground[1], len(classes))
-        n_fg = rng.randint(min(mix.n_foreground[0], hi), hi)
-        chosen = rng.sample(classes, n_fg)
-        events = []
-        for key in chosen:
-            clip = rng.choice(pool.fg[key])
-            offset, onset, dur = _place(rng, library, clip, duration_s=mix.duration_s,
-                                        event_min_s=mix.event_min_s, fill=False)
-            events.append(Event(clip, "fg", key, offset, onset, dur,
-                                _r(rng.uniform(*mix.fg_gain_db))))
-        n_bg = rng.randint(*mix.n_background) if pool.bg else 0
-        for _ in range(n_bg):
-            clip = rng.choice(pool.bg)
-            offset, onset, dur = _place(rng, library, clip, duration_s=mix.duration_s,
-                                        event_min_s=mix.event_min_s, fill=True)
-            events.append(Event(clip, "bg", None, offset, onset, dur,
-                                _r(rng.uniform(*mix.bg_gain_db))))
-        present = sorted(chosen, key=order.index)
-        absent = [k for k in order if k not in present]
-        if absent and rng.random() < mix.empty_target_prob:
-            target = [rng.choice(absent)]
-        else:
-            k = rng.randint(mix.target_size[0], min(mix.target_size[1], len(present)))
-            target = sorted(rng.sample(present, max(1, min(k, len(present)))), key=order.index)
-        recipes.append(Recipe(
-            id=f"{split}-{i + 1:0{width}d}",
-            duration_s=mix.duration_s,
-            events=tuple(events),
-            present=tuple(present),
-            target=tuple(target),
-            target_to_rest_db=_r(rng.uniform(*mix.target_to_rest_db)),
-        ))
-    return recipes
+    prefix = split if prefix is None else prefix
+    specs = [spec] if spec is None or isinstance(spec, RecipeSpec) else list(spec)
+    return [sampler.sample(rng, f"{prefix}-{i + 1:0{width}d}", specs[i % len(specs)])
+            for i in range(count)]
 
 
 def write_recipes(
@@ -357,7 +541,8 @@ def write_recipes(
 ) -> tuple[Path, int]:
     mix = config.data.mixtures
     library = ClipLibrary(index, activity, config.paths,
-                          threshold_db=config.data.activity_threshold_db)
+                          threshold_db=config.data.activity_threshold_db,
+                          clip_cache=Path(config.paths["processed"]) / "cache")
     n = mix.counts[split] if count is None else count
     if n < 0:
         raise RecipeError("--count must be >= 0")
@@ -414,8 +599,12 @@ def render(
     peak_limit: float,
     activity_rate_hz: float = 10.0,
     rirs: Sequence[np.ndarray] | None = None,
+    lowpass_hz: Sequence[float | None] | None = None,
 ) -> RenderedMixture:
     """Render ``recipe`` at ``sample_rate`` (mono). Same recipe -> identical samples.
+
+    ``lowpass_hz`` (step 07b, optional): one cut-off (or ``None``) per event; the event is
+    low-pass filtered before anything else, so mixture and target stay consistent.
 
     ``rirs`` (step 07, optional): one room impulse response per event, in the order of
     ``recipe.events``. Each event is convolved with its own response **before** it is added to
@@ -425,6 +614,10 @@ def render(
     if rirs is not None and len(rirs) != len(recipe.events):
         raise RecipeError(f"{recipe.id}: {len(rirs)} impulse responses for "
                           f"{len(recipe.events)} events")
+    if lowpass_hz is not None and len(lowpass_hz) != len(recipe.events):
+        raise RecipeError(f"{recipe.id}: {len(lowpass_hz)} cut-offs for "
+                          f"{len(recipe.events)} events")
+    class_energy: dict[str, float] = {}
     n = round(recipe.duration_s * sample_rate)
     target = np.zeros(n, dtype=np.float64)
     rest = np.zeros(n, dtype=np.float64)
@@ -436,6 +629,8 @@ def render(
     for number, event in enumerate(recipe.events):
         seg = library.load_segment(event.clip_id, event.clip_offset_s, event.dur_s,
                                    sample_rate).astype(np.float64)
+        if lowpass_hz is not None and lowpass_hz[number] is not None and seg.size:
+            seg = lowpass(seg, float(lowpass_hz[number]), sample_rate)
         regions = library.regions(event.clip_id)
         level = _active_rms(seg, sample_rate, regions, event.clip_offset_s)
         if level > _EPS:
@@ -453,6 +648,9 @@ def render(
             continue
         dest = target if (event.role == "fg" and event.cls in target_set) else rest
         dest[start:stop] += seg[: stop - start]
+        name = event.cls if event.role == "fg" else BG
+        class_energy[name] = class_energy.get(name, 0.0) + float(
+            np.sum(np.square(seg[: stop - start])))
         if event.role == "fg" and event.cls in labels:
             col = labels.index(event.cls)
             for a, b in regions:
@@ -496,18 +694,30 @@ def render(
         activity_rate_hz=activity_rate_hz,
         scale=scale,
         target_gain_db=gain_db,
-        meta={"reverb": rirs is not None},
+        # energy of each class's events as placed (before the target is levelled against the
+        # rest): which interferer dominates a mixture
+        meta={"reverb": rirs is not None, "class_energy": class_energy},
     )
+
+
+def lowpass(x: np.ndarray, cutoff_hz: float, sample_rate: int) -> np.ndarray:
+    """6th-order Butterworth low-pass (nothing is done at or above 0.45 x the sample rate)."""
+    if cutoff_hz >= 0.45 * sample_rate:
+        return x
+    from scipy.signal import butter, sosfilt
+
+    return sosfilt(butter(6, cutoff_hz, btype="low", fs=sample_rate, output="sos"), x)
 
 
 def render_with_config(
     recipe: Recipe, sample_rate: int, library: ClipLibrary, config: AppConfig,
     *, activity_rate_hz: float = 10.0, rirs: Sequence[np.ndarray] | None = None,
+    lowpass_hz: Sequence[float | None] | None = None,
 ) -> RenderedMixture:
     mix = config.data.mixtures
     return render(recipe, sample_rate, library, config.labels,
                   reference_rms_dbfs=mix.reference_rms_dbfs, peak_limit=mix.peak_limit,
-                  activity_rate_hz=activity_rate_hz, rirs=rirs)
+                  activity_rate_hz=activity_rate_hz, rirs=rirs, lowpass_hz=lowpass_hz)
 
 
 # --------------------------------------------------------------------------------------------

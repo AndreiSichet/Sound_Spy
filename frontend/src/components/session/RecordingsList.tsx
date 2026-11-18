@@ -45,6 +45,11 @@ function RunRow({ run, recording }: { run: Run; recording: Recording }) {
         <span className="text-slate-400">rest −{run.attenuation_db} dB</span>
         <span className="rounded bg-slate-800 px-1.5 text-slate-300" title={run.method}>
           {methodName(run.method)}
+          {run.method === 'neural_tse' && typeof run.info?.gate === 'boolean'
+            ? run.info.gate
+              ? ' · gate'
+              : ' · no gate'
+            : ''}
         </span>
         {run.processing_seconds != null && (
           <span className="text-slate-500">{run.processing_seconds.toFixed(1)} s to process</span>
@@ -84,6 +89,8 @@ export function RecordingsList() {
   /** null = follow the session's method (the selector next to the attenuation slider). */
   const [picked, setPicked] = useState<ExtractionMethod | null>(null)
   const sessionMethod = useAppStore((s) => s.status?.extraction_method)
+  // the Gate switch next to the method selector applies to runs too
+  const sessionGate = useAppStore((s) => s.status?.extraction_gate)
   const methods = config?.extraction_methods ?? []
   const available = (name: string | null | undefined) =>
     methods.length === 0 || methods.find((m) => m.name === name)?.available === true
@@ -135,6 +142,7 @@ export function RecordingsList() {
         labels: selected,
         attenuation_db: attenuation,
         ...(processMethod ? { method: processMethod } : {}),
+        ...(processMethod === 'neural_tse' && sessionGate != null ? { gate: sessionGate } : {}),
       })
       if (!isRun(run)) return
       upsertRun(run)

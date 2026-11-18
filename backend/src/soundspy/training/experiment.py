@@ -136,10 +136,12 @@ def read_log(path: Path) -> list[dict[str, str]]:
 
 
 def truncate_log(path: Path, epochs: int) -> None:
-    """Keep only the first ``epochs`` rows (resuming after an interrupted epoch)."""
+    """Keep only the rows of epochs up to ``epochs`` (resuming after an interrupted epoch).
+    A row for epoch 0 (the model before training, extraction step 07b) is kept."""
     rows = read_log(path)
-    if len(rows) <= epochs:
+    keep = [row for row in rows if int(row["epoch"]) <= epochs]
+    if len(keep) == len(rows):
         return
     path.unlink()
-    for row in rows[:epochs]:
+    for row in keep:
         append_log(path, row)

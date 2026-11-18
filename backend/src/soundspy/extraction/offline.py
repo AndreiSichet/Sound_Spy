@@ -77,14 +77,16 @@ def resolve_method(config: AppConfig, requested: str | None = None) -> tuple[str
 
 
 def build_extractor(config: AppConfig, activity: ActivitySource | None, *,
-                    method: str | None = None, device: str | None = None) -> Processor:
-    """The extractor of ``method`` exactly (no fallback: see :func:`resolve_method`)."""
+                    method: str | None = None, device: str | None = None,
+                    gate: bool | None = None) -> Processor:
+    """The extractor of ``method`` exactly (no fallback: see :func:`resolve_method`).
+    ``gate``: the neural output gate on / off (``None``: as configured)."""
     method = method or config.extraction.method
     if method == "neural_tse":
         from soundspy.extraction.neural_tse import NeuralUnavailable, build_neural_extractor
 
         try:
-            return build_neural_extractor(config, device=device)
+            return build_neural_extractor(config, device=device, gate=gate)
         except NeuralUnavailable as exc:
             raise ExtractionUnavailable(str(exc)) from exc
     if method == "mask_baseline":
@@ -130,7 +132,7 @@ class OfflineResult:
 
 def extract_buffer(config: AppConfig, audio: AudioBuffer, labels: Collection[str], *,
                    attenuation_db: float | None = None, method: str | None = None,
-                   device: str | None = None) -> OfflineResult:
+                   device: str | None = None, gate: bool | None = None) -> OfflineResult:
     """Offline extraction of a buffer (any rate/channels).
 
     ``mask_baseline``: centred detection first, then the extractor. ``neural_tse``: the buffer
@@ -146,7 +148,7 @@ def extract_buffer(config: AppConfig, audio: AudioBuffer, labels: Collection[str
     activity = None
     if method == "mask_baseline" and target.labels:
         activity = _centred(config, audio, device)
-    extractor = build_extractor(config, activity, method=method, device=device)
+    extractor = build_extractor(config, activity, method=method, device=device, gate=gate)
     out = run_offline(extractor, mono(audio), target,
                       chunk_frames=config.extraction.offline_chunk_frames)
     info = {
@@ -162,7 +164,8 @@ def extract_buffer(config: AppConfig, audio: AudioBuffer, labels: Collection[str
     status = getattr(extractor, "status_info", None)
     if method == "neural_tse" and callable(status):
         report = status()
-        info.update(model=report.get("model"), device=report.get("device"))
+        info.update(model=report.get("model"), device=report.get("device"),
+                    gate=report.get("gate"), gate_closed=report.get("gate_closed"))
     return OfflineResult(out, activity, time.perf_counter() - started, info)
 
 
@@ -184,12 +187,13 @@ def _centred(config: AppConfig, audio: AudioBuffer, device: str | None) -> Timel
 
 def extract_file(config: AppConfig, path: Path, labels: Collection[str], *,
                  attenuation_db: float | None = None, method: str | None = None,
-                 device: str | None = None) -> OfflineResult:
+                 device: str | None = None, gate: bool | None = None) -> OfflineResult:
     import soundfile as sf
 
     data, sr = sf.read(str(path), dtype="float32", always_2d=True)
     return extract_buffer(config, AudioBuffer(data, int(sr)), labels,
-                          attenuation_db=attenuation_db, method=method, device=device)
+                          attenuation_db=attenuation_db, method=method, device=device,
+                          gate=gate)
 
 
 def irm_oracle(mixture: np.ndarray, target: np.ndarray, rest: np.ndarray,
@@ -212,7 +216,9 @@ def runs_dir(config: AppConfig) -> Path:
     return Path(config.paths["outputs"]) / "processed"
 
 
-def method_parameters(config: AppConfig, method: str) -> dict[str, Any]:
+def method_parameters(config: AppConfig, method: str, gate: bool | None = None
+                      ) -> dict[str, Any]:
+    """What a run sidecar records about the method (the neural model's file and gate)."""
     import dataclasses
 
     if method == "mask_baseline":
@@ -220,7 +226,10 @@ def method_parameters(config: AppConfig, method: str) -> dict[str, Any]:
     if method == "neural_tse":
         cfg = config.extraction.neural_tse
         checkpoint = Path(cfg.checkpoint) if cfg.checkpoint else None
+        gate_cfg = cfg.gate if gate is None else dataclasses.replace(cfg.gate, enabled=gate)
         return {
+            "model_name": checkpoint.parent.parent.name if checkpoint else None,
+            "gate": dataclasses.asdict(gate_cfg),
             "checkpoint": stored_path(checkpoint, config.project_root) if checkpoint else None,
             "checkpoint_modified": (time.strftime(
                 "%Y-%m-%dT%H:%M:%S", time.localtime(checkpoint.stat().st_mtime))
@@ -242,8 +251,8 @@ def run_method(config: AppConfig, requested: str | None = None) -> str:
 
 
 def start_run(config: AppConfig, recording: Path, labels: Collection[str], *,
-              attenuation_db: float | None = None, method: str | None = None
-              ) -> dict[str, Any]:
+              attenuation_db: float | None = None, method: str | None = None,
+              gate: bool | None = None) -> dict[str, Any]:
     """Create a ``pending`` run for ``recording`` (validates labels and method)."""
     method = run_method(config, method)
     if attenuation_db is None:
@@ -255,7 +264,7 @@ def start_run(config: AppConfig, recording: Path, labels: Collection[str], *,
     return run_store.create_run(
         runs_dir(config), recording=stored_path(recording, config.project_root),
         labels=sorted(target.labels), attenuation_db=target.attenuation_db, method=method,
-        parameters=method_parameters(config, method),
+        parameters=method_parameters(config, method, gate),
         activity_mode="timeline" if method == "mask_baseline" else "none")
 
 
@@ -267,8 +276,10 @@ def execute_run(config: AppConfig, run_id: str, *, device: str | None = None) ->
         path = absolute_path(run["recording"], config.project_root)
         if not path.is_file():
             raise ExtractionUnavailable(f"the recording file is gone: {run['recording']}")
+        gate = (run.get("parameters") or {}).get("gate")
         result = extract_file(config, path, run["labels"], attenuation_db=run["attenuation_db"],
-                              method=run["method"], device=device)
+                              method=run["method"], device=device,
+                              gate=gate.get("enabled") if isinstance(gate, dict) else None)
         return run_store.finish_run(directory, run_id, result.audio,
                                     processing_seconds=result.seconds, info=result.info)
     except Exception as exc:  # noqa: BLE001 - a run records its failure instead of raising

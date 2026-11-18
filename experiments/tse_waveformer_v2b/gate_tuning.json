@@ -1,0 +1,468 @@
+{
+  "model": "tse_waveformer_v2b",
+  "checkpoint": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\tse_waveformer_v2b\\checkpoints\\best.pt",
+  "examples": 570,
+  "attenuations_db": [
+    30.0,
+    40.0
+  ],
+  "rows": [
+    {
+      "gate": null,
+      "30": {
+        "si_sdr_i": 3.1753258200218895,
+        "worse": 62,
+        "suppression_db": -15.680668563203978,
+        "estimate_db": -17.77717106398501,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.913923235220078,
+        "worse": 67,
+        "suppression_db": -17.001503524426393,
+        "estimate_db": -17.77717106398501,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -8.0,
+        "close_db": -14.0,
+        "depth_db": 15.0
+      },
+      "30": {
+        "si_sdr_i": 2.8358515442451155,
+        "worse": 63,
+        "suppression_db": -17.45113196189162,
+        "estimate_db": -21.76621400044987,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.3938626548363744,
+        "worse": 70,
+        "suppression_db": -19.725220230220074,
+        "estimate_db": -21.76621400044987,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -8.0,
+        "close_db": -14.0,
+        "depth_db": 25.0
+      },
+      "30": {
+        "si_sdr_i": 2.676604618664294,
+        "worse": 65,
+        "suppression_db": -17.88094268562517,
+        "estimate_db": -23.195045115779987,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.166453689968604,
+        "worse": 70,
+        "suppression_db": -20.470224027524928,
+        "estimate_db": -23.195045115779987,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -8.0,
+        "close_db": -14.0,
+        "depth_db": 35.0
+      },
+      "30": {
+        "si_sdr_i": 2.564645466915727,
+        "worse": 64,
+        "suppression_db": -18.114553599245355,
+        "estimate_db": -23.92018375052638,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.0156169687840104,
+        "worse": 71,
+        "suppression_db": -20.84614296831142,
+        "estimate_db": -23.92018375052638,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -8.0,
+        "close_db": -18.0,
+        "depth_db": 15.0
+      },
+      "30": {
+        "si_sdr_i": 2.857726415807438,
+        "worse": 63,
+        "suppression_db": -17.328765566762254,
+        "estimate_db": -21.48090318268373,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.4113363865992485,
+        "worse": 70,
+        "suppression_db": -19.530901819182393,
+        "estimate_db": -21.48090318268373,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -8.0,
+        "close_db": -18.0,
+        "depth_db": 25.0
+      },
+      "30": {
+        "si_sdr_i": 2.7144569425571783,
+        "worse": 64,
+        "suppression_db": -17.75224435022089,
+        "estimate_db": -22.806895557717027,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.2043895331551164,
+        "worse": 70,
+        "suppression_db": -20.26254850808934,
+        "estimate_db": -22.806895557717027,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -8.0,
+        "close_db": -18.0,
+        "depth_db": 35.0
+      },
+      "30": {
+        "si_sdr_i": 2.611988553614724,
+        "worse": 63,
+        "suppression_db": -17.990296464812246,
+        "estimate_db": -23.50506651681809,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.0708915144601363,
+        "worse": 70,
+        "suppression_db": -20.6595800417776,
+        "estimate_db": -23.50506651681809,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -12.0,
+        "close_db": -18.0,
+        "depth_db": 15.0
+      },
+      "30": {
+        "si_sdr_i": 2.875971644095252,
+        "worse": 63,
+        "suppression_db": -17.07254944385399,
+        "estimate_db": -20.97932269801878,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.4295471071327057,
+        "worse": 69,
+        "suppression_db": -19.155038401493435,
+        "estimate_db": -20.97932269801878,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -12.0,
+        "close_db": -18.0,
+        "depth_db": 25.0
+      },
+      "30": {
+        "si_sdr_i": 2.753941704201498,
+        "worse": 62,
+        "suppression_db": -17.40298572568847,
+        "estimate_db": -22.00425111426448,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.2412367637448423,
+        "worse": 70,
+        "suppression_db": -19.721396666210474,
+        "estimate_db": -22.00425111426448,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -12.0,
+        "close_db": -18.0,
+        "depth_db": 35.0
+      },
+      "30": {
+        "si_sdr_i": 2.6729140512580805,
+        "worse": 62,
+        "suppression_db": -17.58274777934998,
+        "estimate_db": -22.49273245236135,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.1294433735106617,
+        "worse": 70,
+        "suppression_db": -20.026413987693964,
+        "estimate_db": -22.49273245236135,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -12.0,
+        "close_db": -22.0,
+        "depth_db": 15.0
+      },
+      "30": {
+        "si_sdr_i": 2.8887319920586956,
+        "worse": 63,
+        "suppression_db": -17.01183647308715,
+        "estimate_db": -20.812661366572172,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.4427502223629323,
+        "worse": 70,
+        "suppression_db": -19.04937980694067,
+        "estimate_db": -20.812661366572172,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -12.0,
+        "close_db": -22.0,
+        "depth_db": 25.0
+      },
+      "30": {
+        "si_sdr_i": 2.7699945354649795,
+        "worse": 63,
+        "suppression_db": -17.338478710562462,
+        "estimate_db": -21.795273709415156,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.2570711376809838,
+        "worse": 70,
+        "suppression_db": -19.598526701398697,
+        "estimate_db": -21.795273709415156,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -12.0,
+        "close_db": -22.0,
+        "depth_db": 35.0
+      },
+      "30": {
+        "si_sdr_i": 2.6896333684516547,
+        "worse": 62,
+        "suppression_db": -17.52098336693203,
+        "estimate_db": -22.2788336203315,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.147044775155018,
+        "worse": 72,
+        "suppression_db": -19.90160851853613,
+        "estimate_db": -22.2788336203315,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -16.0,
+        "close_db": -22.0,
+        "depth_db": 15.0
+      },
+      "30": {
+        "si_sdr_i": 2.905207502203743,
+        "worse": 64,
+        "suppression_db": -16.889223417721965,
+        "estimate_db": -20.563241118866504,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.4641917199310845,
+        "worse": 70,
+        "suppression_db": -18.861854653576003,
+        "estimate_db": -20.563241118866504,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -16.0,
+        "close_db": -22.0,
+        "depth_db": 25.0
+      },
+      "30": {
+        "si_sdr_i": 2.794005294793457,
+        "worse": 64,
+        "suppression_db": -17.174503340851153,
+        "estimate_db": -21.423792520290196,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.283158097624129,
+        "worse": 71,
+        "suppression_db": -19.33137863957963,
+        "estimate_db": -21.423792520290196,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -16.0,
+        "close_db": -22.0,
+        "depth_db": 35.0
+      },
+      "30": {
+        "si_sdr_i": 2.7188199350554227,
+        "worse": 64,
+        "suppression_db": -17.331834126380805,
+        "estimate_db": -21.83046988394046,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.175274452234403,
+        "worse": 71,
+        "suppression_db": -19.578669442370998,
+        "estimate_db": -21.83046988394046,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -16.0,
+        "close_db": -26.0,
+        "depth_db": 15.0
+      },
+      "30": {
+        "si_sdr_i": 2.9202714858700833,
+        "worse": 64,
+        "suppression_db": -16.84441306605888,
+        "estimate_db": -20.426148887644192,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.4864169524804245,
+        "worse": 70,
+        "suppression_db": -18.785976705589263,
+        "estimate_db": -20.426148887644192,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -16.0,
+        "close_db": -26.0,
+        "depth_db": 25.0
+      },
+      "30": {
+        "si_sdr_i": 2.8124580807519473,
+        "worse": 64,
+        "suppression_db": -17.127789378109217,
+        "estimate_db": -21.239690398241265,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.3112647389381507,
+        "worse": 71,
+        "suppression_db": -19.25136253027498,
+        "estimate_db": -21.239690398241265,
+        "with_target": 479,
+        "without_target": 91
+      }
+    },
+    {
+      "gate": {
+        "open_db": -16.0,
+        "close_db": -26.0,
+        "depth_db": 35.0
+      },
+      "30": {
+        "si_sdr_i": 2.7379771090112803,
+        "worse": 64,
+        "suppression_db": -17.286955525477843,
+        "estimate_db": -21.64568140896999,
+        "with_target": 479,
+        "without_target": 91
+      },
+      "40": {
+        "si_sdr_i": 2.2035898112619314,
+        "worse": 71,
+        "suppression_db": -19.50407347012165,
+        "estimate_db": -21.64568140896999,
+        "with_target": 479,
+        "without_target": 91
+      }
+    }
+  ],
+  "seconds": 464.6,
+  "chosen": {
+    "gate": {
+      "open_db": -12.0,
+      "close_db": -18.0,
+      "depth_db": 15.0
+    },
+    "30": {
+      "si_sdr_i": 2.875971644095252,
+      "worse": 63,
+      "suppression_db": -17.07254944385399,
+      "estimate_db": -20.97932269801878,
+      "with_target": 479,
+      "without_target": 91
+    },
+    "40": {
+      "si_sdr_i": 2.4295471071327057,
+      "worse": 69,
+      "suppression_db": -19.155038401493435,
+      "estimate_db": -20.97932269801878,
+      "with_target": 479,
+      "without_target": 91
+    }
+  }
+}

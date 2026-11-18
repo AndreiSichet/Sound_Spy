@@ -1,6 +1,8 @@
 # Neural target sound extraction (step 07): Waveformer (Veluri et al., ICASSP 2023; MIT),
 # fine-tuned from its public checkpoint on our mixtures. The model gets the audio and the selected
 # classes and outputs only those classes, chunk by chunk, without the detector.
+# Step 07b: trained again on mixtures made on the fly, with a loss term for leakage while the
+# target is silent, and followed by a soft gate driven by the model's own output.
 
 model:                           # the published "default" configuration (E512 / D256)
   sample_rate: 44100             # the checkpoint's rate; other rates are bridged by resampling
@@ -32,7 +34,8 @@ label_init:
   alarm: [Telephone, Microwave_oven]        # ringing and beeps
   traffic: [Bus]
 
-checkpoint: experiments/tse_waveformer_v1/checkpoints/best.pt   # used live and by `extract`
+checkpoint: experiments/tse_waveformer_v2b/checkpoints/best.pt  # used live and by `extract`
+                                 # (step 07b; the step-07 model: tse_waveformer_v1)
 
 live:
   device: auto                   # auto | cuda | cpu
@@ -50,7 +53,22 @@ live:
                                  # in 60 s; apart: none. The detector needs ~80 ms per window on
                                  # one CPU thread, well inside its 250 ms hop.
 
-data:                            # soundspy data cache --task extraction
+gate:                            # soft gate after the model, driven by the model's own output
+  enabled: true                  # (a session can switch it off: the page's "Gate" switch)
+  attack_ms: 5                   # how fast the measured levels rise ...
+  release_ms: 150                # ... and fall
+  open_db: -12                   # estimate at least this loud against the input: gate open
+  close_db: -18                  # estimate this far below the input or lower: gate closed
+  depth_db: 15                   # how much a closed gate turns the estimate down
+                                 # open / close / depth: `soundspy evaluate gate` on v2b (val,
+                                 # 2026-11-18), the strongest suppression costing <= 0.3 dB:
+                                 # SI-SDRi +3.18 -> +2.88 dB, target absent -15.7 -> -17.1 dB at
+                                 # 30 dB. The strongest of the grid (-8/-14/35) reaches only
+                                 # -18.1 dB for -0.62 dB: the leaks that remain are the network
+                                 # keeping a wrong sound at full level, which no level gate sees
+  hold_ms: 200                   # an open gate stays open this long before it may close
+
+data:                            # soundspy data cache --task extraction | clips | rirs
   shard_size: 256                # recipes per shard file (~270 MB at 6 s, 44.1 kHz, float16)
   seed: 7                        # reverberation: which recipes, which rooms
   min_free_gb: 10                # keep at least this much free on the cache drive
@@ -60,29 +78,50 @@ data:                            # soundspy data cache --task extraction
     room_m: [[3.0, 10.0], [3.0, 8.0], [2.4, 4.0]]   # length, width, height ranges
     wall_margin_m: 0.5           # sources and microphone at least this far from the walls
     max_order: 40                # image-source reflections: 40 reaches the asked RT60 (133 ms/room)
+  clip_cache:                    # --task clips: clips converted once to the model's rate
+    datasets: [librispeech]      # (16 kHz FLAC -> 44.1 kHz 16-bit WAV, ~32 GB for the train part)
+    splits: [train]
+  rir_bank:                      # --task rirs: rooms simulated once, for dynamic mixing
+    rooms: 2000
+    positions: 6                 # source positions per room (a mixture has at most 6 events)
+    trim_db: -60                 # cut each response where less than this of its energy is left
 
 training:                        # soundspy train extraction
-  name: tse_waveformer_v1
-  epochs: 32
-  train_recipes: 20000           # how many cached training recipes to use
-  epoch_recipes: 10000           # crops per epoch: epochs rotate through the recipes, so two
-                                 # epochs = one pass over all 20,000 (an epoch of 20,000 took
-                                 # ~29 min on the 3050 Ti: 30 of them would not fit 12 hours)
+  name: tse_waveformer_v2b       # v2 (floor -50 dB) stopped at epoch 15 with val SI-SDRi
+                                 # +2.32 dB; v2b = the same with leak_floor_db -30
+  init_checkpoint: experiments/tse_waveformer_v1/checkpoints/best.pt
+                                 # start from the step-07 model (null = the published weights
+                                 # with the label layer adapted, as in step 07)
+  dynamic: true                  # true: a new random mixture for every crop of every epoch
+                                 # (data/dynamic.py); false: the 20,000 cached mixtures of
+                                 # step 07 (`train_recipes` of them)
+  epochs: 48
+  train_recipes: 20000           # dynamic: false only: how many cached training recipes to use
+  epoch_recipes: 10000           # crops per epoch (~12 min on the 3050 Ti)
   train_crop_s: 3.0              # random crop of each 6 s example (fits 4 GB)
   crop_target_prob: 0.8          # share of crops placed where the target sounds
   batch_size: 8                  # starting point; the largest that fits is found automatically
   max_batch_size: 32
   effective_batch_size: 16       # reached with gradient accumulation
-  num_workers: 2
+  num_workers: 4                 # dynamic mixing renders in the workers (2 were enough for
+                                 # the cached set). Measured: 4 workers 25 crops/s, 6 workers
+                                 # 30 crops/s, the GPU uses ~13. Each worker commits ~1.1 GB:
+                                 # with 6 the 16 GB laptop ran out of commit memory as soon as
+                                 # anything else loaded PyTorch
   loader_timeout_s: 120
-  lr_backbone: 2.5e-4
-  lr_label: 1.0e-3               # the new first layer of the label network
+  lr_backbone: 1.0e-4            # step 07 (from the published weights): 2.5e-4
+  lr_label: 1.0e-4               # step 07: 1e-3 for the then new first label layer
   weight_decay: 1.0e-4
-  warmup_epochs: 1
+  warmup_epochs: 0.2             # step 07: 1
   grad_clip: 5.0
   amp: true
   seed: 42
   val_examples: 500              # fixed subset of the validation cache, full 6 s
+  val_empty_examples: 100        # plus this many target-absent validation examples from the
+                                 # rest of the cache (the 500 hold only ~25): the suppression
+                                 # number logged every epoch
+  require_leak_not_worse: true   # an epoch only counts as "best" if it suppresses an absent
+                                 # target at least as well as the model training started from
   patience: 10                   # early stopping: epochs without a better val SI-SDRi.
                                  # (6 stopped the first run at epoch 9 of 32, while the
                                  # loss and SNRi still improved: at the high learning
@@ -98,8 +137,25 @@ training:                        # soundspy train extraction
     # SNR but 20-40 dB in SI-SNR); 0.2 / 0.8 from the same weights gained ~1 dB in 125 updates.
     snr_weight: 0.2
     si_snr_weight: 0.8
-    empty_weight: 0.5            # weight of the empty-target term in the batch mean
-    empty_floor_db: -40          # no reward for suppressing below this
+    # Leakage term (step 07b): the crop is cut into frames; in every frame where the true
+    # target is silent the output's energy relative to the mixture's (in dB, not below the
+    # floor) is penalised. It replaces the whole-crop "empty target" term of step 07: an absent
+    # target is simply a crop whose frames are all silent, and now the silent stretches inside
+    # crops WITH a target count as well.
+    leak_weight: 1.0             # weight of a fully silent crop relative to the quality term.
+                                 # Chosen from two 4-epoch probes from v1 (val, 2026-11-17):
+                                 # 0.3 -> SI-SDRi +3.05 dB, target-absent leak -13.2 dB (worse
+                                 # than v1's -14.1 and drifting up); 1.0 -> +2.13 dB, -22.3 dB
+    leak_frame_ms: 50
+    leak_floor_db: -30           # no reward for suppressing a frame below this. With -50
+                                 # (run v2) the network pushed pauses far below what anyone
+                                 # hears: the residual mixing adds the dry input back at -30 dB
+                                 # (30 dB evaluation setting; at the 15 dB default even louder).
+                                 # 4-epoch probes from v1 (val, 2026-11-17), weight 1.0:
+                                 # floor -50 -> +2.13 dB, leak -22.3; floor -30 -> +2.96 dB,
+                                 # leak -17.6 (still rising each epoch); weight 0 (new data,
+                                 # no leak term) -> +3.74 dB, leak -10.5
+    leak_silence_dbfs: -70       # a frame whose target is below this level is "silent"
   augment:
     gain_db: 6                   # same random gain on mixture and target
     mic_noise_db: [-75, -55]     # white or pink noise added to the mixture only (dBFS)

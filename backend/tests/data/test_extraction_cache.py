@@ -52,7 +52,7 @@ def cache_env(shared_prepared_env: Any, tmp_path_factory):
         neural.training, epochs=2, train_recipes=11, epoch_recipes=8, train_crop_s=1.0,
         batch_size=2, max_batch_size=2, effective_batch_size=4, num_workers=0, val_examples=5,
         warmup_epochs=0.5, amp=False, smoke_epochs=1, smoke_train_recipes=4,
-        smoke_val_examples=2)
+        smoke_val_examples=2, dynamic=False, init_checkpoint=None)  # tests opt in to both
     neural = dataclasses.replace(neural, model=model, data=data, training=training,
                                  checkpoint=None)
     experiments = tmp_path_factory.mktemp("experiments")
@@ -305,59 +305,81 @@ def test_training_crops_and_validation_items(cache_env) -> None:
 def test_loss_terms_and_the_floor(config) -> None:
     from soundspy.training.extraction_data import (
         extraction_loss,
-        is_silent,
+        frame_leakage,
         si_snr_db,
         snr_db,
     )
 
+    rate = 16_000  # 50 ms frames = 800 samples: 10 frames per 8,000 samples
     cfg = dataclasses.replace(config.extraction.neural_tse.training.loss, snr_weight=0.9,
-                              si_snr_weight=0.1, empty_weight=0.5, empty_floor_db=-40.0)
+                              si_snr_weight=0.1, leak_weight=0.5, leak_frame_ms=50.0,
+                              leak_floor_db=-40.0, leak_silence_dbfs=-70.0)
     torch.manual_seed(0)
     target = torch.randn(1, 8000) * 0.1
     noise = torch.randn(1, 8000) * 0.1
     mixture = target + noise
 
-    # 1. the two ratios: known values
+    # 1. the two ratios: known values; a target sounding everywhere has no silent frame
     estimate = target + 0.1 * noise  # error 20 dB below the target
     assert float(snr_db(estimate, target)) == pytest.approx(20.0, abs=0.2)
     assert float(si_snr_db(estimate, target)) == pytest.approx(20.0, abs=0.2)
     assert float(snr_db(0.5 * target, target)) == pytest.approx(6.02, abs=0.01)  # level matters
     assert float(si_snr_db(0.5 * target, target)) > 60.0  # ... and here it does not
-    loss, parts = extraction_loss(estimate, target, mixture, cfg)
+    loss, parts = extraction_loss(estimate, target, mixture, cfg, rate)
     expected = -(0.9 * snr_db(estimate, target) + 0.1 * si_snr_db(estimate, target))
     assert float(loss) == pytest.approx(float(expected), abs=1e-4)
-    assert parts["silent"] == 0.0 and parts["quality"] == pytest.approx(float(expected), abs=1e-4)
-    better, _ = extraction_loss(target + 0.01 * noise, target, mixture, cfg)
+    assert parts["silent"] == 0.0 and parts["empty"] == 0.0
+    better, _ = extraction_loss(target + 0.01 * noise, target, mixture, cfg, rate)
     assert float(better) < float(loss)  # a better estimate has a lower loss
 
-    # 2. a silent target: the output's energy relative to the mixture, in dB, floored
+    # 2. a silent target (absent class): zero for a silent output, large for the copied
+    # mixture, the floor respected
     silent = torch.zeros(1, 8000)
-    assert bool(is_silent(silent)) and not bool(is_silent(target))
-    for gain, expected_db in ((1.0, 0.0), (0.1, -20.0), (0.01, -40.0), (1e-4, -40.0)):
-        loss, parts = extraction_loss(gain * mixture, silent, mixture, cfg)
-        assert parts["leak_db"] == pytest.approx(expected_db, abs=0.01)
-        assert float(loss) == pytest.approx(0.5 * expected_db, abs=0.01)  # empty_weight
-        assert parts["silent"] == 1.0
-    loss, _ = extraction_loss(torch.zeros(1, 8000), silent, mixture, cfg)
-    assert torch.isfinite(loss) and float(loss) == pytest.approx(-20.0, abs=0.01)  # the floor
+    for gain, level_db in ((1.0, 0.0), (0.1, -20.0), (0.01, -40.0), (1e-4, -40.0)):
+        loss, parts = extraction_loss(gain * mixture, silent, mixture, cfg, rate)
+        assert parts["leak_db"] == pytest.approx(level_db, abs=0.01)
+        assert float(loss) == pytest.approx(0.5 * (level_db + 40.0), abs=0.01)  # leak_weight
+        assert parts["silent"] == 1.0 and parts["empty"] == 1.0
+    loss, _ = extraction_loss(torch.zeros(1, 8000), silent, mixture, cfg, rate)
+    assert torch.isfinite(loss) and float(loss) == pytest.approx(0.0, abs=1e-6)
 
-    # 3. a batch with both kinds: the weighted mean over the examples
+    # 3. frames where the target sounds do not count as leakage, whatever the output is there
+    half = target.clone()
+    half[:, 4000:] = 0.0  # the target stops after 250 ms: frames 5-9 are silent
+    mix = half + noise
+    leak, quiet = frame_leakage(mix, half, mix, 800, -70.0, -40.0)
+    assert quiet.tolist() == [[False] * 5 + [True] * 5]
+    a = half.clone()
+    a[:, 4000:] = mix[:, 4000:]  # copies the mixture where the target is silent
+    b = a.clone()
+    b[:, :4000] = 0.3 * torch.randn(1, 4000)  # ... and something else where it sounds
+    _, pa = extraction_loss(a, half, mix, cfg, rate)
+    _, pb = extraction_loss(b, half, mix, cfg, rate)
+    assert pa["leak_db"] == pytest.approx(0.0, abs=0.01) == pb["leak_db"]
+    clean = half.clone()
+    la, _ = extraction_loss(a, half, mix, cfg, rate)
+    lc, _ = extraction_loss(clean, half, mix, cfg, rate)
+    quality = -(0.9 * snr_db(a, half) + 0.1 * si_snr_db(a, half))
+    assert float(la) == pytest.approx(float(quality) + 0.5 * 40.0 * 5 / 10, abs=1e-3)
+    assert float(lc) < float(la)
+
+    # 4. a batch: quality summed over the examples with a target, leakage over all frames
     est = torch.cat([estimate, 0.1 * mixture])
     tgt = torch.cat([target, silent])
-    mix = torch.cat([mixture, mixture])
-    loss, parts = extraction_loss(est, tgt, mix, cfg)
-    assert float(loss) == pytest.approx((float(expected) + 0.5 * -20.0) / 2, abs=1e-3)
-    assert parts["silent"] == 0.5
+    both = torch.cat([mixture, mixture])
+    loss, parts = extraction_loss(est, tgt, both, cfg, rate)
+    assert float(loss) == pytest.approx(float(expected) / 2 + 0.5 * 20.0 * 10 / 20, abs=1e-3)
+    assert parts["empty"] == 0.5 and parts["silent"] == 0.5
 
-    # 4. gradients: none below the floor, some above it, and never NaN
-    quiet = (1e-4 * mixture).requires_grad_()
-    extraction_loss(quiet, silent, mixture, cfg)[0].backward()
-    assert not quiet.grad.any()
+    # 5. gradients: none below the floor, some above it, and never NaN
+    quiet_out = (1e-4 * mixture).requires_grad_()
+    extraction_loss(quiet_out, silent, mixture, cfg, rate)[0].backward()
+    assert not quiet_out.grad.any()
     loud = (0.1 * mixture).requires_grad_()
-    extraction_loss(loud, silent, mixture, cfg)[0].backward()
+    extraction_loss(loud, silent, mixture, cfg, rate)[0].backward()
     assert loud.grad.abs().sum() > 0
     zero = torch.zeros(2, 8000, requires_grad=True)
-    extraction_loss(zero, tgt, mix, cfg)[0].backward()
+    extraction_loss(zero, tgt, both, cfg, rate)[0].backward()
     assert torch.isfinite(zero.grad).all()
 
 
@@ -436,3 +458,59 @@ def test_training_runs_resumes_and_writes_the_experiment(cache_env, monkeypatch,
     assert (config.paths["experiments"] / "tse_cli" / "checkpoints" / "best.pt").is_file()
     assert main(["train", "extraction", "--name", "tse_cli", "--smoke", "--device", "cpu"]) == 1
     assert "--resume" in capsys.readouterr().out
+
+
+def test_training_with_dynamic_mixing_from_a_checkpoint(cache_env) -> None:
+    """Step 07b: new mixtures every epoch, starting from an earlier model, validated before the
+    first epoch, the leak rule for "best", and the time budget."""
+    from soundspy.training.experiment import read_log
+    from soundspy.training.train_extraction import ExtractionTrainOptions, train_extraction
+
+    base = cache_env
+    C.build_extraction_cache(base, "val", workers=1, progress=lambda m: None)
+    neural = base.extraction.neural_tse
+    tr = dataclasses.replace(neural.training, dynamic=True, epoch_recipes=6, epochs=1,
+                             val_examples=4, val_empty_examples=2, init_checkpoint=None)
+    config = dataclasses.replace(base, extraction=dataclasses.replace(
+        base.extraction, neural_tse=dataclasses.replace(neural, training=tr)))
+    logs: list[str] = []
+    first = train_extraction(config, ExtractionTrainOptions(
+        name="tse_dyn_a", device="cpu", allow_cpu=True, workers=0, pretrained=False),
+        log=logs.append)
+    assert first.epochs_run == 1
+    assert any("dynamic mixing" in m and "6 crops" in m for m in logs)
+    saved = json.loads((first.paths.config).read_text("utf-8"))
+    assert saved["dynamic_mixtures"]["empty_target_prob"] == base.data.dynamic.empty_target_prob
+    assert saved["train_source"]["sample_rate"] == SR
+
+    tr = dataclasses.replace(tr, init_checkpoint=first.paths.best, epochs=3,
+                             require_leak_not_worse=True)
+    config = dataclasses.replace(config, extraction=dataclasses.replace(
+        config.extraction, neural_tse=dataclasses.replace(neural, training=tr)))
+    logs.clear()
+    second = train_extraction(config, ExtractionTrainOptions(
+        name="tse_dyn_b", device="cpu", allow_cpu=True, workers=0, time_budget_h=1e-6),
+        log=logs.append)
+    assert any("starting from tse_dyn_a" in m for m in logs)
+    assert any(m.startswith("start: val SI-SDRi") for m in logs)
+    rows = read_log(second.paths.log)
+    assert [r["epoch"] for r in rows] == ["0", "1"]  # the start, then one epoch: out of time
+    assert rows[0]["train_loss"] == "" and rows[1]["val_leak_frames_db"] != ""
+    assert any("time budget" in m for m in logs)
+    metrics = json.loads(second.paths.metrics.read_text("utf-8"))
+    assert metrics["out_of_time"] is True and "start_leak_db" in metrics
+    # (the five tiny validation recipes may have no target-absent one: then no leak reference)
+    empty_val = any(r.empty_target for r in recipes_of(config, "val"))
+    assert (metrics["start_leak_db"] is not None) == empty_val
+
+
+def test_the_leak_rule_for_best() -> None:
+    from soundspy.training.train_extraction import keep_as_best
+
+    nan, inf = float("nan"), float("inf")
+    assert keep_as_best(3.0, -20.0, 2.0, -13.85) == (True, False)
+    assert keep_as_best(3.0, -13.0, 2.0, -13.85) == (False, True)  # better, but leaks more
+    assert keep_as_best(1.0, -13.0, 2.0, -13.85) == (False, True)
+    assert keep_as_best(1.0, -20.0, 2.0, -13.85) == (False, False)
+    assert keep_as_best(3.0, nan, 2.0, -13.85) == (True, False)  # no target-absent example
+    assert keep_as_best(3.0, -5.0, 2.0, inf) == (True, False)  # the rule is off

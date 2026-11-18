@@ -9,6 +9,7 @@
 | PUT  | /api/session/monitor | status; gain_db in [-40, +12]; 409 no output device |
 | PUT  | /api/session/bypass | status; ``{"enabled": bool}``: hear the unprocessed signal (A/B) |
 | PUT  | /api/session/method | status; ``{"method"}``: neural_tse or mask_baseline; 409 running |
+| PUT  | /api/session/gate | status; ``{"enabled": bool}``: the neural output gate; 409 running |
 | POST | /api/session/record/start | status; 409 no session / already recording |
 | POST | /api/session/record/stop | the new Recording; 409 not recording |
 """
@@ -21,6 +22,7 @@ from soundspy.api.deps import DbDep
 from soundspy.api.schemas import (
     BypassRequest,
     EngineStatusModel,
+    GateRequest,
     MethodRequest,
     MonitorRequest,
     RecordingModel,
@@ -119,6 +121,16 @@ def set_method(body: MethodRequest, request: Request) -> EngineStatusModel:
     sessions = _sessions(request)
     try:
         sessions.set_method(body.method)
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _status(sessions)
+
+
+@router.put("/gate", response_model=EngineStatusModel, responses=ERRORS)
+def set_gate(body: GateRequest, request: Request) -> EngineStatusModel:
+    sessions = _sessions(request)
+    try:
+        sessions.set_gate(body.enabled)
     except ConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _status(sessions)

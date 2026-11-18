@@ -156,6 +156,12 @@ export function SessionBar() {
               label="Extraction"
               value={`${methodName(status.extraction.method)}${
                 status.extraction.device ? ` · ${status.extraction.device}` : ''
+              }${
+                status.extraction.method === 'neural_tse' && status.extraction.gate != null
+                  ? status.extraction.gate
+                    ? ' · gate'
+                    : ' · no gate'
+                  : ''
               } · +${status.extraction.latency_ms} ms${
                 status.extraction.method === 'mask_baseline' && !status.extraction.gating
                   ? ' · no gating'

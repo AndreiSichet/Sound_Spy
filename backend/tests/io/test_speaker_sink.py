@@ -67,6 +67,92 @@ def test_drop_oldest_when_the_queue_is_full(config, manual_output) -> None:
     sink.close()
 
 
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _clocked_sink(config, **overrides) -> tuple[SpeakerSink, object, _Clock]:
+    import sys
+
+    clock = _Clock()
+    output = dataclasses.replace(config.output, **overrides)
+    sink = SpeakerSink(resolve_output(), output, clock=clock)
+    sink.open(SR, 1)
+    return sink, sys.modules["sounddevice"].output_streams()[-1], clock
+
+
+def test_latency_returns_to_normal_after_a_burst(config, manual_output) -> None:
+    """A stall then a burst fills the queue; one second later it is back at its cushion."""
+    sink, stream, clock = _clocked_sink(config, prebuffer_chunks=2, max_queue_chunks=8,
+                                        drain_after_s=1.0, drain_fade_ms=5.0)
+
+    def tick(value: float) -> None:  # 20 ms of steady state: one chunk in, one chunk out
+        sink.write(_chunk(value))
+        stream.pull(CHUNK)
+        clock.now += CHUNK / SR
+
+    sink.write(_chunk(0.1))
+    sink.write(_chunk(0.1))
+    for _ in range(10):
+        tick(0.1)
+    normal = sink.latency_s
+    assert sink.queued_frames == 2 * CHUNK
+
+    for _ in range(5):  # the burst: five chunks at once
+        sink.write(_chunk(0.1))
+    stuck = sink.latency_s
+    assert stuck == pytest.approx(normal + 5 * CHUNK / SR)
+
+    for _ in range(40):  # 0.8 s later nothing has changed: the queue never empties by itself
+        tick(0.1)
+    assert sink.latency_s == pytest.approx(stuck) and sink.drained == 0
+    for _ in range(15):  # past drain_after_s
+        tick(0.1)
+    assert sink.drained == 1 and sink.drained_chunks == 6
+    assert normal - CHUNK / SR - 1e-9 <= sink.latency_s <= normal + 1e-9
+    for _ in range(100):  # and it does not drain again while things are normal
+        tick(0.1)
+    assert sink.drained == 1 and sink.underruns == 0 and sink.dropped_chunks == 0
+    sink.close()
+
+
+def test_drain_crossfades_instead_of_clicking(config, manual_output) -> None:
+    sink, stream, clock = _clocked_sink(config, prebuffer_chunks=2, max_queue_chunks=8,
+                                        drain_after_s=0.5, drain_fade_ms=5.0)
+    for _ in range(5):
+        sink.write(_chunk(0.4))  # old audio
+    sink.write(_chunk(-0.4))  # new audio, as different as possible
+    sink.write(_chunk(-0.4))
+    clock.now += 1.0
+    sink.write(_chunk(-0.4))
+    assert sink.drained == 1 and sink.queued_frames == 2 * CHUNK
+    out = stream.pull(2 * CHUNK).T[0]
+    fade = round(0.005 * SR)
+    assert out[0] == pytest.approx(0.4)  # starts where the old audio would have continued
+    assert np.abs(np.diff(out)).max() <= 0.8 / (fade - 1) + 1e-6  # no jump, a ramp
+    np.testing.assert_allclose(out[fade:], -0.4)
+    sink.close()
+
+
+def test_a_short_excursion_does_not_drain(config, manual_output) -> None:
+    sink, stream, clock = _clocked_sink(config, prebuffer_chunks=2, max_queue_chunks=8,
+                                        drain_after_s=1.0)
+    for _ in range(5):
+        sink.write(_chunk(0.1))
+    clock.now += 0.6
+    stream.pull(3 * CHUNK)  # the output caught up by itself
+    sink.write(_chunk(0.1))  # back at 3 queued: at the cushion, the timer restarts
+    clock.now += 0.6
+    for _ in range(2):
+        sink.write(_chunk(0.1))  # above again, but not for a whole second
+    assert sink.drained == 0
+    sink.close()
+
+
 def test_mono_is_upmixed_and_gain_applied(config, manual_output) -> None:
     sink, stream = _sink(config, prebuffer_chunks=1)
     assert stream.channels == 2

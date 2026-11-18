@@ -420,6 +420,7 @@ class Session:
             output_underruns=int(getattr(output, "underruns", 0)),
             dropped_chunks=source.stats.dropped_chunks,
             output_dropped=int(getattr(output, "dropped_chunks", 0)),
+            output_drained=int(getattr(output, "drained", 0)),
             detector=self._detector_info(),
             bypass=self.bypass if pending_bypass is None else pending_bypass,
             extraction=self._extraction_info(),

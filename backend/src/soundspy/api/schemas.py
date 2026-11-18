@@ -3,7 +3,8 @@
 WebSocket message envelope (both directions)::
 
     {"type": "status" | "levels" | "waveform" | "spectrogram" | "detections" | "sources"
-             | "run" | "warning" | "error" | "set_target" | "set_bypass" | "set_method",
+             | "run" | "warning" | "error" | "set_target" | "set_bypass" | "set_method"
+             | "set_gate",
      "t": float,          # seconds since session start (0.0 when idle)
      "payload": {...}}
 
@@ -41,9 +42,11 @@ MessageType = Literal[
     "set_target",
     "set_bypass",
     "set_method",
+    "set_gate",
 ]
 MESSAGE_TYPES: tuple[str, ...] = MessageType.__args__  # type: ignore[attr-defined]
-CLIENT_MESSAGE_TYPES: tuple[str, ...] = ("set_target", "set_bypass", "set_method")
+CLIENT_MESSAGE_TYPES: tuple[str, ...] = ("set_target", "set_bypass", "set_method",
+                                         "set_gate")
 # High-rate visual messages a slow client may lose (oldest first); everything else is kept.
 DROPPABLE_TYPES: frozenset[str] = frozenset({"levels", "waveform", "spectrogram"})
 
@@ -157,6 +160,8 @@ class ExtractionStatusModel(BaseModel):
     model_ms: float | None = None  # mean time of one model call (one per chunk)
     model_ms_p95: float | None = None
     compiled: bool | None = None  # the streaming step runs as a traced (TorchScript) module
+    gate: bool | None = None  # the neural extractor's output gate is on (step 07b)
+    gate_closed: float | None = None  # share of model steps with the gate mostly closed
 
 
 class WarningModel(_FromCore):
@@ -188,10 +193,12 @@ class EngineStatusModel(_FromCore):
     output_underruns: int = 0
     dropped_chunks: int = 0
     output_dropped: int = 0
+    output_drained: int = 0
     detector: DetectorStatusModel | None = None
     bypass: bool = False
     extraction: ExtractionStatusModel | None = None
     extraction_method: str | None = None  # the method chosen for sessions
+    extraction_gate: bool | None = None  # the neural output gate chosen for sessions
 
 
 class ErrorPayload(BaseModel):
@@ -256,6 +263,7 @@ class SessionStartRequest(BaseModel):
     source: SourceRequest = Field(default_factory=SourceRequest)
     monitor: bool = False
     method: SessionMethod | None = None  # None = the chosen one (PUT /api/session/method)
+    gate: bool | None = None  # None = the chosen one (PUT /api/session/gate)
 
 
 class MethodRequest(BaseModel):
@@ -273,6 +281,10 @@ class RecordStartRequest(BaseModel):
     notes: str = Field(default="", max_length=2000)
 
 
+class GateRequest(BaseModel):
+    enabled: bool
+
+
 class BypassRequest(BaseModel):
     enabled: bool
 
@@ -284,6 +296,7 @@ class ProcessRequest(BaseModel):
     # None = extraction.default_attenuation_db
     attenuation_db: float | None = Field(default=None, ge=0.0, le=60.0)
     method: RunMethod | None = None  # None = the default method that can run
+    gate: bool | None = None  # neural only; None = extraction.neural_tse.gate.enabled
 
 
 # --- REST --------------------------------------------------------------------------------------
@@ -323,6 +336,7 @@ class ConfigResponse(BaseModel):
     device_profile: str
     extraction_methods: list[MethodInfo] = Field(default_factory=list)
     default_method: str = "mask_baseline"  # what a session uses when nothing was chosen
+    default_gate: bool = True  # whether the neural output gate is on when nothing was chosen
     default_attenuation_db: float = 15.0
 
 

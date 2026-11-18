@@ -5,8 +5,10 @@
   ``status`` every ``engine.status_interval_s`` plus ``levels`` / ``waveform`` / ``spectrogram``
   at their analysis rates, and ``warning`` when something needs attention.
 - Client -> server: ``set_target`` (validated against the class list, then stored and forwarded
-  to the session), ``set_bypass`` (``{"enabled": bool}``; A/B listening) and ``set_method``
-  (the extraction method of the next session; refused with ``error`` while one runs). They are
+  to the session), ``set_bypass`` (``{"enabled": bool}``; A/B listening), ``set_method``
+  (the extraction method of the next session) and ``set_gate`` (``{"enabled": bool}``: the
+  neural output gate of the next session); the last two are refused with ``error`` while a
+  session runs. They are
   answered with the new ``status``; malformed or unknown messages with ``error``.
 - ``run`` messages (an offline processing run changed state) come from the ``RunManager``.
 
@@ -35,6 +37,7 @@ from soundspy.api.schemas import (
     CLIENT_MESSAGE_TYPES,
     DROPPABLE_TYPES,
     BypassRequest,
+    GateRequest,
     MethodRequest,
     TargetSpecModel,
     WsMessage,
@@ -146,6 +149,12 @@ def handle_client_message(raw: str, sessions: SessionManager) -> WsMessage:
                 sessions.set_method(MethodRequest.model_validate(message.payload).method)
             except RuntimeError as exc:  # ConflictError: a session is running
                 return error_message(f"set_method: {exc}")
+            return status_message(sessions.status())
+        if msg_type == "set_gate":
+            try:
+                sessions.set_gate(GateRequest.model_validate(message.payload).enabled)
+            except RuntimeError as exc:
+                return error_message(f"set_gate: {exc}")
             return status_message(sessions.status())
         target = TargetSpecModel.model_validate(message.payload).to_core(
             sessions.config.extraction.default_attenuation_db)

@@ -1,0 +1,27 @@
+=== probe leak_weight 1.0, floor -30.0 dB: tse_v2_probe_leak1_floor30
+Waveformer: 3,860,736 parameters, starting from tse_waveformer_v1 (epoch 16)
+batch size 4 x 4 accumulated = 16 per update; 3000 crops of 3.0 s per epoch from dynamic mixing (45022 foreground and 21780 background clips, 2000 rooms), 500 validation examples + 70 target-absent
+start: val SI-SDRi +3.72 dB  SNRi +5.82 dB  leak -14.1 dB  leak in silent frames -33.6 dB
+waiting for the first training batch from 4 worker(s) (timeout 120 s) ...
+first training batch after 5.7 s
+epoch 1/4: loss -1.738  val SI-SDRi +2.75 dB  SNRi +5.40 dB  leak -19.3 dB  silent frames -39.6 dB  *best*  (251 s, train 218 s, 2300 MiB)
+at this pace the 4 epochs of this run take about 0.3 h in total
+epoch 2/4: loss -2.321  val SI-SDRi +2.81 dB  SNRi +5.37 dB  leak -18.6 dB  silent frames -38.8 dB  *best*  (243 s, train 210 s, 2300 MiB)
+epoch 3/4: loss -2.459  val SI-SDRi +2.91 dB  SNRi +5.44 dB  leak -17.8 dB  silent frames -38.5 dB  *best*  (243 s, train 210 s, 2300 MiB)
+epoch 4/4: loss -2.816  val SI-SDRi +2.96 dB  SNRi +5.49 dB  leak -17.6 dB  silent frames -38.4 dB  *best*  (243 s, train 210 s, 2300 MiB)
+best epoch 4: val SI-SDRi +2.96 dB -> C:\Users\User\Desktop\Sound_Spy\experiments\tse_v2_probe_leak1_floor30
+=== tse_v2_probe_leak1_floor30: best epoch 4, val SI-SDRi +2.96 dB, 17.6 min
+=== probe leak_weight 0.0, floor -50.0 dB: tse_v2_probe_leak0
+Waveformer: 3,860,736 parameters, starting from tse_waveformer_v1 (epoch 16)
+batch size 4 x 4 accumulated = 16 per update; 3000 crops of 3.0 s per epoch from dynamic mixing (45022 foreground and 21780 background clips, 2000 rooms), 500 validation examples + 70 target-absent
+start: val SI-SDRi +3.72 dB  SNRi +5.82 dB  leak -14.1 dB  leak in silent frames -33.6 dB
+waiting for the first training batch from 4 worker(s) (timeout 120 s) ...
+first training batch after 6.8 s
+epoch 1/4: loss -4.939  val SI-SDRi +3.66 dB  SNRi +5.45 dB  leak -10.8 dB  silent frames -28.3 dB  (not kept: leak above -13.8 dB)  (250 s, train 216 s, 2300 MiB)
+at this pace the 4 epochs of this run take about 0.3 h in total
+epoch 2/4: loss -5.118  val SI-SDRi +3.73 dB  SNRi +5.48 dB  leak -10.6 dB  silent frames -27.9 dB  (not kept: leak above -13.8 dB)  (243 s, train 210 s, 2300 MiB)
+epoch 3/4: loss -5.301  val SI-SDRi +3.72 dB  SNRi +5.44 dB  leak -10.3 dB  silent frames -28.0 dB  (not kept: leak above -13.8 dB)  (243 s, train 210 s, 2300 MiB)
+epoch 4/4: loss -5.464  val SI-SDRi +3.74 dB  SNRi +5.48 dB  leak -10.5 dB  silent frames -28.4 dB  (not kept: leak above -13.8 dB)  (243 s, train 210 s, 2300 MiB)
+best epoch 0: val SI-SDRi -inf dB -> C:\Users\User\Desktop\Sound_Spy\experiments\tse_v2_probe_leak0
+=== tse_v2_probe_leak0: best epoch 0, val SI-SDRi -inf dB, 17.3 min
+=== exit 0

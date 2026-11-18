@@ -35,6 +35,10 @@ output:
   limiter_ceiling_dbfs: -1.0    # safety limiter on everything sent to the speakers
   limiter_release_ms: 50        # how fast the limiter lets go after a peak
   default_gain_db: 0.0
+  drain_after_s: 1.0            # queue above prebuffer_chunks + 1 for this long (after a stall the
+                                # chunks arrive in a burst and nothing empties the queue again):
+                                # drop the oldest chunks down to the prebuffer level
+  drain_fade_ms: 5              # crossfade over the dropped stretch (no click)
 
 analysis:
   levels_hz: 20                 # LevelFrame rate

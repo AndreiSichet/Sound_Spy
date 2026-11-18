@@ -138,7 +138,7 @@ behind the scenes (back). Keeping both in one repository is called a
 | Choosing a microphone, recording it, checking its levels | **done**, step 02 (Chapter 9) |
 | Live session: listening in headphones, live pictures, recording from the page | **done**, step 03 (Chapter 10) |
 | Recognising sound types | **done**, step 05 (Chapter 12) |
-| Keeping the chosen sounds, removing the rest | **done**: baseline, step 06 (Chapter 13) and neural extractor, step 07 (Chapter 14) |
+| Keeping the chosen sounds, removing the rest | **done**: baseline, step 06 (Chapter 13) and neural extractor, steps 07–07b (Chapter 14) |
 | Direction and source tracking (tabs 2–3) | planned, modules 3–5 |
 
 So today you can start both programs and open the website. You see the three
@@ -175,6 +175,15 @@ and a perfect gate would still do better (Chapter 14.9). A **Method** selector s
 the two, the default attenuation is now 15 dB, and an output level meter sits next to the input
 meters.
 
+*Since step 07b:* the delay no longer stays stuck at 225 ms after a glitch, and a **Gate** switch
+sits next to the Method selector (an extra turn-down when the network itself outputs little). A
+second network, **v2b**, was trained to stay quieter when the selected sound is absent, with
+100 hours of extra speech and new random mixtures every round, and it is the one configured. It
+did what it was trained for on the test mixtures (3–5 dB less leakage when the selected sound
+is absent; better on clean read speech), but it **costs overall quality** (+2.5 dB with the gate
+against v1's +3.3 dB), and on the owner's own music recording it is no quieter than v1. Most of
+the step's targets were missed; Chapter 14.11 has the numbers and the choice left to the owner.
+
 ### The story so far, step by step
 
 Each step was specified by the project owner, built, tested on the laptop and written up here.
@@ -188,6 +197,7 @@ Each step was specified by the project owner, built, tested on the laptop and wr
 | 05 | 15 Nov | **Recognising.** A small pretrained network (EfficientAT) fine-tuned on the mixtures for 3.7 hours on the laptop's graphics card. It recognises the seven types far better than before fine-tuning (test score 0.56 vs 0.41) and runs four times a second live, plus `soundspy detect` for recordings. The owner's room test: every type lit up correctly, with two understandable confusions (classical music → alarm, singing → speech). | Chapter 12 |
 | 06 | 15 Nov | **Keeping what you choose.** The detector now drives a *gate* and a noise reducer: selected sounds are kept, the rest is turned down. Bypass for A/B listening, input/output spectrograms, offline Process with an A/B player, a measuring framework that compares five versions of the method, and a database that can always be rebuilt from the files. The owner's listening test went smoothly. | Chapters 2 and 13 |
 | 07 | 16 Nov | **Pulling sounds apart.** A published network for real-time sound extraction (Waveformer, MIT licence) was adapted, checked against its original code, and fine-tuned for the seven sound types: 25 GB of training mixtures rendered once to drive D:, half of them in simulated rooms, and 7.9 hours of training in two runs (the first one taught a lesson about the loss). It runs live at 44.1 kHz inside the 48 kHz session through a streaming resampler, adds 10.6 ms of delay, and is mixed back with a little of the original. Method selector, output level meter, 15 dB default. Test score +3.3 dB (baseline: −4.9 live, +2.2 offline) | Chapter 14 |
+| 07b | 17–18 Nov | **Quieter when it should be (partly).** The 225 ms delay after a glitch fixed. A loss that punishes leakage in every 50 ms the selected sound is silent, an output gate with an on/off switch, 100 h of LibriSpeech, new random mixtures every round in 2,000 pre-computed rooms. Two training runs (3.3 h and 6.2 h) and four short probes: the first run's penalty pushed silence to −50 dB and lost 1.4 dB of quality; the second (−30 dB) won half of it back. Result: 3–5 dB less leakage on test mixtures, 0.8 dB less quality, no gain on the owner's recording; most targets missed, reported honestly. | Chapter 14.11 |
 
 Along the way, problems were found and fixed, from a training run that silently ran out of memory
 to Python's memory clean-up causing clicks; each one is written up in Chapter 23, and every
@@ -219,8 +229,9 @@ do when something looks wrong. The chapters after it explain *how* each part wor
 - **The trained detection model** (`experiments/det_mn10_v1/checkpoints/best.pt`, made in step
   05). Without it the app still runs, but the buttons do not show which sounds are present, and
   the Baseline method only reduces steady background noise.
-- **The trained extraction model** (`experiments/tse_waveformer_v1/checkpoints/best.pt`, made
-  in step 07) for the **Neural** method. Without it the app uses the Baseline method and says so.
+- **The trained extraction model** (`experiments/tse_waveformer_v2b/checkpoints/best.pt`, made
+  in step 07b; the step-07 one is `experiments/tse_waveformer_v1/`) for the **Neural** method.
+  Without it the app uses the Baseline method and says so.
 - **A web browser** (Chrome, Edge or Firefox).
 
 ### 2.2 Starting and stopping
@@ -280,10 +291,11 @@ microphone array"*: they need hardware that has not arrived yet.
 |---|---|
 | **Start / Stop** | Switches Sound Spy on: it starts listening, recognising and processing. Starting takes about 3–5 seconds, mostly loading the two models onto the graphics card. |
 | **Source** | *Microphone*, or *File: …*, any saved recording played in a loop at normal speed. A file gives the same sound every time, which makes it ideal for comparing settings. Can only be changed while stopped. |
-| **Session figures** (only while running) | **Input** and **Format**: which microphone, its sample rate and channel count (*48000 Hz · 2 ch* on the laptop). **Latency**: how long until a sound reaches your ears, about 95–115 ms with Neural (105–125 ms with Baseline). **RTF p95**: how hard the computer works for the sound (about 0.63 with Neural on the graphics card, 0.17 with Baseline; above 0.8 it turns red and a warning appears). **Overflow / underrun / dropped**: three counters of tiny audio glitches, which should stay at 0. **Detector**: the model and where it runs (`det_mn10_v1 · cuda` = the graphics card). **Inference**: how long one recognition takes (about 28 ms). **Skipped windows**: recognitions skipped because the previous one was not finished (should be 0). **Extraction**: the sound-keeping method, where its model runs and the delay it adds (`Neural · cuda · +10.6 ms`, or `Baseline · +21.33 ms`); for Baseline it says *no gating* in amber when there is no detection model; *bypassed* while Bypass is on. **Model time** (Neural only): how long the network needs for one call, about 7.5 ms on the graphics card; it has to stay well under 20 ms. |
+| **Session figures** (only while running) | **Input** and **Format**: which microphone, its sample rate and channel count (*48000 Hz · 2 ch* on the laptop). **Latency**: how long until a sound reaches your ears, about 95–115 ms with Neural (105–125 ms with Baseline). **RTF p95**: how hard the computer works for the sound (about 0.63 with Neural on the graphics card, 0.17 with Baseline; above 0.8 it turns red and a warning appears). **Overflow / underrun / dropped**: three counters of tiny audio glitches, which should stay at 0. **Detector**: the model and where it runs (`det_mn10_v1 · cuda` = the graphics card). **Inference**: how long one recognition takes (about 28 ms). **Skipped windows**: recognitions skipped because the previous one was not finished (should be 0). **Extraction**: the sound-keeping method, where its model runs and the delay it adds (`Neural · cuda · +10.6 ms · gate`, or `Baseline · +21.33 ms`); for Baseline it says *no gating* in amber when there is no detection model; *bypassed* while Bypass is on. **Model time** (Neural only): how long the network needs for one call, about 7.5 ms on the graphics card; it has to stay well under 20 ms. |
 | **Listen** | Sends the processed sound to your headphones. The first time, it asks you to confirm you are wearing headphones (the browser remembers your answer). It is greyed out, with a note, if the session could not open an output device. |
 | **Volume, Mute** | Loudness in your headphones, −40 to +12 dB. A safety limiter always stops the sound before it gets dangerously loud. |
 | **Method** | How the selected sounds are kept. **Neural** (the default once it is trained): a network that pulls the selected sounds out of the mix, also while other sounds overlap them (Chapter 14). **Baseline**: the detector-driven gate of step 06 (Chapter 13). Can only be changed while stopped. A method that cannot run is greyed out; hover it to read why. |
+| **Gate on / off** *(step 07b)* | Neural only: a soft gate after the network that turns its output further down while the network itself says the selected sound is not there (Chapter 14.11). **On** by default. Switch it off to hear what the network alone does, or when the sound you want is far quieter than everything else. Can only be changed while stopped; the session figures show `· gate` or `· no gate` after the method. |
 | **Attenuation** | How far everything you did **not** select is turned down: 0 dB = not at all, 15 dB (default) = to about 18 % of its strength, 30 dB = to about 3 %, 40 dB = the most. It only matters while something is selected. |
 | **Bypass (A/B)** | Lets you hear the unprocessed sound instead, to compare (section 2.6). |
 | **Record** | Saves what the microphone hears, with an optional label and notes. The button shows the running time while recording; press it again to stop. The recording is always the **raw, unprocessed** sound, so it can be processed again later with better methods. |
@@ -433,20 +445,24 @@ volume fader: up while speech is present, down otherwise. Two consequences:
    has learnt what each type sounds like: that is the Neural method.
 
 **With Method = Neural.** These are expectations from the measurements on test mixtures
-(Chapter 14.9), not yet from long listening in a real room, so treat them as things to check:
+(Chapters 14.9 and 14.11, with the configured network v2b and the Gate on), not yet from long
+listening in a real room, so treat them as things to check:
 
-| Situation (headphones, Listen on, Method = Neural, 15 dB) | What to expect |
+| Situation (headphones, Listen on, Method = Neural, Gate on, 15 dB) | What to expect |
 |---|---|
-| Speech selected, nobody talks | the room, somewhat quieter. Measured: about 8 dB, less than the slider's 15, because the network does not go fully quiet when the selected sound is absent |
+| Speech selected, nobody talks | the room, somewhat quieter. Measured: about 10.6 dB, less than the slider's 15, because the network does not go fully quiet when the selected sound is absent (v1, the step-07 network: about 9 dB) |
 | Speech selected, you talk | your voice **from the first syllable** (no detector to wait for), and the room goes quiet again as soon as you stop |
+| Speech selected, music plays, you are silent | the music turned down, but clearly still there: about 12 dB at 15 dB, 21 dB at 30 dB, 24 dB at 40 dB on test mixtures; about 20 dB at 40 dB on the owner's classical recording. Only Baseline goes (almost) silent here, because its detector says "no speech" |
 | Speech selected, music plays, you talk | your voice in front, the music behind it. This is the case the Baseline cannot handle at all |
 | Speech selected, music with singing | the singing counts as speech here too |
+| Music selected, someone talks over it | weak with v2b (+0.05 dB on the test pairs; v1: +2.1 dB): the music and the voice both come through |
 | Dishes selected, a single clink | the clink itself, at the moment it happens (short sounds are no longer missed because of a slow detector) |
-| Footsteps, dishes, alarm or speech selected | the classes with the largest measured gain (3.6–4.4 dB on the test mixtures) |
-| Music or traffic selected | a smaller gain (about 2.5 dB), but still where the Baseline achieves nothing |
+| Footsteps, alarm, dishes or speech selected | the classes with the largest measured gain (2.7–3.8 dB on the test mixtures) |
+| Music or traffic selected | a small gain (0.7–1.3 dB; v1: 2.1–2.2 dB), but still where the Baseline achieves nothing |
 | Chair scraping selected | hardly any effect: the weakest class for both methods |
 | Several types selected | all of them together; the measured gain is smaller than with one type |
-| The network picks the wrong sound | you hear a piece of something you did not select at nearly full level, or the selected sound turns dull. At 15 dB this is mild; at 30 dB it is obvious. Compare with Bypass |
+| The network picks the wrong sound | you hear a piece of something you did not select at nearly full level, or the selected sound turns dull: in about one test mixture in seven. At 15 dB this is mild; at 30 dB it is obvious. Compare with Bypass |
+| Gate off | slightly better quality (+0.4 dB measured), 1.5 dB more leakage when the selected sound is absent. Turn it off when the wanted sound is much quieter than the rest |
 | A reverberant room | only slightly worse than a dry one in the measurements (0.4 dB; the training included simulated rooms) |
 
 The two methods fail differently. Baseline is **late and coarse** (it opens for everything, a
@@ -527,7 +543,7 @@ The data, training and detection-evaluation commands are described in Chapters 1
 | **Listen** greyed out, *"Listening unavailable"* | the output device changed: Stop and Start again |
 | Listen is on but you hear nothing | is **Mute** on, or the volume low? Is a type selected that is not present (silence is then correct)? Press Bypass, or deselect everything, to check |
 | Notice *"Sound detection is off for this session"*, *Extraction … no gating* in amber | the detection model file is missing: the buttons show nothing, and Baseline then only reduces steady noise (Neural still works). Check that `experiments\det_mn10_v1\checkpoints\best.pt` exists |
-| Notice *"Neural extraction is not available … Using the baseline"*, *Neural (not available)* in the Method list | the trained extraction model is missing: check that `experiments\tse_waveformer_v1\checkpoints\best.pt` exists (it is made by `soundspy train extraction`, Chapter 14.6) |
+| Notice *"Neural extraction is not available … Using the baseline"*, *Neural (not available)* in the Method list | the trained extraction model is missing: check that the file named by `checkpoint` in `backend\configs\extraction\neural_tse.yaml` exists (since step 07b `experiments\tse_waveformer_v2b\checkpoints\best.pt`; it is made by `soundspy train extraction`, Chapters 14.6 and 14.11) |
 | The Method list is greyed out | a session is running: press Stop first |
 | *RTF p95* is red, crackles, with Method = Neural | the network is not keeping up: is *Extraction* showing `cpu` instead of `cuda`, or is something else using the graphics card (a training run)? See Chapter 14.7 |
 | Clicks or crackles, the underrun counter rises | the computer is busy with something else: close heavy programs; check that RTF stays low |
@@ -1060,6 +1076,40 @@ them, when one large batch does not fit the graphics card's memory.
 
 **Early stopping, patience.** Ending the training when the validation score has not improved for
 a set number of rounds (the patience), and keeping the best round.
+
+### Neural extraction v2 (added in step 07b)
+
+**Leakage.** Sound that should have been removed but comes through: the network keeps part of
+a sound you did not select, most audibly while the selected sound is silent or absent. Measured
+as the output's level relative to the input, in dB (−25 dB = the output is 25 dB quieter).
+
+**Output gate.** A soft volume switch after the network that turns the output further down
+while the network's own output is much quieter than its input, i.e. while the network itself
+"believes" the selected sound is not there (Chapter 14.11).
+
+**Attack, release, hold.** How fast a gate opens (attack), how long it waits before closing
+(hold) and how fast it closes (release).
+
+**Dynamic mixing.** Making a new random training mixture for every example, instead of
+reusing a fixed set; the network can then no longer learn the examples by heart.
+
+**Overfitting.** Learning the training examples themselves instead of the skill: the training
+score keeps improving while the validation score stops or gets worse.
+
+**Hard negative.** A training example built to be difficult on purpose: the selected sound is
+absent, and a sound the network tends to confuse with it is present.
+
+**Partial target.** A training example in which the selected sound starts (or stops) in the
+middle, so the network has to switch on or off within the example.
+
+**Low-pass filter.** A filter that removes everything above a frequency. Used here to make
+recordings of every class sometimes sound "band-limited", like LibriSpeech's 16 kHz speech.
+
+**LibriSpeech.** A large public collection of read English audiobook speech (1,000 hours, of
+which Sound Spy uses 100), with a free licence (Chapter 11.3).
+
+**Probe.** A short training run that answers one question (here: which weight for the leakage
+penalty) before the long run is started.
 
 ### Testing and tooling
 
@@ -2000,6 +2050,15 @@ run at *exactly* the same speed. Between them sits a small queue (`SpeakerSink`)
   counted. Playback then waits for the cushion again rather than clicking repeatedly.
 - **Overflow.** If more than 8 chunks pile up (the input clock running fast), the **oldest** is
   thrown away and counted. That keeps the delay from creeping up over a long session.
+- **Draining** (*added in step 07b*). After a hiccup (the computer briefly busy with something
+  else), the chunks that waited arrive all at once and fill the queue. From then on input and
+  output run at the same speed again, so before step 07b nothing ever emptied it: the delay
+  stayed at about 225 ms until the session was restarted. Now, when the queue has stayed above
+  its cushion plus one chunk for a whole second, the oldest chunks are dropped until only the
+  cushion is left, and the jump is hidden by a 5 ms crossfade (no click). The session status
+  counts it (`output_drained`). Settings: `output.drain_after_s` and `drain_fade_ms` in
+  `default.yaml`. Checked live with a forced 0.3 s stall: 104 → 224 → 104 ms within a second
+  (Chapter 23.44).
 - **Mono to stereo.** The single mixed channel is copied to both ears.
 - **Volume and mute.** −40 to +12 dB. Mute plays silence but keeps everything running.
 - **Safety limiter — always on.** The laptop's microphone can deliver sound *above* full scale
@@ -2200,6 +2259,7 @@ Moving the whole data folder to another drive therefore only needs a config chan
 | **AudioSet ontology** | the tree of 632 sound categories (`ontology.json`) | 0.3 MB | CC BY-SA 4.0 |
 | **ESC-50** | 2,000 clips of 5 s, 44.1 kHz, 50 classes (dog, rain, footsteps…), 5 official folds | 0.6 GB | **CC BY-NC 3.0** |
 | **FSD50K** | 51,197 clips (0.3–30 s), 44.1 kHz mono, 200 AudioSet classes, Freesound | 25 GB download, ~34 GB unpacked | per clip: CC0, CC-BY, **CC-BY-NC**, Sampling+ |
+| **LibriSpeech** (*added in step 07b*) | read English speech from public-domain audiobooks (LibriVox), 16 kHz FLAC; Sound Spy uses `train-clean-100` (28,539 utterances, 100.6 h, 251 speakers), `dev-clean` and `test-clean` (2,703 and 2,620 utterances, 40 speakers each) | 7.1 GB download, about the same unpacked | **CC BY 4.0** (Panayotov, Chen, Povey, Khudanpur, ICASSP 2015; https://www.openslr.org/12) |
 
 "NC" means *non-commercial*. That is fine for a university project, but **it must be looked at
 again before any public or commercial use** of the data or of models trained on it. FSD50K's
@@ -2211,8 +2271,14 @@ be filtered out later if needed.
 ```powershell
 soundspy data download ontology esc50     # small, a minute
 soundspy data download fsd50k             # 25 GB; asks before starting (--yes to skip)
+soundspy data download librispeech        # step 07b: 7.1 GB from openslr.org (an hour here)
 soundspy data cleanup-archives            # later, to delete the downloaded zips
 ```
+
+LibriSpeech's three `.tar.gz` archives get their MD5 checksums from the site's own
+`md5sum.txt`; they are unpacked by Python with its safe "data" filter (no files outside the
+target folder, no links), and afterwards the number of FLAC files is compared with the
+transcript lines (every utterance has one).
 
 What it does, and why:
 
@@ -2245,8 +2311,9 @@ Layout on D: afterwards:
 D:/SoundSpyData/external/
 ├── ontology/   ontology.json, SOURCE.json, .done
 ├── esc50/      ESC-50-master/ (audio/, meta/esc50.csv), archives/, SOURCE.json, .done
-└── fsd50k/     FSD50K.dev_audio/, FSD50K.eval_audio/, FSD50K.ground_truth/,
-                FSD50K.metadata/, FSD50K.doc/, archives/, SOURCE.json, .done
+├── fsd50k/     FSD50K.dev_audio/, FSD50K.eval_audio/, FSD50K.ground_truth/,
+│               FSD50K.metadata/, FSD50K.doc/, archives/, SOURCE.json, .done
+└── librispeech/ LibriSpeech/<subset>/<speaker>/<chapter>/*.flac, archives/, SOURCE.json, .done
 ```
 
 ### 11.5 From dataset labels to our seven classes
@@ -2364,7 +2431,7 @@ That is **leakage**. Every clip therefore has a `group`, and a group always stay
   side that already holds most of its dev clips (ties → train). 2,010 of the 40,966 dev clips
   change side; val keeps 2,660 clips instead of 4,170. FSD50K's README allows a different split
   as long as it is stated, which is what this paragraph does (deviation from the spec, Chapter
-  20.23). *(Step 05: then whole training uploaders move to val until every class has at least
+  23.23). *(Step 05: then whole training uploaders move to val until every class has at least
   40 val clips, Chapter 11.14.)*
 - **ESC-50:** official folds 1–3 → train, 4 → val, 5 → test (configurable). A fold holds all the
   pieces (`-A`, `-B`, …) of one original recording.
@@ -2409,6 +2476,25 @@ How recipes are drawn (all numbers in `configs/data/default.yaml`, section `mixt
 Why recipes and not audio files? 24,000 six-second mixtures would be ~25 GB at 44.1 kHz, fixed
 at one sample rate. The recipes are a few MB, can be rendered at whatever sample rate step 05
 chooses, and can be regenerated in seconds.
+
+**One sampler for everything** *(added in step 07b)*. The drawing rules above live in one class,
+`RecipeSampler` (`data/mixtures.py`). `data mix` is a seeded loop over it, so the files are
+exactly the ones written in step 04. Three other users share it:
+
+- **dynamic mixing** for training the neural extractor (Chapter 14.11): a new recipe for every
+  crop, seeded by (seed, round, index) so a round can be repeated exactly, with its own rules
+  in the section `mixtures.dynamic`: target absent 15 %, **partial targets** 25 %
+  (`partial_target_prob`: every target event starts after, or ends before, one moment, stored
+  as `switch_s`), **hard negatives** (`hard_negative_prob`, `hard_negative_pairs`: put a
+  confusable class into a target-absent mixture), `source_mix` (at most half of the speech
+  events from LibriSpeech) and a random **low-pass** (`lowpass_prob`, `lowpass_hz`: 6–16 kHz,
+  6th-order Butterworth, applied to the event before it is levelled);
+- the **benchmark sets** of the evaluation (`bench_<name>.jsonl` next to the recipe files, the
+  first line holds the settings they were drawn with): a recipe can be pinned to exactly these
+  classes present, exactly this selection, a selection that must be absent, clips at least N
+  seconds long, or a fixed target-to-rest level (`RecipeSpec`);
+- the legacy rules stay the defaults (`partial_target_prob: 0`, `hard_negative_prob: 0`, no
+  low-pass, LibriSpeech share 0), which is what keeps the frozen files identical.
 
 ### 11.10 Rendering a recipe
 
@@ -2760,7 +2846,7 @@ and counts underruns), the trained model:
 | backend CPU use | 21 % of a core | 38 % of a core |
 | session start (model load + warm-up) | ~6 s | ~2.5 s |
 
-Two problems were found and fixed during these measurements (Chapter 23.27 and 20.28): the first
+Two problems were found and fixed during these measurements (Chapter 23.27 and 23.28): the first
 3 s of every GPU session were skipped, and CPU mode kept ~7 cores busy. The numbers above are
 after the fixes.
 
@@ -3267,6 +3353,10 @@ microphone would add. The training does not use whole 6 s examples but random **
 (a whole example does not fit the 4 GB graphics card at a useful batch size); 80 % of the crops
 are placed where the target actually sounds.
 
+*(Step 07b: version 2 no longer trains on the cached recipes but on new mixtures made on the fly
+for every crop, with a precomputed bank of 2,000 simulated rooms; the validation and test caches
+are still used as described here. Chapter 14.11.)*
+
 ### 14.5 What "good" means to the network: the loss
 
 Training means: show an example, measure how wrong the output is with one number (the *loss*),
@@ -3290,7 +3380,8 @@ these examples the loss is simply **how loud the output is compared with the inp
 output 20 dB quieter than the input scores −20. Below −40 dB there is no further reward,
 otherwise the easiest way to improve the score would be to push already inaudible outputs
 towards minus infinity instead of learning anything. This term counts half as much as the
-others.
+others. *(Step 07b replaced it with a penalty per 50 ms frame in which the target is silent,
+which also covers the target's pauses: Chapter 14.11.)*
 
 **A lesson from the first run.** The published network was trained with the weights the other
 way round (0.9 × SNR + 0.1 × SI-SNR), and the first full training run of this step copied that.
@@ -3580,28 +3671,317 @@ The full tables are in `experiments\ext_neural_tse\metrics.md`, and every mixtur
 
 ### 14.10 Limitations
 
+(Written for v1, the step-07 network; what changed with v2b is in brackets and in 14.11.)
+
 - **A modest gain, unevenly spread.** +3.3 dB on average; large for many mixtures, negative for
   about one in nine. It is clearly better than the baseline live, only slightly better than the
-  baseline's offline mode, and well below what a perfect gate would reach.
+  baseline's offline mode, and well below what a perfect gate would reach. (v2b with the gate:
+  +2.5 dB, negative for about one in seven.)
 - **It sometimes keeps the wrong sound.** A network that rebuilds the sound can be confidently
-  wrong, which a volume fader cannot. Residual mixing (15 dB by default) softens this.
+  wrong, which a volume fader cannot. Residual mixing (15 dB by default) softens this. (Neither
+  the training of v2b nor the output gate fixed this: a confident mistake looks, to the gate,
+  exactly like a confident right answer.)
 - **It does not go quiet when the selected sound is absent** as firmly as the baseline does
-  (about 12 dB instead of nearly 30).
+  (about 12 dB instead of nearly 30). (v2b with the gate: about 17 dB; still far from 30.)
 - **Two sounds of the same type cannot be told apart.** "Speech" means every voice: yours, the
   neighbour's and the singer in the song. Choosing one voice among several is what the Spatial
   and Sources tabs are for (direction, modules 3–5).
 - **Chair scraping barely works**, and music and traffic are weaker than the other classes.
 - **It learnt from only 20,000 mixtures** of dataset clips, and it began to overfit after 12
   rounds. More and more varied material is the most promising way to improve it; a longer
-  training of the same material is not.
+  training of the same material is not. (v2b trains on new random mixtures every round and
+  100 h of extra speech. On its own that neither helped nor hurt in a short probe (+3.74 dB vs
+  +3.72); what cost quality was the leakage penalty.)
 - **Not yet verified by long listening in real rooms.** All numbers come from synthetic
   mixtures; the simulated rooms help, but a real cafeteria is a different thing. No recordings
   from the owner's own microphone were used for training.
 - **It needs the graphics card to be comfortable.** On the processor alone it runs at about
   0.7–0.8 of real time on this laptop and uses almost four cores. And while it uses the
   graphics card, nothing else should (a training run in the background would make it stutter).
+  (v2b with the gate on the graphics card: the worst moment of a 60 s session reached 0.785 of
+  real time, close to the 0.8 limit.)
 - **One channel.** Like the baseline it works on the mono mix; the second microphone is not used
   yet.
+
+### 14.11 Version 2 (step 07b): quiet when it should be, more speech, new mixtures every round
+
+Step 07 left four problems. The network went only about 12 dB quieter when the selected sound
+was absent (the baseline: 27–29 dB). The owner heard classical music under **Speech** even at
+the 40 dB setting. About one mixture in ten came out more than 5 dB *worse* than the input. And
+from round 12 on it learnt its 20,000 training mixtures by heart instead of improving. Step 07b
+is one time-limited round against those problems. (A fifth problem, the delay stuck at 225 ms
+after a stall, was in the speaker output and is fixed there: Chapter 10.4, 23.44.)
+
+**First, what went wrong.** The 51 test mixtures v1 made more than 5 dB worse were taken apart
+class by class: for each one, which sound makes up most of the output? (The rendered mixture
+keeps every sound separately, so the output can be compared with each one.)
+
+| What the output mostly was | Mixtures |
+|---|---|
+| a **background** clip (crowd murmur, room tone, wind…: no class of ours) | 33 |
+| alarm | 4 |
+| traffic | 4 |
+| chair scraping | 3 |
+| music | 3 |
+| dishes | 3 |
+| footsteps | 1 |
+
+On average the wrongly kept sound was 37 % of the output and the real target only 20 %. Chair
+scraping was the selected class in 16 of the 51. The recurring confusions between our own
+classes were chair scraping ↔ alarm / music / dishes, dishes → chair scraping / music / alarm,
+traffic ↔ footsteps and music → alarm. In the target-absent mixtures of validation and test the
+largest leaks were a selected chair scraping or music letting **alarm** through (−3 to −5 dB),
+footsteps ↔ traffic (−6 to −8 dB), music → speech (−8 dB) and speech → music (−10.5 dB): the
+last one is exactly what the owner heard. The pairs became the *hard negatives* below. The
+background finding is reported but not acted on: no pair of classes can express it.
+
+**Fix 1: a loss that listens to the pauses.** In step 07 an absent target was punished as a
+whole: one number for the whole 3 s crop. When the target *was* there, the SI-SNR of the crop was
+decided by its loud parts, so letting other sounds through in the target's pauses cost almost
+nothing. Now every crop is cut into **50 ms frames**. A frame in which the true target is silent
+(below −70 dBFS) adds a penalty: how loud the output is there compared with the input, in dB,
+from −30 dB (no penalty; −50 dB in the first run, see below) upwards (`leak_frame_ms`, `leak_floor_db`, `leak_silence_dbfs` in
+`neural_tse.yaml`). An absent target is simply a crop whose frames are all silent. The penalty
+is added to the quality term with the weight `leak_weight`.
+
+**Fix 2: an output gate.** A soft gate after the network (`extraction/gate.py`). Every model step
+(416 samples, 9.4 ms) it compares how loud the network's output is with how loud its input is.
+If the output is *no more than* 12 dB below the input (`open_db`), the network is keeping a
+real part of what it hears and the gate stays open. If it
+is 18 dB or more below (`close_db`), the network itself says "almost nothing of mine here", and
+the gate turns the output down by a further 15 dB (`depth_db`); in between, proportionally.
+(These are the values tuned on validation, below; the spec started from −22 and 25 dB.) It
+opens within 5 ms (`attack_ms`: the start of a word is not lost) and closes only after 200 ms
+without a reason to stay open (`hold_ms`) and then over 150 ms (`release_ms`: no chopping between
+syllables). Unlike the baseline's gate, which waits for the detector, this one follows the
+network's own output, so it has **no lag and adds no delay**. The thresholds are chosen on the
+validation set (`soundspy evaluate gate`, below). The **Gate** button on the Semantic tab
+switches it on and off for the next session; *Process* uses the same setting, and
+`soundspy extract --no-gate` switches it off. Turn it off to hear what the network alone does,
+or when the wanted sound is much quieter than everything else (the gate could then mistake it
+for leakage and duck it).
+
+**More speech: LibriSpeech.** FSD50K has 79 minutes of training speech. LibriSpeech
+`train-clean-100` adds 100 hours of read English from 251 speakers (Chapter 11.3; CC BY 4.0).
+Its official subsets are its splits (`dev-clean` validation, `test-clean` test) and a speaker is
+never in two of them. Two precautions: LibriSpeech is recorded at 16 kHz, so it contains nothing
+above 8 kHz. Used alone, the network could learn "no high frequencies = speech". So at most half
+of the speech events come from LibriSpeech (`source_mix`), and any foreground event, of any
+class, is low-passed at a random 6–16 kHz with probability 0.3. And the training part is
+converted once to 44.1 kHz WAV on D: (31.9 GB, 11 minutes), so the workers do not resample
+every clip again.
+
+**New mixtures every round (dynamic mixing).** Instead of the 20,000 cached recipes, every
+training crop of every round is a **new random recipe**, made and rendered on the fly by the
+DataLoader workers (`data/dynamic.py`). The recipe comes from the same sampler that once wrote
+the frozen recipe files (those can still be regenerated identically), with new rules for
+training only:
+
+- the target is **absent** in 15 % of the recipes (was 5 %); in half of those, a sound the
+  network confuses with the selection is put in on purpose (**hard negative**: speech → music,
+  music → alarm or speech, chair scraping → alarm, dishes or music, dishes → chair scraping,
+  music or alarm, traffic ↔ footsteps);
+- in 25 % the target is **partial**: it sounds only after (or only before) one moment, and the
+  crop is placed around that moment, so the network has to switch off *within* a crop;
+- half of the recipes are played in a simulated room, taken from a **bank of 2,000 rooms × 6
+  positions** computed once (0.6 GB, 3 minutes; `soundspy data cache --task rirs`) because
+  simulating a room takes 0.15 s, far too slow per example;
+- the LibriSpeech share and the low-pass above.
+
+A worker needs about 80 ms per example; four workers deliver 25 crops per second, almost twice
+what the graphics card consumes (~13), so the card never waits. **Validation and test are
+unchanged** (the frozen step-07 sets), so every number below is comparable with step 07.
+
+**Choosing the weight of the pause penalty: two short probes.** Each probe started from v1 and
+trained 4 short rounds of 3,000 crops (20 minutes):
+
+| | val SI-SDRi | leak, target absent | leak in the target's pauses |
+|---|---|---|---|
+| v1 (start) | +3.72 dB | −14.1 dB | −33.6 dB |
+| `leak_weight` 0.3 | +3.05 dB | −13.2 dB | −46.7 dB |
+| `leak_weight` 1.0 | +2.13 dB | **−22.3 dB** | −51.5 dB |
+
+With 0.3 the network learnt to be quiet in the pauses but not when the target is absent
+altogether, and that leak was getting worse every round: it was behind v1 on both counts. With
+1.0 the absent-target leak dropped by 8 dB at the price of SI-SDRi early in training. 1.0 was
+chosen; the main run had to win the SI-SDRi back.
+
+**The first main run did not win it back.** `tse_waveformer_v2` (weight 1.0, floor −50 dB)
+was stopped by the patience rule after 15 of 48 rounds (3.3 h). Its best round, the 5th,
+reached +2.32 dB; all the others stayed between +1.9 and +2.3 dB, with the absent-target leak at
+−18 to −22 dB. The score was flat from round 2 while the learning rate was still at its peak, so
+something in the loss, not the schedule, was holding it down. The run is kept on disk as a
+result; it is not the model the app uses.
+
+**Where the quality went: two more probes**, of the same size as the first two:
+
+| | val SI-SDRi (round 1 → 4) | leak, target absent | leak in the target's pauses |
+|---|---|---|---|
+| weight 0 (new data, no pause penalty) | +3.66 → **+3.74** dB | −10.5 dB | −28.4 dB |
+| weight 1.0, floor −30 dB | +2.75 → **+2.96** dB | −17.6 dB | −38.4 dB |
+
+Without the penalty, the new data alone gives exactly v1's quality (and leaks more than v1, which
+had a milder absent-target term). So the new mixtures cost nothing, and **all of the lost quality
+came from the penalty**, most of it from its floor. At −50 dB the network was pushed to make the
+pauses 50 dB quieter than its input. Below about −30 dB that buys nothing you can hear, because
+the attenuation slider adds the untouched input back at −30 dB (at the 30 dB setting; at the
+15 dB default it is louder still). The network was spending its capacity on silence nobody
+hears. With the floor at −30 dB it kept most of the leak gain and won back 0.8 dB. The leak still
+rose a little every round (1.7 dB over the four, in shrinking steps), but it stayed 3.75 dB inside
+the limit of the leak rule, which guards the main run anyway. The bar for going ahead was fixed
+before these probes ran: at least +2.63 dB with the leak at −14.85 dB or lower. The probes used
+74 of the 90 minutes allowed. The second main run, **`tse_waveformer_v2b`**, uses floor −30 dB
+and the rest of the 12 h budget (8.5 h).
+
+**The second main run.** `tse_waveformer_v2b` trained 30 of its 48 rounds in 6.2 h and was
+stopped by the patience rule. New bests came at rounds 4, 7, 15, 18, 19 and 20; every round from
+the 2nd on scored between +2.75 and +3.17 dB, so it had found its level early. The best,
+round 20, is the configured network (`checkpoint` in `neural_tse.yaml`):
+
+| Validation (500 mixtures, 30 dB, no gate) | SI-SDRi | SNRi | leak, target absent | leak in the pauses |
+|---|---|---|---|---|
+| v1 (step 07) | +3.72 dB | +5.82 dB | −14.1 dB | −33.6 dB |
+| v2, round 5 (floor −50 dB) | +2.32 dB | +5.42 dB | −18.0 dB | −50.2 dB |
+| **v2b, round 20** (floor −30 dB) | **+3.17 dB** | +5.72 dB | **−17.8 dB** | −37.9 dB |
+
+Training used 9.5 of the 12 GPU hours (3.3 + 6.2) plus 74 minutes of probes.
+
+**Tuning the gate.** `soundspy evaluate gate` runs the network once over the 500 validation
+mixtures plus the 70 target-absent ones the validation cache has, and then tries 18 gate settings
+(open −8 / −12 / −16 dB, closing 6 or 10 dB lower, depth 15 / 25 / 35 dB) on the same outputs.
+The rule: the strongest suppression that costs at most 0.3 dB of SI-SDRi. A selection of the rows
+(all at 30 dB; "estimate alone" is the network's output before the slider mixes the input back
+in):
+
+| Network, gate (open / close / depth dB) | SI-SDRi | worse by > 5 dB | suppression, target absent | at 40 dB | estimate alone |
+|---|---|---|---|---|---|
+| v2b, off | +3.18 | 62 | −15.7 | −17.0 | −17.8 |
+| v2b, −16 / −26 / 15 (mildest) | +2.92 | 64 | −16.8 | −18.8 | −20.4 |
+| **v2b, −12 / −18 / 15 (chosen)** | **+2.88** | 62 | **−17.1** | −19.2 | −21.0 |
+| v2b, −12 / −22 / 25 (the spec's starting values) | +2.77 | 63 | −17.3 | −19.6 | −21.8 |
+| v2b, −8 / −14 / 35 (strongest) | +2.56 | 64 | −18.1 | −20.8 | −23.9 |
+| v1, off | +3.73 | 41 | −12.8 | −13.6 | −14.1 |
+| v1, −8 / −14 / 15 (chosen for v1) | +3.43 | 48 | −14.2 | −15.4 | −16.2 |
+
+The gate cannot get anywhere near 25 dB: even the strongest setting stops at −18 dB. The reason
+is what is left to remove. The gate closes when the network's output is much quieter than its
+input, i.e. when the network itself says "nothing of mine here". The leaks that dominate are the
+opposite case: the network keeps a wrong sound at nearly full level, with full confidence. To a
+level gate that looks exactly like a right answer, so the gate only removes the quiet residue,
+about 1.4 dB, and every dB beyond that is paid for by dimming quiet parts of real targets.
+
+**The test results** (500 test mixtures at 48 kHz, as in step 07; nothing was tuned on them).
+`experiments/ext_neural_tse_v2/` holds v2b with all systems; v1 with its own tuned gate was
+evaluated separately (`experiments/ext_neural_tse_v1_gate/`, same mixtures, no reverberant copy).
+"Gate" rows are offline, and the streaming numbers are identical to them (difference 0.00 dB):
+
+| System (30 dB unless stated) | SI-SDRi mean | median | worse by > 5 dB | target missed | suppression, target absent | reverberant copy |
+|---|---|---|---|---|---|---|
+| Baseline, live | −4.85 | −0.96 | 175 | 32 % | −28.7 | −5.20 |
+| Baseline, offline timeline | +2.19 | +0.00 | 53 | 28 % | −26.6 | +0.70 |
+| v1 (step 07) | **+3.28** | **+3.32** | **51** | 0 % | −12.5 | **+2.92** |
+| v1 + gate | +2.97 | +3.13 | 55 | 1 % | −14.0 | – |
+| v2b, no gate | +2.88 | +2.85 | 59 | 0 % | −15.6 | +2.43 |
+| **v2b + gate (configured)** | +2.51 | +2.58 | 66 | 2 % | **−17.1** | +2.07 |
+| v1 + gate, 15 dB | +3.24 | +3.10 | 19 | 3 % | −9.0 | – |
+| **v2b + gate, 15 dB (the app's default)** | +3.10 | +2.78 | 22 | 7 % | −10.6 | +2.73 |
+| v2b + gate, 40 dB | +1.95 | +2.43 | 74 | 0 % | −19.5 | +1.52 |
+
+By target class (SI-SDRi, 30 dB):
+
+| Class | v1 | v1 + gate | v2b | v2b + gate |
+|---|---|---|---|---|
+| speech | +3.60 | +3.38 | +2.93 | +2.68 |
+| music | +2.65 | +2.17 | +1.64 | +1.25 |
+| footsteps | +4.41 | +4.30 | +3.90 | +3.75 |
+| dishes | +3.84 | +3.73 | +3.21 | +2.97 |
+| chair_scrape | +0.16 | −0.33 | +0.22 | −0.28 |
+| alarm | +3.75 | +3.70 | +4.01 | +3.79 |
+| traffic | +2.46 | +2.12 | +1.30 | +0.73 |
+
+The benchmark sets (Chapter 18, `--no-benchmarks` skips them), 30 dB:
+
+| Benchmark | v1 | v1 + gate | v2b | v2b + gate | Baseline live |
+|---|---|---|---|---|---|
+| `absent`: 200 mixtures, each class selected while absent (suppression) | −12.6 | −14.1 | −14.8 | **−16.3** | −26.5 |
+| `pair_absent`: only music, Speech selected (suppression) | −15.3 | −16.1 | −19.6 | **−20.6** (−24.0 at 40 dB) | −29.3 |
+| `pair_a`: speech + music, Speech selected (SI-SDRi) | +5.33 | +5.00 | +5.33 | +4.99 | −4.64 |
+| `pair_b`: speech + music, Music selected (SI-SDRi) | **+2.11** | +1.84 | +0.27 | +0.05 | −6.88 |
+| `librispeech`: read speech from test-clean (SI-SDRi) | +8.06 | +7.91 | **+8.93** | +8.83 | −5.39 |
+
+**The owner's two recordings**, Speech selected at 40 dB (`outputs/eval/ext_neural_tse_v2/owner/`,
+`levels.json`). The level is the output against the input over the stretches the detector marks
+as music without speech (37.5 s of `test-music-classical`) and as speech (30.2 s of `ui-test`):
+
+| Output vs input | v1 | v1 + gate | v2b | v2b + gate | Baseline |
+|---|---|---|---|---|---|
+| classical music, nobody talks (should be −40) | −18.8 dB | −20.5 dB | −19.0 dB | −19.9 dB | **−40.0 dB** |
+| the owner talking (should stay near 0) | −2.8 dB | −2.8 dB | −3.3 dB | −3.3 dB | −0.2 dB |
+
+On the real recording v2b is no quieter than v1: the synthetic gain did not carry over to this
+piece of classical music. The baseline is silent there because its detector hears "no speech"
+and closes completely (Idea 1 below).
+
+**Live and offline** (60 s on the laptop microphone, Speech selected, 15 dB, Listen muted, the
+default devices: network on the graphics card, detector on the processor):
+
+| | v1 (step 07) | v2b + gate |
+|---|---|---|
+| real-time factor, p95 (at the end; worst moment) | 0.63; 0.72 | 0.64; **0.785** |
+| processing per 20 ms chunk, mean | 9.0 ms | 9.3 ms |
+| network call, mean (p95) | 7.5 ms | 7.8 ms (11.4 ms) |
+| delay heard | 95–115 ms | 115 ms |
+| underruns / speaker queue drained | 0 / – | 0 / 0 |
+| backend processor use | 71 % of one core | 72 % of one core |
+| start | ~3 s | 3.3 s |
+| gate closed (quiet room, nobody talking) | – | 97 % of the time |
+| offline: the 62 s recording | 6.8 s | 6.1 s |
+
+**Against the step's targets:**
+
+| Target (spec §11) | Result | |
+|---|---|---|
+| target absent, 30 dB, gate on: ≥ 25 dB suppression | 17.1 dB (benchmark 16.3) | missed |
+| owner's music, Speech at 40 dB: ≥ 35 dB down | 19.9 dB | missed |
+| gate off: better than v1's −12.5 dB | −15.6 dB | met |
+| SI-SDRi with the gate: > +3.28 dB (goal +4.5) | +2.51 dB | missed |
+| the gate costs ≤ 0.3 dB | 0.37 dB on test (0.30 on validation, where it was chosen) | missed, narrowly |
+| speech: > +3.74 dB | +2.68 dB | missed |
+| fewer than 51 mixtures worse by > 5 dB | 66 | missed |
+| streaming = offline within 0.1 dB | 0.00 dB | met |
+| live: real-time factor p95 < 0.8, no underruns | worst 0.785, 0 underruns | met, narrowly |
+| all checks pass | 572 backend + 50 website tests, ruff, eslint, tsc, build | met |
+| nothing tuned on test | gate and checkpoint chosen on validation | met |
+
+**What it means.** v2b does what its training asked for: 3–5 dB less leakage when the selected
+sound is absent (more in the speech-vs-music case it was aimed at) and better read speech. It pays
+with quality at 30 dB: 0.4 dB without the gate, 0.8 dB with it (against v1 as shipped in step 07,
+without a gate; 0.5 dB against v1 with its own gate), and badly when Music is selected while
+someone talks. At the app's default 15 dB the gap nearly closes (+3.10 against
+v1-with-gate's +3.24 dB) while the extra suppression stays (1.7 dB). On the owner's real music
+recording neither network is clearly better. The configuration follows the spec (v2b, gate on);
+switching back to v1 is one line, `checkpoint: experiments/tse_waveformer_v1/checkpoints/best.pt`
+(with v1's own gate setting −8 / −14 / 15), and the choice is the owner's.
+
+**Ideas that came out of it** (not built, scope):
+
+1. **Let the detector close the gate when it is sure.** On the owner's recording the baseline is
+   silent because the detector says "no speech" for seconds on end. The network's weakness is the
+   opposite of the detector's: immediate but sometimes wrong about the content, versus late but
+   right about presence. Closing fully only after, say, a second of confident "absent", and
+   handing over to the network the moment the detector wavers, would keep the network's onsets
+   and add the baseline's silence.
+2. **The remaining wrong-sound errors are mostly background clips** (33 of v1's 51), which no
+   loss tweak and no level gate addresses; cleaner labels for the background material would.
+3. **Music under speech** (`pair_b`) got worse with v2b; the hard-negative pairs may have taught
+   "speech present → turn down" too broadly. Worth a look before any v3.
+
+**Listening examples** are in `outputs/eval/ext_neural_tse_v2/` (`index.md` lists them; 302
+files, 331 MB): the usual set plus benchmark examples and the two mixtures the owner asked about.
+`test-000030` (speech over dishes) shows the gate's cost on quiet speech: v1 +6.6, v2b +6.4, v2b
+with the gate +4.4 dB. `test-000036` (speech 10 dB under footsteps and dishes) is still lost by
+every network (v1 −10.3, v2b −12.6 dB). The v1-with-gate examples are in
+`outputs/eval/ext_neural_tse_v1_gate/`.
 
 ---
 
@@ -3621,15 +4001,16 @@ The full tables are in `experiments\ext_neural_tse\metrics.md`, and every mixtur
 | `PUT /api/session/target` | change what to listen to (a `TargetSpec`); checked against the class list, stored, passed to the session | **works** (step 03), no audible effect until step 05; unknown class → 422. *(Step 05: the class chips send it over the WebSocket as `set_target`; still no audible effect until step 06.)* *(Step 06: audible. `attenuation_db` comes from the new slider.)* |
 | `PUT /api/session/bypass` | `{"enabled": true}`: play the unprocessed sound (same delay) instead of the output, for A/B listening | **works** (step 06); remembered between sessions |
 | `PUT /api/session/method` | `{"method": "neural_tse"}` or `"mask_baseline"`: the extraction method sessions are started with (Chapter 14.8) | **works** (step 07); remembered between sessions; **409** while a session runs (the methods have different delays). The start request also accepts `method` for that one session |
+| `PUT /api/session/gate` | `{"enabled": false}`: the neural method's output gate (Chapter 14.11) for the sessions that follow | **works** (step 07b); remembered between sessions; **409** while a session runs; the start request also accepts `gate` for that one session; the baseline ignores it |
 | `PUT /api/session/monitor` | Listen on/off, volume (−40…+12 dB), mute | **works** (step 03) |
 | `POST /api/session/record/start` / `stop` | record what the session hears; stop returns the new recording | **works** (step 03); 409 without a session, or when (not) recording |
 | `GET /api/recordings` | list recordings, newest first (re-reads `data/raw` first, Chapter 9.6) | **works** (since step 02) |
 | `GET /api/recordings/{id}`, `/{id}/audio` | view one recording; download its sound as `audio/wav` (the page's Play button) | **works** (step 03); 404 if missing |
 | `POST /api/recordings/{id}/detect` | offline detection of a recording: probabilities over time and the active segments per class (Chapter 12.8) | **works** (step 05); 413 over 2 minutes, 503 without a trained model |
-| `POST /api/recordings/{id}/process` | extract sound types from a saved recording: `{labels, attenuation_db?, method?}`. Answers at once (202) with a *run* in state `pending`; a background worker processes it, one job at a time | **works** (step 06): 404 file gone, 413 over 5 minutes, 422 no or unknown classes, 503 without a detection model | *Step 07:* `method` may be `neural_tse` or `mask_baseline` (default: the configured method if it can run, else the baseline); 503 names the model that is missing; `attenuation_db` defaults to 15. |
+| `POST /api/recordings/{id}/process` | extract sound types from a saved recording: `{labels, attenuation_db?, method?}`. Answers at once (202) with a *run* in state `pending`; a background worker processes it, one job at a time | **works** (step 06): 404 file gone, 413 over 5 minutes, 422 no or unknown classes, 503 without a detection model | *Step 07:* `method` may be `neural_tse` or `mask_baseline` (default: the configured method if it can run, else the baseline); 503 names the model that is missing; `attenuation_db` defaults to 15. *Step 07b:* `gate` (neural only; default: the gate chosen for sessions); the run's sidecar records the model's name and every gate setting. |
 | `GET /api/recordings/{id}/runs` | the processing runs of a recording, newest first | **works** (step 06) |
 | `GET /api/runs/{run_id}`, `/{run_id}/audio` | one run (status, timing, where the target was found); its processed sound as `audio/wav` | **works** (step 06): 404 unknown, 409 audio of an unfinished or failed run |
-| `WS /ws/session` | the live channel (below) | **works**: status, live pictures, warnings, errors; accepts `set_target`. *Step 05:* also `detections` (4 per second: every class's probability + the active ones), and the status carries a `detector` block (model, device, hop, inference time, skipped windows). *Step 06:* live pictures carry `source` (`input` / `output`); the status carries `bypass` and an `extraction` block (method, its delay, whether gating works, whether the target is active now); `run` messages report every state change of a processing run; the page may send `set_bypass` | *Step 07:* accepts `set_method` (answered with `error` while a session runs); the status carries `extraction_method` (the chosen method) and, for the neural method, the device, the model's name and the time of one model call; the output waveform is no longer sent (the output has level meters). |
+| `WS /ws/session` | the live channel (below) | **works**: status, live pictures, warnings, errors; accepts `set_target`. *Step 05:* also `detections` (4 per second: every class's probability + the active ones), and the status carries a `detector` block (model, device, hop, inference time, skipped windows). *Step 06:* live pictures carry `source` (`input` / `output`); the status carries `bypass` and an `extraction` block (method, its delay, whether gating works, whether the target is active now); `run` messages report every state change of a processing run; the page may send `set_bypass` | *Step 07:* accepts `set_method` (answered with `error` while a session runs); the status carries `extraction_method` (the chosen method) and, for the neural method, the device, the model's name and the time of one model call; the output waveform is no longer sent (the output has level meters). *Step 07b:* accepts `set_gate` (`{"enabled": bool}`, like `set_method`); the status carries `extraction_gate`, `output_drained` (how often the speaker queue was emptied back to its cushion) and, for the neural method, `extraction.gate` and `gate_closed` (the share of model steps in which the gate was mostly closed). |
 
 **Why have addresses that only say "not implemented"?** Because the complete
 shape of the interface is then visible from day one. The automatic
@@ -3857,6 +4238,10 @@ and a download link. A recording whose file is gone is shown greyed out with "fi
 
 *Since step 07* (Chapter 14.7–14.8): a **Method** selector (Neural / Baseline) next to the attenuation slider, usable while stopped; a method that cannot run is greyed out with the reason as its tooltip. The slider starts at **15 dB** (the value comes from the backend). Next to the input level meters there is an **output level meter**, so the effect of the extraction is visible at a glance. The session bar shows the method by its name, where its model runs (`cuda` or `cpu`), the delay it adds and, for Neural, the **model time** per call. The recordings list has a **Process with** choice, and every run shows the method it was made with.
 
+*Since step 07b* (Chapter 14.11): a **Gate on / Gate off** button next to the Method selector
+(Neural only, usable while stopped); the session bar adds *· gate* or *· no gate* to the
+extraction figures; a neural run on a recording uses the session's gate choice and shows it.
+
 ### 17.2 The connection light
 
 It combines two separate checks:
@@ -3923,11 +4308,11 @@ test clips, preparing data and training models.
 | `soundspy check-mic` | record a few seconds and report the levels, channel comparison and warnings (Chapter 9.8); `--meter` for a live level meter | **works** (step 02) |
 | `soundspy record` | record a clip into `data/raw` as WAV + sidecar (`--seconds`, `--label`, `--notes`, `--out`) | **works** (step 02) |
 | `soundspy record-dataset` | guided recording of labelled clips into `data/custom` (Chapter 11.12) | **works** (step 04) |
-| `soundspy data` | `paths`, `download`, `cleanup-archives`, `prepare`, `stats`, `mix`, `preview` (Chapter 11); *step 07:* `cache --task extraction [--split all] [--sample-rate 44100] [--workers N] [--force]` renders the mixtures once to D: (Chapter 14.4) | **works** (step 04) |
-| `soundspy train` | `train detection [--name] [--epochs] [--smoke] [--resume] [--workers]` (Chapter 12.4); *step 07:* `train extraction [--name tse_waveformer_v1] [--epochs N] [--smoke] [--resume] [--batch-size N]` fine-tunes the neural extractor (Chapter 14.6) | **works** (step 05) |
-| `soundspy evaluate` | `evaluate detection [--experiment] [--split test]`: fine-tuned vs zero-shot (Chapter 12.5); `evaluate extraction --method mask_baseline [--split test] [--n 500] [--sample-rate 48000]`: the five-system comparison (Chapter 13.7) | **works** (step 05; extraction: step 06) | *Step 07:* `evaluate extraction --method neural_tse` adds the neural extractor (whole-file, streaming, and at the live attenuation) to the same table and repeats it in simulated rooms (Chapter 14.9). |
+| `soundspy data` | `paths`, `download`, `cleanup-archives`, `prepare`, `stats`, `mix`, `preview` (Chapter 11); *step 07:* `cache --task extraction [--split all] [--sample-rate 44100] [--workers N] [--force]` renders the mixtures once to D: (Chapter 14.4); *step 07b:* `download librispeech`, `cache --task clips` (LibriSpeech converted to 44.1 kHz WAV on D:) and `cache --task rirs` (the bank of 2,000 simulated rooms) (Chapter 14.11) | **works** (step 04) |
+| `soundspy train` | `train detection [--name] [--epochs] [--smoke] [--resume] [--workers]` (Chapter 12.4); *step 07:* `train extraction [--name tse_waveformer_v1] [--epochs N] [--smoke] [--resume] [--batch-size N]` fine-tunes the neural extractor (Chapter 14.6); *step 07b:* `--time-budget-h H` (stop before a round that would not fit; `training.time_budget_h`), training from `training.init_checkpoint` with new mixtures every round (Chapter 14.11) | **works** (step 05) |
+| `soundspy evaluate` | `evaluate detection [--experiment] [--split test]`: fine-tuned vs zero-shot (Chapter 12.5); `evaluate extraction --method mask_baseline [--split test] [--n 500] [--sample-rate 48000]`: the five-system comparison (Chapter 13.7) | **works** (step 05; extraction: step 06) | *Step 07:* `evaluate extraction --method neural_tse` adds the neural extractor (whole-file, streaming, and at the live attenuation) to the same table and repeats it in simulated rooms (Chapter 14.9). *Step 07b:* `--name` (the output folder), the earlier model, the network without its gate, the 40 dB setting and the benchmark sets (`--no-benchmarks`, `--no-reverb` to skip parts); `evaluate gate [--checkpoint]` tries a grid of gate settings on the validation set (Chapter 14.11). |
 | `soundspy detect` | per-class timeline of a recording (Chapter 12.9) | **works** (step 05) |
-| `soundspy extract` | `extract <wav> --labels speech [music …] [--attenuation-db 15] [--method neural_tse|mask_baseline] [--out out.wav]`: keep the named sound types of a recording, as a processing run in `outputs/processed` (Chapter 13.6) | **works** (step 06) |
+| `soundspy extract` | `extract <wav> --labels speech [music …] [--attenuation-db 15] [--method neural_tse|mask_baseline] [--out out.wav]`: keep the named sound types of a recording, as a processing run in `outputs/processed` (Chapter 13.6); *step 07b:* `--gate` / `--no-gate` (the neural output gate) | **works** (step 06) |
 | `soundspy db` | `db rebuild`: drop the database and index the sidecar files again (Chapter 16) | **works** (step 06) |
 
 Placeholder commands print `not implemented yet (step-XX)` and exit normally.
@@ -4137,7 +4522,9 @@ latency.
 
 *(Built in step 07: Chapter 14 describes how it really works. The published Waveformer was
 fine-tuned for the seven classes; it scores +3.3 dB SI-SDRi on the 500 test mixtures, the same
-live and offline, against −4.9 dB live and +2.2 dB offline for the baseline.)*
+live and offline, against −4.9 dB live and +2.2 dB offline for the baseline. Step 07b trained a
+second version, v2b, that leaks less when the selected sound is absent but scores lower:
++2.5 dB with its output gate; Chapter 14.11.)*
 
 ### 20.3 Training data from mixtures (step 04)
 
@@ -4265,11 +4652,12 @@ longer warns about noise suppression.
 
 ```powershell
 # backend (in backend/, with the venv active)
-pytest              # 540 tests (after step 07; 482 after step 06), about 105 seconds
+pytest              # 572 tests (after step 07b; 540 after step 07), about 3 minutes
+                    # (measured while an evaluation ran alongside; 105 s after step 07)
 ruff check .        # code-quality check
 
 # website (in frontend/)
-npm run test        # 46 tests (after step 07; 36 after step 06); run it from PowerShell,
+npm run test        # 50 tests (after step 07b; 46 after step 07); run it from PowerShell,
                     # not Git Bash (Chapter 23.26)
 npm run lint        # code-quality check
 npm run typecheck   # TypeScript type check
@@ -4368,6 +4756,10 @@ hold and clip memory; an output waveform that still arrives is ignored; Process 
 method, follows the session's method by default, skips an unavailable one, and every run shows
 its method.
 
+*Step 07b added:* the Gate button sends `set_gate` and shows the new state, is disabled during a
+session and for the baseline; the session bar adds *· gate* / *· no gate* for Neural; Process
+sends the session's gate choice with a neural run, and a run shows whether its gate was on.
+
 - The three tabs and the connection light appear.
 - Class buttons show display names, not internal IDs, and are disabled with
   the description as a tooltip.
@@ -4393,7 +4785,7 @@ website's proxy, with the backend up, stopped, and restarted.
 and a short `soundspy record` on the real laptop. Then start `soundspy serve` and
 confirm the recording appears at `GET /api/recordings`. Tests can only prove the
 code behaves correctly with the *fake* sound card. The two biggest surprises of
-step 02, start-up silence and noise suppression (Chapter 23.8–17.9), only showed
+step 02, start-up silence and noise suppression (Chapter 23.8–23.9), only showed
 up on real hardware.
 
 ---
@@ -4987,6 +5379,89 @@ Python's bookkeeping between 200 small operations, not from the optimiser: 8.4 �
 on the graphics card, no slow first calls. Tracing itself happens in `start()`, before the first
 chunk, and a traced step is compared with the plain one before it is used.
 
+### 23.44 The delay stayed at 225 ms after any stall (fixed in step 07b)
+
+**Symptom:** the end of 23.42 and 23.43: after a single hiccup the delay to the ear went from
+about 105 ms to 225 ms and stayed there until the session was restarted (limitation 31 of
+step 07).
+
+**Cause:** during a stall the microphone keeps recording; afterwards the waiting chunks are
+processed in a burst and all land in the speaker queue. From then on chunks come in and go out
+at the same rate, so the queue never shrinks again.
+
+**Fix:** the speaker output drains itself (Chapter 10.4): when the queue has stayed above its
+cushion plus one chunk for a whole second, the oldest chunks are dropped down to the cushion,
+with a 5 ms crossfade. Measured live with the laptop microphone and a forced 0.3 s stall: with
+the fix the delay went 104 → 224 → **104 ms** within 1.0 s (one drain); without it, it stayed at
+224–234 ms for the rest of the run.
+
+### 23.45 A test run crashed a training probe: "not enough memory"
+
+**Symptom:** the first leak-weight probe of step 07b died after a few minutes with an Intel MKL
+error, *"Not enough memory to allocate"*.
+
+**Cause:** my mistake. While the probe ran (6 DataLoader workers for dynamic mixing, 2 more for
+validation, the main process with CUDA), I started the backend test suite in parallel. Each
+PyTorch process **commits** about 1.1–1.3 GB (the main CUDA process ~5.5 GB), so together they
+asked Windows for more than its commit limit (RAM + page file) and the next allocation failed.
+Free RAM was not the problem; promised memory was.
+
+**Fix:** 4 training workers instead of 6 (still about twice as fast as the graphics card
+consumes), validation without workers (it only reads the memory-mapped cache), the probes
+restarted, and a rule: **no PyTorch tests while a training runs** (`CLAUDE.md`).
+
+### 23.46 A crop with no target in it
+
+**Symptom:** a dynamic-mixing test found training crops whose target was silent although the
+recipe said the target was present.
+
+**Cause:** the crop was placed so that it overlapped the stretch from the target's first to its
+last sound. With two target events far apart (footsteps at 1 s, again from 2.7 s), a 1 s crop
+could fall in the gap between them.
+
+**Fix:** a crop is now placed around a randomly chosen *moment where the target really sounds*
+(10 ms frames of the rendered target); a partial target's crop is placed around its switch.
+
+### 23.47 LibriSpeech would have changed the frozen test mixtures
+
+**Symptom:** after adding LibriSpeech to the clip index, `data prepare` would have moved
+different FSD50K clips into validation.
+
+**Cause:** the validation rebalance (Chapter 11.14) counts clips per class over all datasets;
+33,862 new speech clips changed those counts, and with them the split of FSD50K, and with that
+every frozen validation and test recipe.
+
+**Fix:** datasets with official splits (LibriSpeech's subsets) are left out of the rebalance.
+Verified: every FSD50K / ESC-50 clip keeps its split, so the step-07 validation and test recipes
+(and the numbers measured on them) stay comparable.
+
+### 23.48 The gate switch over the WebSocket was refused
+
+**Symptom:** a new test showed that `set_gate` sent over the WebSocket came back as an error.
+
+**Cause:** the message type was added to the list the server *handles* but not to the list the
+envelope *accepts*, so validation rejected it first. An earlier test had passed by accident:
+it expected an error that mentions `set_gate`, and the validation error does mention it.
+
+**Fix:** `set_gate` added to the envelope's types; the test now expects the exact "stop the
+session" error while running and the new `status` while idle.
+
+### 23.49 The first v2 training run went flat at the start
+
+**Symptom:** `tse_waveformer_v2` scored +1.9 to +2.3 dB on validation in every round from the
+2nd to the 15th (v1: +3.72), while the learning rate was still at its peak, and the patience rule
+stopped it after 3.3 hours.
+
+**Cause:** the leakage penalty's floor. At −50 dB it rewarded the network for making the
+target's pauses 50 dB quieter than its input (it reached −51 dB), far below anything audible: the
+slider adds the input back at −30 dB anyway. Two 20-minute probes separated the causes: the new
+mixtures without the penalty kept v1's quality exactly (+3.74 dB), and the floor at −30 dB won
+back 0.8 dB of the 1.6 dB the penalty had cost in the same time.
+
+**Fix:** `leak_floor_db: -30` and a second run, `tse_waveformer_v2b`, with the rest of the GPU
+budget: +3.17 dB on validation, leak −17.8 dB (Chapter 14.11). It still did not reach v1's
+quality: what remains is the price of the penalty itself.
+
 ---
 
 ## 24. Design decisions and why
@@ -5214,6 +5689,55 @@ them; tracing removes much of that and changes no number. The optimiser is left 
 live session needs every call to take the same time more than it needs the average to be low
 (Chapter 23.43).
 
+**Why penalise leakage per 50 ms frame instead of per example?** (step 07b) Because the problem
+the owner heard lives in the pauses. A score over a 3 s crop is decided by the loud part where
+the target sounds; whatever leaks through while it is silent barely moves it. Frames of 50 ms
+are short enough to see a pause between words and long enough to measure a level reliably. The
+penalty stops at −30 dB so the network gains nothing by pushing inaudible output further down:
+the slider adds the input back at −30 dB anyway. In the 4-round probes the penalty cost 1.6 dB of
+SI-SDRi with the floor at −50 dB (the first run) and 0.8 dB with it at −30 dB (Chapter 14.11).
+
+**Why a gate after the network, when the baseline's gate was the problem in step 06?** (step 07b)
+The baseline's gate waited for the detector, which is a third of a second late switching on and
+a second late switching off. This gate looks at the network's own output, sample-exact and
+without delay: it only makes firmer a decision the network has already made ("almost nothing of
+mine here"). It cannot bring back a sound the network removed, and it is switchable, so its
+effect can always be heard with and without.
+
+**Why make new mixtures every round instead of more cached ones?** (step 07b) 20,000 recipes
+were learnt by heart after 12 rounds. Rendering on the fly gives practically endless variety at
+no disk cost, and it turned out fast enough: four workers make mixtures about twice as fast as
+the graphics card uses them. The validation and test sets stay frozen so that the numbers can be
+compared with step 07.
+
+**Why only half of the speech from LibriSpeech, and why the low-pass?** (step 07b) LibriSpeech is
+read English at 16 kHz: no sound above 8 kHz, always a single calm voice. Used for all speech,
+the network could learn "no treble = speech" or "a calm reader = speech" and miss a laugh or a
+shout in a cafeteria. Mixing the sources and sometimes removing the treble from *every* class
+takes that shortcut away.
+
+**Why start version 2 from version 1, not from the published weights?** (step 07b) Version 1
+already knows Sound Spy's seven classes; the round was time-limited (12 hours of graphics card)
+and its goals were about leakage and robustness, not about learning the classes again.
+
+**Why train a second run (v2b) instead of shipping the first one?** (step 07b) The first run
+was flat at +2.0–2.3 dB from round 2 on, at the peak learning rate: the loss, not the schedule,
+was holding it down. Two short probes showed that the new data alone cost nothing (+3.74 dB) and
+that a penalty floor of −30 dB instead of −50 won back 0.8 dB. The bar for a second run was set
+before those probes ran, and the budget for it was already in the spec (12 h, of which 3.3 h
+were used).
+
+**Why is v2b the configured network when v1 scores higher?** (step 07b) The spec's integration
+step says so, and v2b is what the step was for: on the test mixtures it leaks 3–5 dB less when
+the selected sound is absent, and at the app's default 15 dB its quality is within 0.15 dB of v1
+with a gate. At 30–40 dB, with Music selected over speech, and on the owner's own music
+recording, v1 is as good or better. Both checkpoints stay on disk, switching is one line in
+`neural_tse.yaml`, and the choice is the owner's (Chapter 14.11).
+
+**Why gate thresholds of −12 / −18 / 15 dB and not the spec's −12 / −22 / 25?** (step 07b) The
+spec asked for the thresholds to be tuned on validation with a cost of at most 0.3 dB. The
+spec's values cost 0.41 dB for 0.2 dB more suppression; the chosen ones cost exactly 0.30.
+
 ---
 
 ## 25. Known limitations
@@ -5317,26 +5841,31 @@ These are understood and accepted for now, not oversights.
     last selection and attenuation between sessions, but there is no way yet for the page to ask
     for them, so after a reload the buttons look unselected while the sound is still processed.
     Selecting again brings the two back in step (Chapter 2.12).
-26. **The neural extractor's gain is modest and uneven** (step 07): +3.3 dB SI-SDRi on the test
-    mixtures; large for many, but in about one mixture in nine the output is more than 5 dB
-    *worse* than the input, because the wrong sound was kept. A gate with perfect timing would
-    reach +8.1 dB (Chapter 14.9).
-27. **Neural does not go quiet when the selected sound is absent** (step 07): about 12 dB of
-    suppression at the 30 dB setting, 8.5 dB at the default 15 dB (the baseline: 27–29 dB).
+26. **The neural extractor's gain is modest and uneven** (steps 07–07b): +3.3 dB SI-SDRi on the
+    test mixtures with v1; with v2b and its gate (configured since step 07b) +2.5 dB at 30 dB
+    and +3.1 dB at the default 15 dB. Large for many mixtures, but in about one in seven (v1: one
+    in nine) the output is more than 5 dB *worse* than the input, because the wrong sound was
+    kept. Neither the leakage training nor the gate fixed that. A gate with perfect timing would
+    reach +8.1 dB (Chapters 14.9, 14.11).
+27. **Neural does not go quiet when the selected sound is absent** (steps 07–07b): v2b with the
+    gate reaches about 17 dB of suppression at the 30 dB setting and 10.6 dB at the default
+    15 dB (v1: 12.5 and about 9 dB; the baseline: 27–29 dB). On the owner's classical recording
+    with Speech selected it stays about 20 dB down even at 40 dB, where the baseline reaches 40.
+    The output gate cannot close on a sound the network keeps confidently (Chapter 14.11).
 28. **Sounds of the same type cannot be told apart** (step 07): "speech" is every voice in the
     room, including singing. Choosing one source among several of a kind needs direction
     (modules 3–5).
-29. **The neural extractor learnt from 20,000 synthetic mixtures only** (step 07) and began to
-    overfit after 12 rounds; chair scraping barely works (+0.2 dB). No recordings from the
-    owner's microphone and no real rooms were used. More varied material is the way forward.
+29. **The neural extractor learnt from synthetic mixtures only** (steps 07–07b). v1 used 20,000
+    fixed mixtures and began to overfit after 12 rounds; v2b gets new random mixtures every round
+    plus 100 h of LibriSpeech, but its leakage penalty costs quality: music (+1.3 dB) and traffic
+    (+0.7 dB) are weak, music with someone talking over it fails (+0.05 dB), and chair scraping
+    barely works (−0.3 dB). No recordings from the owner's microphone and no real rooms were
+    used.
 30. **Neural needs the graphics card to be comfortable, and needs it alone** (step 07): on the
     processor it uses almost four cores at RTF p95 0.7–0.8; and a training run or another
     GPU program next to a live session makes it stutter. The detector therefore runs on the
-    processor during a Neural session (about 80 ms per recognition instead of 25).
-31. **After a stall, the listening delay stays high** (step 07, found while measuring): when
-    chunks arrive in a burst the speaker queue fills up to its maximum (8 chunks) and nothing
-    drains it back to its normal 2, so the delay stays at about 225 ms until the session is
-    restarted. It did not happen in the final configuration, but any overload can cause it.
+    processor during a Neural session (about 80 ms per recognition instead of 25). With v2b and
+    the gate the worst moment of a 60 s session reached RTF 0.785: little headroom left.
 
 ---
 
@@ -5366,9 +5895,9 @@ synthetic training mixtures. No code was taken from SemanticHearing itself; the 
 comes from the same group's **Waveformer** repository, which has its own row above.
 
 
-**Data, not code.** The datasets downloaded in step 04 (AudioSet ontology, ESC-50, FSD50K) are
-data used for training, not adapted code. Their sources and licences are recorded in each
-dataset's `SOURCE.json` and described in Chapter 11.3.
+**Data, not code.** The datasets downloaded in step 04 (AudioSet ontology, ESC-50, FSD50K) and
+step 07b (LibriSpeech, CC BY 4.0) are data used for training, not adapted code. Their sources
+and licences are recorded in each dataset's `SOURCE.json` and described in Chapter 11.3.
 ---
 
 ## 27. Quick reference
@@ -5420,16 +5949,20 @@ soundspy detect data\raw\<file>.wav              # per-class timeline of a recor
 Get-Content experiments\det_mn10_v1\log.csv -Wait   # follow training
 ```
 
-### Extraction (steps 06-07)
+### Extraction (steps 06-07b)
 
 ```powershell
 soundspy data cache --task extraction --split all   # render the mixtures once (~25 GB on D:)
+soundspy data download librispeech; soundspy data prepare   # 07b: extra speech (7 GB)
+soundspy data cache --task clips                    # 07b: LibriSpeech at 44.1 kHz (~32 GB on D:)
+soundspy data cache --task rirs                     # 07b: 2,000 simulated rooms (0.6 GB)
 soundspy train extraction --smoke                   # 1 short epoch, end-to-end check
-soundspy train extraction                           # full run (hours) -> experiments\tse_waveformer_v1\
+soundspy train extraction                           # full run (hours) -> experiments\<training.name>\
 soundspy train extraction --resume                  # continue after a stop
-Get-Content experiments\tse_waveformer_v1\log.csv -Wait   # follow training
-soundspy evaluate extraction --method neural_tse    # neural vs baseline vs oracles
-soundspy extract data\raw\<file>.wav --labels speech [--method mask_baseline] [--attenuation-db 15]
+Get-Content experiments\tse_waveformer_v2b\train.log -Wait  # follow training
+soundspy evaluate gate                              # 07b: choose the gate's thresholds on validation
+soundspy evaluate extraction --method neural_tse --name ext_neural_tse_v2   # all systems + benchmarks
+soundspy extract data\raw\<file>.wav --labels speech [--method mask_baseline] [--no-gate] [--attenuation-db 15]
 soundspy db rebuild                                 # rebuild the index from the sidecars
 ```
 
@@ -5447,16 +5980,17 @@ PUT  /api/session/target                TargetSpec: {labels, attenuation_db} (42
 PUT  /api/session/monitor               {enabled, gain_db -40..12, muted}
 PUT  /api/session/bypass                {enabled}: hear the unprocessed sound (A/B)
 PUT  /api/session/method                 {method: neural_tse | mask_baseline} (409 while running)
+PUT  /api/session/gate                  {enabled}: the neural output gate (409 while running)
 POST /api/session/record/start | stop   {label, notes} / returns the new recording
 POST /api/recordings/{id}/detect        offline detection timeline (413 > 2 min, 503 no model)
-POST /api/recordings/{id}/process       {labels, attenuation_db?, method?} -> a run, 202 (413 > 5 min,
+POST /api/recordings/{id}/process       {labels, attenuation_db?, method?, gate?} -> a run, 202 (413 > 5 min,
                                         422 no/unknown class, 503 no model)
 GET  /api/recordings/{id}/runs          its processing runs, newest first
 GET  /api/runs/{run_id}[/audio]         one run / its processed WAV (409 if not done)
 WS   /ws/session                        status 1/s, levels 20/s (input and output), waveform 25/s (input),
                                         spectrogram 25/s (input and output), detections 4/s, run,
                                         warning, error; heartbeat every 2 s when idle;
-                                        accepts set_target, set_bypass and set_method
+                                        accepts set_target, set_bypass, set_method and set_gate
 ```
 
 ### The numbers worth remembering
@@ -5470,11 +6004,11 @@ WS   /ws/session                        status 1/s, levels 20/s (input and outpu
 | Default suppression of unchosen sounds | 15 dB live since step 07 (to about 18 % of its size); 30 dB in the evaluation (about 3 %) |
 | Engine chunk | 1,024 frames (~21 ms at 48 kHz); *since step 03:* 20 ms (960 frames at 48 kHz) |
 | Listening delay (laptop, wired) | about 94 ms (22 in + 20 chunk + ~30 queue + 22 out); *since step 06:* 105–125 ms (+21.3 ms STFT); *since step 07, Neural:* 95–115 ms (+10.6 ms) |
-| Processing load (laptop) | RTF p95 0.06; ~12 % of one CPU core; *since step 06 (detector on GPU + extractor):* RTF p95 0.17; ~24 %; *since step 07, Neural on the GPU + detector on the CPU:* RTF p95 0.63, network 7.5 ms per call, ~71 % of one core, 0 underruns in 60 s |
+| Processing load (laptop) | RTF p95 0.06; ~12 % of one CPU core; *since step 06 (detector on GPU + extractor):* RTF p95 0.17; ~24 %; *since step 07, Neural on the GPU + detector on the CPU:* RTF p95 0.63, network 7.5 ms per call, ~71 % of one core, 0 underruns in 60 s; *step 07b, v2b + gate:* RTF p95 0.64 (worst 0.785), 7.8 ms per call, 72 %, 0 underruns |
 | Extractor (baseline) | STFT 1,024 / 256 at 48 kHz; gate 10 ms open, 300 ms hold, 200 ms close; SI-SDRi on 500 test mixtures: +2.2 dB offline, −4.9 dB live, +8.1 dB with true timing, +24.5 dB ideal mask |
-| Extractor (neural) | Waveformer E512/D256, 3.86 M parameters, 44.1 kHz, steps of 416 samples (9.4 ms), lookahead 32; delay 509 samples (10.6 ms) at 48 kHz; SI-SDRi on 500 test mixtures: +3.28 dB live and offline (median +3.32), +2.92 dB in simulated rooms; 0 % targets missed; 12.5 dB quieter when the target is absent |
-| Neural training | 20,000 mixtures (25.4 GB cache on D:, half reverberant), 3 s crops, batch 4 × 4, ~12 min per round of 10,000 crops; second run 26 rounds, 5.4 h, best round 16: validation +3.72 dB |
-| Offline processing | 62 s recording in 6.5 s (step 07: 6.8 s with either method, 12 s the first time); at most 5 minutes per recording on the page; one job at a time |
+| Extractor (neural) | Waveformer E512/D256, 3.86 M parameters, 44.1 kHz, steps of 416 samples (9.4 ms), lookahead 32; delay 509 samples (10.6 ms) at 48 kHz; SI-SDRi on 500 test mixtures: +3.28 dB live and offline (median +3.32), +2.92 dB in simulated rooms; 0 % targets missed; 12.5 dB quieter when the target is absent. *Configured since step 07b, v2b + output gate (−12 / −18 / 15 dB):* +2.51 dB at 30 dB (+3.10 at 15 dB), +2.07 dB in simulated rooms; 2 % missed; 17.1 dB quieter when the target is absent |
+| Neural training | 20,000 mixtures (25.4 GB cache on D:, half reverberant), 3 s crops, batch 4 × 4, ~12 min per round of 10,000 crops; second run 26 rounds, 5.4 h, best round 16: validation +3.72 dB. *Step 07b:* new random mixtures every round (4 workers, ~12.3 min per round), from v1, LR 1e-4; v2 15 rounds 3.3 h (+2.32 dB), v2b 30 rounds 6.2 h, best round 20: validation +3.17 dB, leak −17.8 dB |
+| Offline processing | 62 s recording in 6.5 s (step 07: 6.8 s with either method, 12 s the first time; step 07b: 6.1 s with v2b + gate, 6.8 s baseline); at most 5 minutes per recording on the page; one job at a time |
 | Speaker cushion / max queue / limiter | 2 chunks / 8 chunks / −1 dBFS ceiling, 50 ms release |
 | Heartbeat / health check | every 2 s / every 5 s |
 | Python / Node | 3.11 / 24 |
@@ -5482,7 +6016,7 @@ WS   /ws/session                        status 1/s, levels 20/s (input and outpu
 | Honest noise floor (enhancements off) | about −65 dBFS |
 | WASAPI start-up silence (discarded) | 500 ms with enhancements on, none with them off |
 | Mic stall timeout / live chunk queue | 2 s / 32 chunks, oldest dropped first |
-| Backend tests / website tests | 264 / 18 (after step 03); 344 / 18 (after step 04); 387 / 23 (after step 05); 482 / 36 (after step 06); 540 / 46 (after step 07) |
+| Backend tests / website tests | 264 / 18 (after step 03); 344 / 18 (after step 04); 387 / 23 (after step 05); 482 / 36 (after step 06); 540 / 46 (after step 07); 572 / 50 (after step 07b) |
 | Detector | EfficientAT mn10_as, 4.88 M parameters, 32 kHz, 1 s window padded to 10 s, a result every 0.25 s |
 | Training data | `D:/SoundSpyData/` (external, processed, mixtures, models) |
 | Mixtures | 6 s, 20,000 / 2,000 / 2,000 recipes (train / val / test), seeds 1 / 2 / 3 |
