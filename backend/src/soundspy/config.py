@@ -405,6 +405,27 @@ class HybridGateConfig:
 
 
 @dataclass(frozen=True)
+class SpeechGateConfig:
+    """The speech route's gate (step 07d): driven by DeepFilterNet3's own output."""
+
+    enabled: bool = True
+    close_db: float = -15.0  # r = L(output) - L(input) below this for the hold: close
+    open_db: float = -12.0  # r above this: open (hysteresis: open_db > close_db)
+    close_hold_ms: float = 150.0  # the hold when the detector is unsure (or absent)
+    close_hold_confident_ms: float = 50.0  # the hold when the detector is sure nothing is there
+    detector_override_max_ms: float = 1000.0  # the hold while the detector says "on"
+    close_ms: float = 50.0  # closing ramp
+    open_ms: float = 5.0  # opening ramp
+    ratio_attack_ms: float = 5.0  # level envelopes of output and input
+    ratio_release_ms: float = 50.0
+    close_prob_factor: float = 0.5  # "sure": probability < factor x threshold
+    min_level_dbfs: float = -60.0  # input quieter than this cannot open the gate
+    block_ms: float = 1.0  # decision grid
+    warmup_ms: float = 0.0  # after the speech route starts, r is not used for this long (closed)
+    start_closed: bool = True  # a stream (or the route) starts closed
+
+
+@dataclass(frozen=True)
 class HybridSpeechConfig:
     """The speech route: DeepFilterNet3 (``speech`` in ``hybrid.yaml``)."""
 
@@ -425,7 +446,7 @@ class HybridSpeechConfig:
 
 @dataclass(frozen=True)
 class HybridConfig:
-    """``configs/extraction/hybrid.yaml`` (step 07c)."""
+    """``configs/extraction/hybrid.yaml`` (step 07c; ``speech_gate`` step 07d)."""
 
     speech: HybridSpeechConfig
     gate: HybridGateConfig
@@ -433,6 +454,10 @@ class HybridConfig:
     performance_cores: bool
     tuning: dict[str, tuple[float, ...]]  # gate parameter -> values tried on val
     tuning_max_cost_db: float  # strongest suppression whose SI-SDRi cost stays within this
+    speech_gate: SpeechGateConfig = SpeechGateConfig()
+    speech_tuning: dict[str, tuple[float, ...]] = dataclasses.field(default_factory=dict)
+    speech_tuning_max_cut: float = 0.02  # speech-cut rate allowed on the tuning session
+    speech_tuning_max_cost_db: float = 0.3  # speech-over-music SI-SDRi below the 07c gate
 
 
 def speech_model_dir(config: AppConfig) -> Path:
@@ -1153,14 +1178,54 @@ def load_neural_tse_config(path: Path, project_root: Path, labels: LabelSet) -> 
 
 
 HYBRID_TUNABLE = ("close_prob_factor", "close_hold_ms", "reopen_ratio_db")
+SPEECH_GATE_TUNABLE = ("close_db", "open_db", "close_hold_ms")
+SPEECH_GATE_KEYS = ("enabled", "close_db", "open_db", "close_hold_ms", "close_hold_confident_ms",
+                    "detector_override_max_ms", "close_ms", "open_ms", "ratio_attack_ms",
+                    "ratio_release_ms", "close_prob_factor", "min_level_dbfs", "block_ms",
+                    "warmup_ms", "start_closed")
+
+
+def _grid(section: _Section, keys: tuple[str, ...]) -> dict[str, tuple[float, ...]]:
+    grid: dict[str, tuple[float, ...]] = {}
+    for key in keys:
+        values = section.data[key]
+        if (not isinstance(values, list) or not values
+                or not all(isinstance(v, int | float) and not isinstance(v, bool) for v in values)):
+            raise section._fail(key, "a non-empty list of numbers")
+        grid[key] = tuple(float(v) for v in values)
+    return grid
+
+
+def _speech_gate(top: _Section, source: str) -> SpeechGateConfig:
+    s = _Section(top.data, "speech_gate", SPEECH_GATE_KEYS, source)
+    gate = SpeechGateConfig(
+        enabled=s.boolean("enabled"),
+        close_db=s.number("close_db", ge=-80, le=0),
+        open_db=s.number("open_db", ge=-80, le=0),
+        close_hold_ms=s.number("close_hold_ms", ge=0, le=10000),
+        close_hold_confident_ms=s.number("close_hold_confident_ms", ge=0, le=10000),
+        detector_override_max_ms=s.number("detector_override_max_ms", ge=0, le=10000),
+        close_ms=s.number("close_ms", ge=0, le=5000),
+        open_ms=s.number("open_ms", ge=0, le=1000),
+        ratio_attack_ms=s.number("ratio_attack_ms", gt=0, le=1000),
+        ratio_release_ms=s.number("ratio_release_ms", gt=0, le=5000),
+        close_prob_factor=s.number("close_prob_factor", gt=0, le=1),
+        min_level_dbfs=s.number("min_level_dbfs", ge=-140, le=0),
+        block_ms=s.number("block_ms", gt=0, le=50),
+        warmup_ms=s.number("warmup_ms", ge=0, le=10000),
+        start_closed=s.boolean("start_closed"),
+    )
+    if gate.open_db <= gate.close_db:
+        raise s._fail("open_db", f"above close_db ({gate.close_db:g}): the hysteresis")
+    return gate
 
 
 def load_hybrid_config(path: Path, labels: LabelSet) -> HybridConfig:
     """Load and validate ``configs/extraction/hybrid.yaml``."""
     path = Path(path)
     source = f"extraction/{path.name}"
-    top = _Section({"root": load_yaml(path)}, "root", ("speech", "gate", "live", "tuning"),
-                   source)
+    top = _Section({"root": load_yaml(path)}, "root", ("speech", "gate", "speech_gate", "live",
+                                                       "tuning", "speech_tuning"), source)
     top.name = ""
     sp = _Section(top.data, "speech", ("labels", "route", "model", "atten_lim_db",
                                        "post_filter", "device", "backend", "cpu_threads",
@@ -1197,13 +1262,9 @@ def load_hybrid_config(path: Path, labels: LabelSet) -> HybridConfig:
     )
     live = _Section(top.data, "live", ("ramp_ms", "performance_cores"), source)
     tu = _Section(top.data, "tuning", (*HYBRID_TUNABLE, "max_cost_db"), source)
-    grid: dict[str, tuple[float, ...]] = {}
-    for key in HYBRID_TUNABLE:
-        values = tu.data[key]
-        if (not isinstance(values, list) or not values
-                or not all(isinstance(v, int | float) and not isinstance(v, bool) for v in values)):
-            raise tu._fail(key, "a non-empty list of numbers")
-        grid[key] = tuple(float(v) for v in values)
+    grid = _grid(tu, HYBRID_TUNABLE)
+    st = _Section(top.data, "speech_tuning", (*SPEECH_GATE_TUNABLE, "max_speech_cut",
+                                              "max_cost_db"), source)
     return HybridConfig(
         speech=HybridSpeechConfig(
             labels=tuple(chosen),
@@ -1223,6 +1284,10 @@ def load_hybrid_config(path: Path, labels: LabelSet) -> HybridConfig:
         performance_cores=live.boolean("performance_cores"),
         tuning=grid,
         tuning_max_cost_db=tu.number("max_cost_db", ge=0, le=10),
+        speech_gate=_speech_gate(top, source),
+        speech_tuning=_grid(st, SPEECH_GATE_TUNABLE),
+        speech_tuning_max_cut=st.number("max_speech_cut", ge=0, le=1),
+        speech_tuning_max_cost_db=st.number("max_cost_db", ge=0, le=10),
     )
 
 

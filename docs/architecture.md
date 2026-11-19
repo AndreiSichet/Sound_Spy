@@ -530,6 +530,54 @@ Real-room benchmark: `soundspy record-benchmark` → `data/benchmark/<session>/<
 
 Result (`experiments/ext_hybrid/`): gate 400 ms / 0.5 / −6 dB, warm-up 1 s (val), speech input gain +10 dB (`SpeechEnhancer(input_gain_db=)`, `enhance_whole(input_gain_db=)`, `HybridCores.speech_gain_db`). Test +3.20 dB offline = streaming, +2.06 with the live detector (v1 +3.28); music only with Speech selected −45.2 dB at 30 dB, −56.0 at 40 dB; speech over music +7.0 offline / +4.0 live (v1 +5.33); real room at 0 dB +12.0 / +11.8 (classical), +10.7 (pop), speech-only interruption 0.2 %; owner's classical recording −25.4 dB (the first 2 s of the stream). Live: Speech route RTF p95 0.39, Waveformer route 0.72 (worst 0.86, as Neural alone), 144 ms.
 
+## Speech-route gate (step 07d)
+
+**`SpeechRouteGate`** (`extraction/speech_gate.py`, `speech_gate` in `hybrid.yaml`): the speech
+route's gate. Per `block_ms` block (counted from `origin`, the stream sample at which the gate was
+(re)started): one-pole envelopes of DeepFilterNet3's estimate (input gain undone) and its input
+(`ratio_attack_ms` / `ratio_release_ms`), `r` = their ratio. State OPEN / CLOSED: OPEN → CLOSED
+when `r < close_db` (or input below `min_level_dbfs`) for `hold` blocks without a break, CLOSED →
+OPEN when `r > open_db` and the input above `min_level_dbfs` (`open_db > close_db`, checked by the
+loader); `hold` = `close_hold_confident_ms` when the `ActivitySource` says `absent(…,
+close_prob_factor)`, `max(close_hold_ms, detector_override_max_ms)` when it says `active`,
+`close_hold_ms` otherwise (asked at most every 10 blocks, and only once `r` has been low for the
+shortest hold). Position ramps `open_ms` / `close_ms`, the next block ramps linearly in dB as in
+`HybridGate`; `positions()` / `gains()`; `position_gains(pos, attenuation_db)`. `reset()` = a
+stream (closed when `start_closed`, no warm-up); `restart(at_sample, warmup)` = the speech route
+(re)starts mid-stream: closed again, `r` unused for `warmup_ms`, detector times offset by
+`at_sample`. Nothing selected or disabled: open at once.
+
+**In `HybridExtractor`**: `speech_gate` exists when a speech route does; it is fed the speech
+route's own padded estimate whenever that route runs (`restart(self._pos)` when it starts again
+after resting) and its gains replace the `HybridGate`'s while the incoming route is a speech
+route. The `HybridGate` runs on every chunk as in 07c (Waveformer route, pass-through). `gate=`
+switches both. Status `extraction.gate_kind`: `speech_route` | `detector`; `gate_state`,
+`gate_closed`, `gate_reopened` are the gate in use (`active_gate`).
+
+**Evaluation.** `evaluate_hybrid.speech_gate_positions` / `speech_gate_output` /
+`mix_with_positions` (whole file, `latency` zeros first, as streaming); `configured_output(config,
+route, …)` = the speech-route gate for `dfn` / `cascade`, the hybrid gate for `wf`; new system
+`dfn_sgate`; the `hybrid_*` systems use `configured_output`. `real_benchmark`: `find_pauses`
+(50 ms frames ≤ room level + 6 dB between two speech frames; room level = the `room` take's
+median frame level), `pause_energies` → summary `pause_{brief,short,long}_db` (energies pooled
+over the group's pauses: < 0.5 s, 0.5–2 s, ≥ 2 s), `music_start` cases (every 6 s of each music
+take, 5 s long; `leak_s` = 20 ms frames with the output less than 30 dB below the input) and
+`speech_start` cases (0.2 s before up to 8 words after ≥ 0.5 s pauses; interruption rate); systems
+`hgate_offline` / `hgate_live` (the speech route with the 07c gate); summary groups per ratio,
+`mixes`, per music; `evaluate_real(name=, role=)` → `experiments/<name>/real_room.json` +
+`real_room_<session>.md`, listening files `outputs/eval/<name>/real/<session>/`.
+`training/evaluate_speech_gate.py`: `soundspy evaluate speech-gate --session <tuning>` (Speech-alone
+val recipes among `--n` + val `pair_a` / `pair_absent` / `librispeech`, `--bench-n` each, and the
+tuning session's cases; DeepFilterNet3 once, both timelines; rows `none`, `07c`, the
+`speech_tuning` grid with `open_db > close_db`; rule in its docstring; then `warmup_ms` ∈
+{0, 100, 200, 300, 500, 1000}) → `experiments/ext_hybrid_07d/speech_gate_tuning.json|md`;
+`--check`: the test set's Speech-selected sets → `synthetic_test.json|md`.
+`record-benchmark`: the room part prints `room_tone_note` instead of the "very quiet" warning
+(`level_warnings(quiet_expected=True)` warns only below `DEAD_INPUT_DBFS` = −90).
+`find_sessions(root, "A+B")` / `load_takes(folders, max_seconds)` (several sessions scored together, take names prefixed with the session's last four characters; every take cut at `max_seconds`); `room_for(room, n)` repeats a shorter room take; pause energies are pooled unrounded.
+
+Result (`experiments/ext_hybrid_07d/`): tuned −12 dB / 100 ms / −9 dB, warm-up 0, detector hold 1000 ms. Held-out real room (`20261119-164017-bb5e+20261119-164508-2d33`, 56 s, live, 40 dB), classical: short pauses −33.0 dB (07c −30.5), long −42.5 dB (07c −38.5); song with vocals ~−15 dB for every system; speech cut 0.3 %; 0 dB speech over music −0.15 / +0.27 dB vs 07c; stream start 0.0 s. Synthetic test live +0.14 to +1.23 dB, music only −42.8 dB (07c −46.1), offline 0.5–2.1 dB below 07c. Live: speech route RTF p95 0.34 (worst 0.45), Waveformer route 0.66 (worst 0.74), 0 underruns.
+
 ## Training data (step 04, `soundspy.data`)
 
 Storage (`paths` in `default.yaml`; large data never inside the repository):
@@ -650,6 +698,7 @@ report is given in chat; `project_insights.md` is updated every step.
 | 07 | Neural TSE (Waveformer fine-tuned, label-conditioned, streaming); live extraction in the Semantic tab — **done** (`extraction/neural_tse.py`, cache + reverb, method selector) | 1 |
 | 07b | Neural extraction v2: silent-frame loss, output gate, LibriSpeech, dynamic mixing, speaker-queue draining — **done** | 1 |
 | 07c | Hybrid extraction: DeepFilterNet3 for Speech, Waveformer v1 for the rest, detector-closed / output-reopened gate, real-room benchmark — **done** | 1 |
+| 07d | Speech-route gate driven by DeepFilterNet3's output; pause metrics; tuning / held-out real-room sessions — **done** | 1 |
 | 08 | End-to-end evaluation, robustness, polish, documentation for the university report | 1 |
 | module-3/4 | Simulated array (pyroomacoustics), DOA, beamforming, Spatial tab | 2 |
 | module-5 | Source tracking + detection fusion, Sources tab | 3 |

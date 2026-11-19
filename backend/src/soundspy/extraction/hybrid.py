@@ -20,10 +20,17 @@ anything else          **Waveformer** v1 (``neural_tse.py``), label-conditioned;
 
 ``speech.route: cascade`` sends Speech through the Waveformer first and DeepFilterNet3 after it.
 
-After the route: the :class:`~soundspy.extraction.hybrid_gate.HybridGate` (the detector closes
-it, the extractor's output reopens it), then residual mixing with the slider::
+After the route, a gate, then residual mixing with the slider::
 
     y = G * (est + g * (x - est)),    g = 10^(-attenuation_db / 20),   G = gate gain (1 .. g)
+
+* **speech route** (step 07d): the :class:`~soundspy.extraction.speech_gate.SpeechRouteGate`,
+  driven by DeepFilterNet3's own output against its input (the detector only sets how long it
+  waits before closing);
+* **Waveformer route**: the :class:`~soundspy.extraction.hybrid_gate.HybridGate` of step 07c
+  (the detector closes it, the extractor's output reopens it). It runs on every chunk, whatever
+  the route, exactly as in 07c; its gains are used whenever the speech route is not the one in
+  use (Waveformer, pass-through).
 
 **One delay for every route.** The session needs a fixed latency (bypass, recordings, the
 evaluation), so every route's estimate is delayed to the slowest route's: DeepFilterNet3 needs
@@ -54,8 +61,10 @@ from soundspy.core.audio import AudioBuffer
 from soundspy.extraction.activity import ActivitySource
 from soundspy.extraction.base import Extractor
 from soundspy.extraction.hybrid_gate import HybridGate
+from soundspy.extraction.speech_gate import SpeechRouteGate
 
 OFF, SPEECH, WAVEFORMER, CASCADE = "off", "speech_enhancer", "waveformer", "cascade"
+SPEECH_ROUTES = (SPEECH, CASCADE)
 
 
 class HybridUnavailable(RuntimeError):
@@ -189,6 +198,9 @@ class HybridExtractor(Extractor):
         self.speech_labels = frozenset(config.speech.labels)
         self.gate_config = (config.gate if gate is None
                             else dataclasses.replace(config.gate, enabled=bool(gate)))
+        self.speech_gate_config = (
+            config.speech_gate if gate is None
+            else dataclasses.replace(config.speech_gate, enabled=bool(gate)))
         self.activity = activity
         self.notes = list(notes)
         self._speech = speech
@@ -202,6 +214,8 @@ class HybridExtractor(Extractor):
                 self._routes[SPEECH] = _SpeechRoute(speech)
         self._latency = 0
         self.gate: HybridGate | None = None
+        self.speech_gate: SpeechRouteGate | None = None
+        self._pos = 0  # output samples since reset() (the speech gate's clock)
         self.pinned: int | None = None
         self._incoming = OFF  # the route in use (set again by reset())
         self._weights: dict[str, float] = {OFF: 1.0}
@@ -231,6 +245,8 @@ class HybridExtractor(Extractor):
         self.activity = activity
         if self.gate is not None:
             self.gate.activity = activity
+        if self.speech_gate is not None:
+            self.speech_gate.activity = activity
 
     @property
     def cores(self) -> list:
@@ -273,6 +289,9 @@ class HybridExtractor(Extractor):
         self._ramp = (1.0 if self.config.ramp_ms <= 0
                       else 1000.0 / (self.config.ramp_ms * sample_rate))
         self.gate = HybridGate(self.gate_config, sample_rate, self._latency, self.activity)
+        self.speech_gate = (SpeechRouteGate(self.speech_gate_config, sample_rate, self._latency,
+                                            self.activity)
+                            if any(r in self._routes for r in SPEECH_ROUTES) else None)
         self.reset()
         return 1
 
@@ -290,9 +309,12 @@ class HybridExtractor(Extractor):
         self._incoming = current
         self._wait = 0
         self._wf_labels: frozenset[str] = frozenset()
+        self._pos = 0
         if self.gate is not None:
             self.gate.reset()
-            self.gate.restart(current in (SPEECH, CASCADE))
+            self.gate.restart(current in SPEECH_ROUTES)
+        if self.speech_gate is not None:
+            self.speech_gate.restart(0, warmup=current in SPEECH_ROUTES)
 
     def start(self) -> None:
         if self.config.performance_cores:
@@ -352,13 +374,14 @@ class HybridExtractor(Extractor):
         self._dry.push(x)
         dry = self._dry.read(n)
         est = np.zeros(n, dtype=np.float32)
+        speech_est = None
         for name, route in self._routes.items():
             if name == OFF:
                 continue
             running = name in weights
             # the speech labels for the speech routes; for the Waveformer the selection, or
             # while it fades out after a deselection, the last one it had
-            if name in (SPEECH, CASCADE):
+            if name in SPEECH_ROUTES:
                 route_labels = self.speech_labels
             else:
                 if labels and self.route_for(labels) == WAVEFORMER:
@@ -373,21 +396,43 @@ class HybridExtractor(Extractor):
                 self._resting.discard(name)
                 route.reset()
                 self._pads[name] = _Fifo(self._latency - self._route_latency[name])
+                if name in SPEECH_ROUTES and self.speech_gate is not None:
+                    self.speech_gate.restart(self._pos)  # closed until speech appears
             self._pads[name].push(route.process(x, route_labels))
-            est += weights[name] * self._pads[name].read(n)
+            part = self._pads[name].read(n)
+            if name in SPEECH_ROUTES:
+                speech_est = part
+            est += weights[name] * part
         if OFF in weights:
             est += weights[OFF] * dry
         attenuation_db = self.target.attenuation_db if self.target is not None else 0.0
-        gains = self.gate.gains(est, dry, labels, attenuation_db)
+        gains = self.gate.gains(est, dry, labels, attenuation_db)  # runs on as in step 07c
+        if speech_est is not None and self.speech_gate is not None:
+            # fed whenever the speech route runs (its clock stays the stream's); its gains count
+            # while the speech route is the one in use
+            speech_gains = self.speech_gate.gains(speech_est, dry, labels, attenuation_db)
+            if self._incoming in SPEECH_ROUTES:
+                gains = speech_gains
+        self._pos += n
         g = 10.0 ** (-attenuation_db / 20.0)
         y = gains * (est + g * (dry - est))
         return AudioBuffer(np.ascontiguousarray(y, dtype=np.float32).reshape(-1, 1),
                            chunk.sample_rate, {**chunk.metadata, "extraction": self.method})
 
+    @property
+    def active_gate(self) -> HybridGate | SpeechRouteGate | None:
+        """The gate whose gains are in use: the speech gate on the speech route, else the
+        07c gate."""
+        if self._incoming in SPEECH_ROUTES and self.speech_gate is not None:
+            return self.speech_gate
+        return self.gate
+
     def status_info(self) -> dict[str, Any]:
         info = super().status_info()
-        gate = self.gate
-        if gate is None or not self.gate_config.enabled:
+        gate = self.active_gate
+        speech = gate is not None and gate is self.speech_gate
+        enabled = self.speech_gate_config.enabled if speech else self.gate_config.enabled
+        if gate is None or not enabled:
             gate_state = "off"
         else:
             gate_state = "closed" if gate.closed else "open"
@@ -396,6 +441,7 @@ class HybridExtractor(Extractor):
             route=self.route,
             routes=[name for name in self._routes if name != OFF],
             gate=bool(self.gate_config.enabled),
+            gate_kind="speech_route" if speech else "detector",
             gate_state=gate_state,
             gate_closed=round(gate.closed_share, 3) if gate is not None else None,
             gate_reopened=gate.reopened if gate is not None else None,
@@ -405,7 +451,7 @@ class HybridExtractor(Extractor):
         )
         for route in self._routes.values():
             info.update(route.status())
-        part = info.get("speech_enhancer") if self.route in (SPEECH, CASCADE) else None
+        part = info.get("speech_enhancer") if self.route in SPEECH_ROUTES else None
         part = part or info.get("waveformer") or info.get("speech_enhancer") or {}
         info.update(device=part.get("device"), model=part.get("model"),
                     model_ms=part.get("model_ms"), model_ms_p95=part.get("model_ms_p95"))

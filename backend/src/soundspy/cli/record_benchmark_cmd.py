@@ -24,7 +24,10 @@ import argparse
 from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
+
 from soundspy.cli.common import (
+    DEAD_INPUT_DBFS,
     USER_ERRORS,
     add_profile_arguments,
     countdown,
@@ -70,6 +73,16 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     parser.add_argument("--countdown", type=float, default=3.0,
                         help="seconds of countdown before each take (default 3)")
     parser.set_defaults(handler=run)
+
+
+def room_tone_note(buf: AudioBuffer) -> str:
+    """The informational line after the room part (step 07d: it used to warn "muted or very
+    quiet input", but a quiet room is exactly what this part records)."""
+    from soundspy.dsp.levels import rms_dbfs
+
+    level = float(np.max(rms_dbfs(buf)))
+    return (f"Room tone: {level:.1f} dBFS RMS (a quiet room is what this part needs; only an "
+            f"input below {DEAD_INPUT_DBFS:.0f} dBFS would be a dead microphone).")
 
 
 def _delete_take(wav: Path) -> None:
@@ -124,8 +137,11 @@ def record_benchmark(config: AppConfig, read_take: Callable[[float], AudioBuffer
             last = writer.close()
             kept.append(last)
             count += 1
-            print_level_report(buf, compare_channels=False)
-            for warning in level_warnings(buf):
+            room = part == "room"  # a quiet room is the goal: no "very quiet" warning
+            print_level_report(buf, compare_channels=False, quiet_expected=room)
+            if room:
+                print(room_tone_note(buf))
+            for warning in level_warnings(buf, quiet_expected=room):
                 print(f"WARNING: {warning}")
             print(f"Saved {last.name}")
     print(f"\nDone. Kept {len(kept)} take(s). Score them with `soundspy evaluate extraction "

@@ -5,8 +5,12 @@
     soundspy evaluate extraction --method mask_baseline [--split test] [--n 500]
                                  [--sample-rate 48000] [--name ext_neural_tse_v2]
                                  [--no-reverb] [--no-benchmarks]
-    soundspy evaluate extraction --method hybrid [--benchmark real [--session ID]]
+    soundspy evaluate extraction --method hybrid [--benchmark real [--session ID[+ID]]
+                                 [--name ext_hybrid_07d] [--role tuning|held-out]
+                                 [--max-seconds S]]
     soundspy evaluate hybrid-gate [--n 200] [--bench-n 40]
+    soundspy evaluate speech-gate --session ID [--n 1000] [--bench-n 40]
+    soundspy evaluate speech-gate --check
 
 **detection** scores the trained model against the zero-shot baseline, writes
 ``experiments/<name>/metrics.json`` and prints a per-class table (without a trained checkpoint
@@ -26,6 +30,11 @@ next to the checkpoint's experiment.
 scores the real-room benchmark the owner recorded (``soundspy record-benchmark``).
 **hybrid-gate** tries the ``tuning`` grid of ``hybrid.yaml`` on validation recipes and writes
 ``experiments/ext_hybrid/gate_tuning.json`` / ``.md``.
+
+**speech-gate** (step 07d, ``training/evaluate_speech_gate.py``): ``--session`` tunes the
+speech-route gate (``speech_tuning`` of ``hybrid.yaml``) on validation recipes and that real-room
+**tuning** session; ``--check`` scores the configured gate on the test set's Speech-selected
+benchmarks. Both write to ``experiments/ext_hybrid_07d/``.
 """
 
 from __future__ import annotations
@@ -39,7 +48,8 @@ HELP = "evaluate the detection model or an extraction method"
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser(NAME, help=HELP, description=HELP)
-    parser.add_argument("task", choices=("detection", "extraction", "gate", "hybrid-gate"))
+    parser.add_argument("task", choices=("detection", "extraction", "gate", "hybrid-gate",
+                                         "speech-gate"))
     parser.add_argument("--checkpoint", default=None,
                         help="gate: the neural model (default: extraction.neural_tse.checkpoint)")
     parser.add_argument("--experiment", default=None, help="experiment name (default from config)")
@@ -55,7 +65,15 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     parser.add_argument("--benchmark", choices=("real",), default=None,
                         help="extraction, hybrid: the real-room benchmark instead of the recipes")
     parser.add_argument("--session", default=None,
-                        help="--benchmark real: the recording session (default: the newest)")
+                        help="--benchmark real: the recording session (default: the newest; "
+                             "several joined by +); "
+                             "speech-gate: the tuning session")
+    parser.add_argument("--max-seconds", type=float, default=None,
+                        help="--benchmark real: only the first seconds of every take")
+    parser.add_argument("--role", choices=("tuning", "held-out"), default=None,
+                        help="--benchmark real: what the session is used for (stored)")
+    parser.add_argument("--check", action="store_true",
+                        help="speech-gate: the test check instead of the tuning")
     parser.add_argument("--bench-n", type=int, default=40,
                         help="hybrid-gate: recipes per validation pair benchmark")
     parser.add_argument("--n", type=int, default=None,
@@ -178,11 +196,40 @@ def run_real(args: argparse.Namespace) -> int:
     try:
         config = load_config()
         result = evaluate_real(config, session=args.session, device=args.device,
+                               name=args.name or "ext_hybrid", role=args.role,
+                               max_seconds=args.max_seconds,
                                progress=lambda m: print(m, flush=True))
     except (ConfigError, RealBenchmarkError, ValueError) as exc:
         print(f"error: {exc}")
         return 1
     print(format_real(result))
+    print(f"-> {result['path']}")
+    return 0
+
+
+def run_speech_gate(args: argparse.Namespace) -> int:
+    from soundspy.config import ConfigError, load_config
+    from soundspy.training import evaluate_speech_gate as esg
+    from soundspy.training.real_benchmark import RealBenchmarkError
+
+    progress = lambda m: print(m, flush=True)  # noqa: E731
+    try:
+        config = load_config()
+        if args.check:
+            result = esg.run_check(config, args.device, progress=progress)
+            print(esg.format_synthetic(result))
+        else:
+            if args.session is None:
+                raise ValueError("speech-gate tuning needs --session (the tuning session)")
+            result = esg.run_tuning(config, args.session, args.device, n=args.n or 1000,
+                                    bench_n=args.bench_n, progress=progress)
+            print(esg.format_tuning(result))
+            chosen = result["chosen"]
+            print("chosen:", chosen["gate"] if chosen else "none",
+                  "warm-up:", result["chosen_warmup_ms"])
+    except (ConfigError, RealBenchmarkError, RuntimeError, ValueError) as exc:
+        print(f"error: {exc}")
+        return 1
     print(f"-> {result['path']}")
     return 0
 
@@ -196,6 +243,8 @@ def run(args: argparse.Namespace) -> int:
         return run_gate(args)
     if args.task == "hybrid-gate":
         return run_hybrid_gate(args)
+    if args.task == "speech-gate":
+        return run_speech_gate(args)
 
     from soundspy.config import ConfigError, load_config
     from soundspy.data.mixtures import RecipeError

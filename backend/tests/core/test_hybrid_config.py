@@ -45,3 +45,19 @@ def test_bad_values_are_refused(configs_dir, config, tmp_path: Path) -> None:
     bad.write_text(yaml.safe_dump(data), encoding="utf-8")
     with pytest.raises(ConfigError, match="close_prob_factor"):
         load_hybrid_config(bad, config.labels)
+
+
+def test_speech_gate_section(configs_dir, config, tmp_path: Path) -> None:
+    """Step 07d: the speech-route gate's settings, its tuning grid, and the hysteresis rule."""
+    sg = config.extraction.hybrid.speech_gate
+    assert sg.enabled and sg.start_closed and sg.open_db > sg.close_db
+    hy = config.extraction.hybrid
+    assert set(hy.speech_tuning) == {"close_db", "open_db", "close_hold_ms"}
+    assert 0 < hy.speech_tuning_max_cut <= 0.05 and hy.speech_tuning_max_cost_db == 0.3
+    source = configs_dir / "extraction" / "hybrid.yaml"
+    data = yaml.safe_load(source.read_text(encoding="utf-8"))
+    data["speech_gate"]["open_db"] = data["speech_gate"]["close_db"] - 1  # no hysteresis
+    bad = tmp_path / "hybrid.yaml"
+    bad.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ConfigError, match="open_db"):
+        load_hybrid_config(bad, config.labels)

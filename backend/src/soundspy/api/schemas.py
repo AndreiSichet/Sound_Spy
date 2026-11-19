@@ -167,6 +167,7 @@ class ExtractionStatusModel(BaseModel):
     routes: list[str] | None = None  # the routes this session can use
     gate_state: str | None = None  # open | closed | off (the hybrid gate right now)
     gate_reopened: int | None = None  # times the gate reopened
+    gate_kind: str | None = None  # speech_route (step 07d) | detector (step 07c): the gate in use
     speech_enhancer: dict[str, Any] | None = None  # model, device, latency_ms, model_ms(_p95)
     waveformer: dict[str, Any] | None = None  # the same for the Waveformer route
     performance_cores: bool | None = None  # the audio thread is kept on the fast CPU cores

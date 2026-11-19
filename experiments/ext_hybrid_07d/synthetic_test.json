@@ -1,0 +1,298 @@
+{
+  "split": "test",
+  "groups": {
+    "speech": 53,
+    "pair_a": 100,
+    "pair_absent": 100,
+    "librispeech": 100
+  },
+  "attenuations_db": [
+    30.0,
+    40.0
+  ],
+  "rows": {
+    "dfn": {
+      "centred": {
+        "30": {
+          "speech": {
+            "si_sdr_i": 6.968,
+            "suppression_db": -23.826,
+            "interruption": 0.391,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 6.267,
+            "suppression_db": null,
+            "interruption": 0.371,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -24.347,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 12.182,
+            "suppression_db": null,
+            "interruption": 0.089,
+            "n": 100
+          }
+        },
+        "40": {
+          "speech": {
+            "si_sdr_i": 6.367,
+            "suppression_db": -28.285,
+            "interruption": 0.396,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 5.81,
+            "suppression_db": null,
+            "interruption": 0.378,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -28.816,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 12.338,
+            "suppression_db": null,
+            "interruption": 0.097,
+            "n": 100
+          }
+        }
+      }
+    },
+    "07c": {
+      "centred": {
+        "30": {
+          "speech": {
+            "si_sdr_i": 7.128,
+            "suppression_db": -38.967,
+            "interruption": 0.391,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 6.995,
+            "suppression_db": null,
+            "interruption": 0.371,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -45.221,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 12.492,
+            "suppression_db": null,
+            "interruption": 0.089,
+            "n": 100
+          }
+        },
+        "40": {
+          "speech": {
+            "si_sdr_i": 6.374,
+            "suppression_db": -48.355,
+            "interruption": 0.396,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 6.278,
+            "suppression_db": null,
+            "interruption": 0.378,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -55.998,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 12.547,
+            "suppression_db": null,
+            "interruption": 0.097,
+            "n": 100
+          }
+        }
+      },
+      "live": {
+        "30": {
+          "speech": {
+            "si_sdr_i": 4.699,
+            "suppression_db": -38.938,
+            "interruption": 0.427,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 4.025,
+            "suppression_db": null,
+            "interruption": 0.411,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -46.117,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 10.653,
+            "suppression_db": null,
+            "interruption": 0.137,
+            "n": 100
+          }
+        },
+        "40": {
+          "speech": {
+            "si_sdr_i": 3.818,
+            "suppression_db": -48.363,
+            "interruption": 0.432,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 3.43,
+            "suppression_db": null,
+            "interruption": 0.415,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -57.388,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 10.549,
+            "suppression_db": null,
+            "interruption": 0.145,
+            "n": 100
+          }
+        }
+      }
+    },
+    "07d": {
+      "centred": {
+        "30": {
+          "speech": {
+            "si_sdr_i": 5.554,
+            "suppression_db": -39.184,
+            "interruption": 0.398,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 4.861,
+            "suppression_db": null,
+            "interruption": 0.387,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -42.762,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 12.041,
+            "suppression_db": null,
+            "interruption": 0.101,
+            "n": 100
+          }
+        },
+        "40": {
+          "speech": {
+            "si_sdr_i": 4.565,
+            "suppression_db": -48.532,
+            "interruption": 0.405,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 4.156,
+            "suppression_db": null,
+            "interruption": 0.392,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -52.032,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 11.985,
+            "suppression_db": null,
+            "interruption": 0.108,
+            "n": 100
+          }
+        }
+      },
+      "live": {
+        "30": {
+          "speech": {
+            "si_sdr_i": 4.841,
+            "suppression_db": -39.191,
+            "interruption": 0.405,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 4.607,
+            "suppression_db": null,
+            "interruption": 0.391,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -42.752,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 11.875,
+            "suppression_db": null,
+            "interruption": 0.103,
+            "n": 100
+          }
+        },
+        "40": {
+          "speech": {
+            "si_sdr_i": 3.765,
+            "suppression_db": -48.535,
+            "interruption": 0.412,
+            "n": 51
+          },
+          "pair_a": {
+            "si_sdr_i": 3.911,
+            "suppression_db": null,
+            "interruption": 0.396,
+            "n": 100
+          },
+          "pair_absent": {
+            "si_sdr_i": null,
+            "suppression_db": -52.044,
+            "interruption": null,
+            "n": 100
+          },
+          "librispeech": {
+            "si_sdr_i": 11.829,
+            "suppression_db": null,
+            "interruption": 0.112,
+            "n": 100
+          }
+        }
+      }
+    }
+  },
+  "gate": {
+    "close_db": -12.0,
+    "open_db": -9.0,
+    "close_hold_ms": 100.0,
+    "warmup_ms": 0.0
+  },
+  "seconds": 235.5
+}

@@ -199,6 +199,13 @@ about −27 dB. The delay grows to 144 ms. The real-room benchmark (recorded by 
 owner's live listening test only the owner's own voice was left while talking over music, where the
 baseline let the music through.
 
+*Since step 07d:* the speech route has its own gate, which follows DeepFilterNet3's output instead
+of waiting for the detector to be sure: on a held-out real-room session with classical music the
+long pauses are 42 dB quieter (07c 39, 49 dB with voice and music equally loud), short ones 33 dB
+(07c 31), word starts are no longer cut (3 % against 17 %) and music playing when a session starts
+is no longer heard. A song with vocals stays audible in the pauses (its singer is a voice), and
+short pauses still wait for the live detector's lag (Chapter 15.10–15.11).
+
 ### The story so far, step by step
 
 Each step was specified by the project owner, built, tested on the laptop and written up here.
@@ -214,6 +221,7 @@ Each step was specified by the project owner, built, tested on the laptop and wr
 | 07 | 16 Nov | **Pulling sounds apart.** A published network for real-time sound extraction (Waveformer, MIT licence) was adapted, checked against its original code, and fine-tuned for the seven sound types: 25 GB of training mixtures rendered once to drive D:, half of them in simulated rooms, and 7.9 hours of training in two runs (the first one taught a lesson about the loss). It runs live at 44.1 kHz inside the 48 kHz session through a streaming resampler, adds 10.6 ms of delay, and is mixed back with a little of the original. Method selector, output level meter, 15 dB default. Test score +3.3 dB (baseline: −4.9 live, +2.2 offline) | Chapter 14 |
 | 07b | 17–18 Nov | **Quieter when it should be (partly).** The 225 ms delay after a glitch fixed. A loss that punishes leakage in every 50 ms the selected sound is silent, an output gate with an on/off switch, 100 h of LibriSpeech, new random mixtures every round in 2,000 pre-computed rooms. Two training runs (3.3 h and 6.2 h) and four short probes: the first run's penalty pushed silence to −50 dB and lost 1.4 dB of quality; the second (−30 dB) won half of it back. Result: 3–5 dB less leakage on test mixtures, 0.8 dB less quality, no gain on the owner's recording; most targets missed, reported honestly. | Chapter 14.11 |
 | 07c | 18 Nov | **Silent when absent, separated when overlapping.** No training: a published speech enhancer (DeepFilterNet3, MIT / Apache) adapted and checked against its original (123 dB agreement), run 3–6× faster with ONNX Runtime on the processor's fast cores; Speech goes to it, everything else to v1; a gate that the detector closes and the extractor reopens. Tuned on validation, scored on the same 500 test mixtures and the 07b benchmarks, and on the owner's recordings: music under "Speech" −60 dB at 40 dB, speech over music +7.6 dB offline. A real-room benchmark (record the parts, mix them digitally) is ready for the owner. | Chapter 15 |
+| 07d | 19 Nov | **Silent pauses on the speech route.** No training: a second gate for Speech that follows the speech enhancer's own output (a voice comes out 5 dB below the input, music 30–45 dB below), tuned on one real-room session and validation mixtures, reported on another the owner recorded. Pause measures, stream starts, two sessions scored together, the room tone repeated to the full length. With classical music the long pauses 42 dB quieter, short 33 dB, word starts intact, no music at a stream start; a song with vocals stays (its singer is a voice). | Chapter 15.10–15.11 |
 
 Along the way, problems were found and fixed, from a training run that silently ran out of memory
 to Python's memory clean-up causing clicks; each one is written up in Chapter 24, and every
@@ -573,7 +581,8 @@ Run these in window 1 (stop the server first with Ctrl+C, or use a third window 
 | `soundspy extract data\raw\<file>.wav --labels speech` | keeps speech, turns the rest down by 15 dB (`--attenuation-db`, `--method hybrid`, `neural_tse` or `mask_baseline`, `--no-gate`, `--out copy.wav`); the result appears on the page as a run |
 | `soundspy data download deepfilternet` | fetches the Hybrid method's speech enhancer once (8 MB, to D:) and prepares its fast version |
 | `soundspy record-benchmark --pop` | records the real-room benchmark, guided: you talking with pauses (60 s), music from a speaker (60 s), a song with vocals (60 s), room tone (30 s); Enter = record, r = redo, s = skip, q = quit (Chapter 15.9) |
-| `soundspy evaluate extraction --method hybrid --benchmark real` | scores every method on the recorded benchmark (`--session` for an older one) |
+| `soundspy evaluate extraction --method hybrid --benchmark real` | scores every method on the recorded benchmark (`--session` for an older one, `--session A+B` for two together, `--max-seconds 56` to leave out the end of every take, `--name ext_hybrid_07d`, `--role held-out`) |
+| `soundspy evaluate speech-gate --session <id>` | tunes the speech route's gate on validation mixtures and that real-room session (`--check`: the test set's Speech benchmarks; Chapter 15.11) |
 | `soundspy evaluate extraction --method hybrid` | measures the Hybrid method, its parts, Neural v1 and the baseline on 500 test mixtures and the benchmark sets (about an hour; `--method neural_tse`: Neural and the baseline, also in simulated rooms; `--method mask_baseline` alone: about 4 minutes) |
 | `soundspy db rebuild` | rebuilds the app's database from the files on disk (never loses anything; Chapter 17) |
 
@@ -4041,7 +4050,8 @@ every network (v1 −10.3, v2b −12.6 dB). The v1-with-gate examples are in
 *Step 07c. Code: `extraction/hybrid.py`, `extraction/hybrid_gate.py`,
 `extraction/speech_enhancer.py`, `extraction/speech_model.py`,
 `extraction/models/deepfilternet/`; settings: `configs/extraction/hybrid.yaml`; evaluation:
-`training/evaluate_hybrid.py`, `training/real_benchmark.py`.*
+`training/evaluate_hybrid.py`, `training/real_benchmark.py`. Step 07d: the speech route's own
+gate, `extraction/speech_gate.py`, and `training/evaluate_speech_gate.py` (15.10, 15.11).*
 
 ### 15.1 Why a third method
 
@@ -4079,7 +4089,8 @@ sounds overlap, word starts intact.**
 | Speech **and** other classes | the **Waveformer** | DeepFilterNet3 cannot keep music or an alarm. Running both and adding their outputs would count the sound they share (the voice) twice |
 | any other selection | the **Waveformer** | the only part that knows these classes |
 
-After the route comes the **hybrid gate** (15.4), then the same residual mixing as before:
+After the route comes a gate (on the speech route since step 07d the **speech-route gate**,
+15.10; on the Waveformer route the **hybrid gate**, 15.4), then the same residual mixing as before:
 everything that was removed comes back *attenuation* dB quieter.
 
 ```
@@ -4401,6 +4412,9 @@ Measured with the laptop microphone in a quiet room, 60 s per session, Listen on
   Waveformer's 10.6 ms).
 - **Start**: 12 s for the first session after starting the backend (both networks load, the
   ONNX step is checked, the Waveformer is traced), under 1 s afterwards.
+- **Step 07d** (19 Nov, with the +10 dB input gain and the speech-route gate): Speech route RTF
+  p95 0.34 (worst 0.45), 0 underruns, 134 ms, 56 %; Waveformer route 0.66 (worst 0.74), 0
+  underruns, 76 % (15.11).
 
 ### 15.9 The real-room benchmark
 
@@ -4485,14 +4499,236 @@ above are better):
 
 **The owner's live listening test (19 Nov, backend + page, Speech, 40 dB, music from the phone):** "the hybrid one is clearly better than the baseline: with the baseline I can still hear the music while talking, with the hybrid I can only hear myself talking, a major improvement." The step's central case (music under the voice, Chapter 15.1) is solved in the real room as the benchmark predicted. **Retest with the +10 dB input gain (19 Nov):** the first seconds of speech now come through (they had been missing in the first test, 24.57).
 
-### 15.10 Limitations
+### 15.10 The speech-route gate (step 07d)
 
-Chapter 26, items 31–38: the 40 ms delay for every selection, all voices kept (several
-talkers, singing), non-speech overlap still with the Waveformer, the gate trusting the
-detector's certainty (and its live lag), the first second after Speech is selected, 48 kHz only,
-the interruption rate being clean only on real recordings, and music heard for about 2 s at the
-start of a stream (the price of the input gain that fixed the speech enhancer's cold start on the
-quiet microphone; 15.3, 15.9).
+*Code: `extraction/speech_gate.py` (`SpeechRouteGate`), wired into `extraction/hybrid.py`;
+settings `speech_gate:` and `speech_tuning:` in `configs/extraction/hybrid.yaml`; tuning and
+checks `training/evaluate_speech_gate.py`; pause and stream-start measures in
+`training/real_benchmark.py`.*
+
+**The problem it solves.** The 07c gate (15.4) closes only when the **detector** is *sure* that
+nobody talks, for 400 ms. While someone talks over music with short pauses, the live detector
+never becomes sure: it still "hears" the last word for 0.6–1 s after it ended (its 1 s windows and
+smoothing). So in pauses of half a second to two seconds the gate stayed open and only
+DeepFilterNet3's own suppression worked.
+
+**Why DeepFilterNet3's own output is a good indicator.** On the speech route the extractor itself
+answers "is someone talking?" faster and almost as surely as the detector: it keeps voices and
+removes everything else, so the level of its output compared with the level of its input,
+
+```
+r = L(output) − L(input)      (dB; 1 ms blocks, envelopes: 5 ms attack, 50 ms release)
+```
+
+is about **−30 to −45 dB on music alone** and about **−5 dB on the owner's speech** (tuning
+session: median −4.6 dB in speech frames, −35 dB in pauses, −39 to −42 dB after the first
+quarter second of a pause). A 20+ dB gap, and it reacts within milliseconds. (The Waveformer's
+confident mistakes leak at −12 to −20 dB, so its route keeps the detector-driven gate.)
+
+**The state diagram.**
+
+```
+                 r < close_db (−12 dB) without a break for the hold
+       ┌────────┐ ─────────────────────────────────────────────────► ┌────────┐
+       │  OPEN  │                closing ramp close_ms (50 ms)       │ CLOSED │ ◄── start of a stream,
+       │ gain 1 │ ◄───────────────────────────────────────────────── │ gain g │     or of the speech
+       └────────┘      r > open_db (−9 dB): opening ramp 5 ms        └────────┘     route in a session
+
+       the hold = close_hold_confident_ms (50 ms)    the detector is SURE nobody talks
+                  detector_override_max_ms (1000 ms) the detector says "speech"
+                  close_hold_ms (100 ms)             otherwise (unsure, not decided yet, none)
+```
+
+- **Hysteresis.** Between −12 and −9 dB nothing changes, so a signal hovering around one
+  threshold cannot make the gate flutter ("pumping").
+- **The detector is only a helper.** It can make the gate close sooner (sure: 50 ms instead of
+  100 ms) or later (it says "speech": up to 1 s), but it can never close the gate while
+  DeepFilterNet3 still lets something through (r above −12 dB), never open it, and never keep it
+  open for more than a second while r stays low.
+- **Start.** A stream starts closed, and so does the speech route when Speech is selected in a
+  running session; the gate opens when r rises above −9 dB, i.e. when somebody starts talking.
+  `warmup_ms` (r not used for that long after a start) exists but is 0 (15.11: any warm-up cut
+  word starts on validation, and the start leak was already short without one).
+- **Closed** = the slider's attenuation on the whole output, as before. **No added delay**: a
+  decision every millisecond, ramped sample by sample. An input below −60 dBFS cannot open it.
+- **Where the old gate still works.** The 07c gate keeps running on every chunk exactly as before;
+  its gains are used on the Waveformer route and for pass-through, the speech-route gate's on the
+  speech route. The page's **Gate** switch turns both off. The session status says which gate is
+  in use (`gate_kind`: `speech_route` / `detector`).
+
+### 15.11 Step 07d results: tuning, the held-out session, pauses
+
+**Two kinds of real-room data.** *Tuning*: the morning session `20261119-105248-00c1` (the 07c
+benchmark) together with validation recipes (89 with Speech alone among 1,000, and 40 each of the
+validation copies of speech + music, music only and LibriSpeech). *Held-out*, never used for any
+choice: the owner's afternoon session `20261119-164017-bb5e` (speech, classical music, a song with
+vocals, room tone) and the speech take of `20261119-164508-2d33` (recorded right after, with long
+pauses), scored together as `bb5e+2d33` with every take cut at 56 s (a phone rang from 56.4 s in
+the second take; Chapter 24.58). The session the spec named as held-out holds only room tone.
+
+**What is measured** (`training/real_benchmark.py`, both sessions the same way):
+
+- **Pauses.** The clean speech take's 50 ms frames at most 6 dB above the room's level, between two
+  words, grouped by length: *brief* (< 0.5 s), *short* (0.5–2 s), *long* (≥ 2 s). Per group the
+  music's suppression: the output's energy in those frames against the input's, summed over every
+  pause of the group (one number that weighs each pause by its music, as a listener hears it).
+- **Stream starts.** Streams of 5 s starting every 6 s of a music take (music already playing when
+  the session starts): the time in which the output is less than 30 dB below the input. Speech
+  starts: streams starting 0.2 s before a word that follows a pause (word starts cut?).
+- As in 07c: SI-SDRi of the mixtures at four speech-to-music ratios, music only, speech only (the
+  speech-cut rate = the interruption rate of Chapter 15.9).
+
+**Tuning** (`soundspy evaluate speech-gate --session 20261119-105248-00c1`,
+`experiments/ext_hybrid_07d/speech_gate_tuning.md`; live detector; the session at 40 dB, validation
+at 30 dB; 21 settings of the spec's grid, four of them here):
+
+| Speech route | short pauses | speech cut | classical / pop at 0 dB (SI-SDRi) | music only | worst start leak | speech-start cut | val Speech alone | val speech + music |
+|---|---|---|---|---|---|---|---|---|
+| DeepFilterNet3, no gate | −33.0 dB | 0.2 % | +12.40 / +11.07 | −25.4 dB | 3.26 s | 3.6 % | +7.93 | +8.75 |
+| 07c hybrid gate | −34.4 dB | 0.5 % | +11.63 / +11.03 | −45.4 dB | 0.76 s | 10.0 % | +4.72 | +6.95 |
+| speech-route gate, spec defaults (−15 / 150 / −12) | −35.2 dB | 0.2 % | +11.88 / +10.95 | −32.4 dB | 0.36 s | 3.6 % | +6.52 | +7.72 |
+| **speech-route gate, chosen (−12 / 100 / −9)** | **−35.7 dB** | **0.2 %** | **+11.34 / +10.84** | **−45.5 dB** | **0.22 s** | **3.6 %** | **+6.62** | **+7.12** |
+
+The rule (strongest short-pause suppression with speech cut ≤ 2 % and speech over music at most
+0.3 dB below the 07c gate) chose **close −12 dB, hold 100 ms, open −9 dB**: the spec's −12 dB
+opening let DeepFilterNet3's own music leaks reopen the gate (music only −32.4 dB). Warm-up: none
+(300 / 500 / 1000 ms cut 4.2 / 13 / 28 % of the word starts). The detector's "speech" hold stays at
+the spec's 1000 ms; 500 ms would also keep the rule (−36.4 dB in short pauses) but is outside the
+spec's grid (left to the owner). A first run on 30 s mixtures (`speech_gate_tuning_30s.*`) had chosen
+−12 / 150 / −9; the room-tone fix of Chapter 24.59 made the mixtures 60 s and the tuning was run
+again.
+
+**Held-out session** (`experiments/ext_hybrid_07d/real_room_20261119-164017-bb5e+20261119-164508-2d33.md`, listening files in
+`outputs/eval/ext_hybrid_07d/real/`), Speech selected:
+
+| System | mixtures −5 / 0 / +5 / +10 dB (SI-SDRi, 30 dB) | music only (40 dB) | speech only: SI-SDR / cut |
+|---|---|---|---|
+| baseline, live detector | −4.84 / −1.86 / −2.71 / −4.95 | −40.0 dB | +4.5 / 30.7 % |
+| Waveformer v1 | +3.74 / +3.33 / +2.49 / +1.19 | −22.5 dB | +14.4 / 5.6 % |
+| DeepFilterNet3, no gate | +11.70 / +10.28 / +8.39 / +6.39 | −25.8 dB | +19.5 / 0.2 % |
+| 07c gate, live detector | +10.83 / +9.81 / +8.07 / +6.16 | −46.4 dB | +18.6 / 0.5 % |
+| **07d speech-route gate, live** | **+10.48 / +9.88 / +8.17 / +6.26** | **−46.4 dB** | **+19.1 / 0.3 %** |
+| 07d speech-route gate, offline | +10.48 / +9.90 / +8.16 / +6.21 | −46.4 dB | +19.1 / 0.3 % |
+
+Music in the pauses (40 dB, live detector unless said; pooled over all ratios):
+
+| Pauses | DeepFilterNet3, no gate | 07c gate | **07d gate** | 07d offline |
+|---|---|---|---|---|
+| classical, short (0.5–2 s) | −29.5 dB | −30.5 dB | **−33.0 dB** | −34.6 dB |
+| classical, long (≥ 2 s) | −31.6 dB | −38.5 dB | **−42.5 dB** | −47.2 dB |
+| classical, brief (< 0.5 s) | −27.7 dB | −28.0 dB | −29.4 dB | −30.2 dB |
+| song with vocals, short / long | −14.9 / −14.7 dB | −15.0 / −14.8 dB | −15.1 / −14.9 dB | −15.1 / −14.8 dB |
+| all mixtures, short / long | −17.5 / −17.2 dB | −17.5 / −17.4 dB | −17.7 / −17.5 dB | −17.8 / −17.4 dB |
+
+Classical, by speech-to-music ratio (short / long pauses):
+
+| Ratio | DeepFilterNet3, no gate | 07c gate (live) | 07d gate (live) | 07d gate (offline) |
+|---|---|---|---|---|
+| −5 dB | −34.4 / −35.8 dB | −37.4 / −46.8 dB | −44.7 / −75.8 dB | −45.9 / −75.8 dB |
+| +0 dB | −29.4 / −32.0 dB | −31.1 / −40.4 dB | −35.9 / −48.7 dB | −37.0 / −52.7 dB |
+| +5 dB | −23.7 / −26.3 dB | −24.0 / −32.8 dB | −26.7 / −36.3 dB | −29.1 / −40.9 dB |
+| +10 dB | −18.6 / −20.6 dB | −18.9 / −25.5 dB | −19.6 / −28.2 dB | −20.9 / −33.0 dB |
+
+At equal loudness (0 dB) the voice over the music: classical +10.72 dB (07c +10.87), song +8.89 dB
+(07c +8.62) at 40 dB with the live detector. Stream starts: classical 0.00 / 0.00 s (mean / worst),
+song 0.02 / 0.22 s (07c 0.26 / 0.90 s, DeepFilterNet3 alone 2.76 / 4.58 and 1.94 / 3.02 s); word
+starts cut 3.0 % (07c live 16.8 %, the baseline live 56 %).
+
+**What it means.**
+
+- **With classical music the speech route's pauses are now silent where it matters.** Long pauses
+  −42 dB (−49 dB with voice and music equally loud, −76 dB when the music is 5 dB louder), short
+  pauses −33 dB, against −39 / −31 dB with the 07c gate. Offline (no detector lag) it is −47 / −35 dB.
+- **The pooled −17.7 dB does not measure the gate.** It is dominated by the song with vocals, the
+  loudest input: its singer is a voice, so DeepFilterNet3 keeps it, the gate stays open (r is high),
+  and every system leaves the song at −15 dB in the pauses (limitation 32). The second effect is the
+  speaker's own quiet sounds: in the speech take alone the pause frames are at −65 / −66 dBFS (the
+  room −67 dBFS), and DeepFilterNet3 keeps them at −8 to −10 dB (breathing, the voice's tail); when
+  the music is 5–10 dB below the voice those sounds are as loud as the music, so a pause is not
+  "music only" any more and no system can score well there (Chapter 24.60).
+- **The gate gains little in short pauses with the live detector** because the detector still says
+  "speech" for 0.6–1 s after the last word, and the gate waits up to `detector_override_max_ms`
+  (1 s) while it does: most short pauses are over before it closes. DeepFilterNet3 alone already
+  holds the music at about −30 dB in them; the gate's own work shows in the long pauses.
+- **The speech is safe.** Speech cut 0.3 %, word starts at a stream start 3 % (07c 17 %), speech
+  over music within 0.15 dB of 07c (classical) and +0.27 dB better (song).
+
+**Synthetic check** (`soundspy evaluate speech-gate --check`, test set, Speech selected, 30 dB;
+`experiments/ext_hybrid_07d/synthetic_test.md`):
+
+| System | Speech alone (53) | speech + music (100) | music only (100) | LibriSpeech (100) |
+|---|---|---|---|---|
+| DeepFilterNet3, no gate | +6.97 | +6.27 | −24.3 dB | +12.18 |
+| 07c gate, offline / live | +7.13 / +4.70 | +7.00 / +4.03 | −45.2 / −46.1 dB | +12.49 / +10.65 |
+| **07d gate, offline / live** | +5.55 / **+4.84** | +4.86 / **+4.61** | −42.8 / **−42.8 dB** | +12.04 / **+11.88** |
+
+Live, the new gate is better on every speech set (+0.14 / +0.58 / +1.23 dB; at 40 dB Speech alone
+−0.05) and removes 3.3 dB less music when nobody talks (−42.8 dB). Offline it is 0.5–2.1 dB below
+the 07c gate, whose centred detector is almost an oracle there. On validation the loss comes mostly
+from a few dataset clips labelled speech that DeepFilterNet3 itself removes (shouting, laughter,
+crowds: its output 40 dB below its input during the target): the speech-route gate trusts
+DeepFilterNet3 and closes on them, the 07c gate trusted the detector (limitation 39).
+
+**The owner's recordings** (Speech, 40 dB; `outputs/eval/ext_hybrid_07d/owner/levels.json`). In the
+talking-over-music recordings of 18 and 19 Nov the "music only" parts the detector finds stay at
+−10 to −28 dB with *every* system, DeepFilterNet3 alone included: they are mostly the owner talking
+while the detector is unsure (speech probability 0.5–0.65; DeepFilterNet3's output −2 to −8 dB from
+its input, i.e. it hears a voice), so they measure missed speech, not pauses. Deep inside real
+pauses (50 ms frames with no voice for 250 ms around them) the music is at:
+
+| Recording | DeepFilterNet3, no gate | 07c gate, live | 07d gate, live | 07d gate, offline |
+|---|---|---|---|---|
+| 18 Nov 10:16 | −34.9 dB | −39.1 dB | −39.6 dB | −42.8 dB |
+| 18 Nov 10:22 | −37.6 dB | −39.7 dB | −44.1 dB | −77.6 dB |
+| 19 Nov 11:12 (the listening test) | −35.9 dB | −36.9 dB | −40.4 dB | −47.4 dB |
+| 19 Nov 15:32 | −34.4 dB | −37.2 dB | −42.4 dB | −45.2 dB |
+
+The classical recording of 15 Nov is
+the hard case for this gate: DeepFilterNet3 lets parts of it through at −2 to −9 dB (as if it were
+a voice), so the gate opens on them: −22.0 dB over the file (07c −25.4 dB).
+
+**Start of a stream with music playing** (Speech at 40 dB):
+
+| Music | live, looping file (backend + file source) | offline, 5 s streams every 3–6 s: mean / worst |
+|---|---|---|
+| held-out classical / song | 0.0 / 0.0 s | 0.00 / 0.00 s, 0.02 / 0.22 s |
+| tuning classical / song | 0.0 / 0.3 s | 0.03 / 0.18 s, 0.02 / 0.22 s |
+| the owner's classical recording (15 Nov) | **1.4 s** | 0.19 / 1.26 s (07c 0.09 / 0.76 s) |
+
+The ~2 s of music at a stream start of 07c (limitation 38) is gone for the benchmark's music: the
+stream starts closed and only a voice opens it. Music that DeepFilterNet3 takes for a voice still
+opens it (the 15 Nov recording).
+
+**Live, with the +10 dB input gain** (laptop microphone, quiet room, 60 s, Listen on but muted):
+Speech route RTF p95 **0.34** (worst 0.45), 4.2 ms per chunk, DeepFilterNet3 2.3 ms (p95 ≤ 4.9),
+**0 underruns**, delay 134 ms (at most 144), backend CPU 56 %; the gate was closed 99.7 % of the
+time (nobody talked; output −96 dBFS). Waveformer route (Music, 15 dB): RTF p95 0.66 (worst 0.74),
+Waveformer 7.9 ms per call, 0 underruns, 134–154 ms, 76 %. Latency and RTF margins are step 08's
+work.
+
+**Acceptance (spec 07d §8; held-out session, live detector, 40 dB unless said).**
+
+| Criterion | Result | |
+|---|---|---|
+| Short pauses (0.5–2 s) ≥ 25 dB | classical **−33.0 dB**; song with vocals −15.1 dB (every system: the singer is kept); all mixtures pooled −17.7 dB | met for classical, missed with the song |
+| Long pauses (≥ 2 s) ≥ 35 dB | classical **−42.5 dB** (−48.7 dB at equal loudness); song −14.9 dB; pooled −17.5 dB | met for classical, missed with the song |
+| Speech cut ≤ 2 % | **0.3 %** | met |
+| Speech over music at equal loudness not more than 0.3 dB below 07c | classical +10.72 vs +10.87 (−0.15), song +8.89 vs +8.62 (+0.27) | met |
+| Synthetic Speech-selected benchmarks: no regression > 0.3 dB | live: Speech alone +0.14, speech + music +0.58, LibriSpeech +1.23 dB; music only 3.3 dB less suppressed (−42.8 vs −46.1 dB); offline 0.5–2.1 dB below 07c | missed (music only; offline) |
+| Stream start with music: leak ≤ 0.3 s above −30 dB (looping file) | benchmark music 0.0–0.3 s live (worst offline 0.22 s); the owner's 15 Nov classical recording 1.4 s | met on the benchmark, missed on the 15 Nov file |
+| Live RTF p95 < 0.8, 0 underruns in 60 s (speech route) | **0.34** (worst 0.45), 0 underruns | met |
+| pytest without GPU / data, ruff, frontend checks | 636 passed, ruff clean; 54 frontend tests, eslint, tsc, build | met |
+| No tuning on the held-out session; no git write commands | the held-out takes were looked at (pauses, the phone) and scored once, with the final settings | met |
+
+### 15.12 Limitations
+
+Chapter 26, items 31–42: the 40 ms delay for every selection, all voices kept (several
+talkers, singing), non-speech overlap still with the Waveformer, the 07c gate trusting the
+detector's certainty (and its live lag) on the Waveformer route, 48 kHz only, the interruption
+rate being clean only on real recordings, music that DeepFilterNet3 takes for a voice at the start
+of a stream, and from step 07d: the speech-route gate trusting DeepFilterNet3 (39), music heard as
+a voice reopening it (40), short pauses waiting for the lagging live detector (41), and pauses that
+are not "music only" (42).
 
 ---
 
@@ -4821,7 +5057,7 @@ test clips, preparing data and training models.
 | `soundspy record-dataset` | guided recording of labelled clips into `data/custom` (Chapter 11.12) | **works** (step 04) |
 | `soundspy data` | `paths`, `download`, `cleanup-archives`, `prepare`, `stats`, `mix`, `preview` (Chapter 11); *step 07:* `cache --task extraction [--split all] [--sample-rate 44100] [--workers N] [--force]` renders the mixtures once to D: (Chapter 14.4); *step 07b:* `download librispeech`, `cache --task clips` (LibriSpeech converted to 44.1 kHz WAV on D:) and `cache --task rirs` (the bank of 2,000 simulated rooms) (Chapter 14.11) | **works** (step 04) |
 | `soundspy train` | `train detection [--name] [--epochs] [--smoke] [--resume] [--workers]` (Chapter 12.4); *step 07:* `train extraction [--name tse_waveformer_v1] [--epochs N] [--smoke] [--resume] [--batch-size N]` fine-tunes the neural extractor (Chapter 14.6); *step 07b:* `--time-budget-h H` (stop before a round that would not fit; `training.time_budget_h`), training from `training.init_checkpoint` with new mixtures every round (Chapter 14.11) | **works** (step 05) |
-| `soundspy evaluate` | `evaluate detection [--experiment] [--split test]`: fine-tuned vs zero-shot (Chapter 12.5); `evaluate extraction --method mask_baseline [--split test] [--n 500] [--sample-rate 48000]`: the five-system comparison (Chapter 13.7) | **works** (step 05; extraction: step 06) | *Step 07:* `evaluate extraction --method neural_tse` adds the neural extractor (whole-file, streaming, and at the live attenuation) to the same table and repeats it in simulated rooms (Chapter 14.9). *Step 07b:* `--name` (the output folder), the earlier model, the network without its gate, the 40 dB setting and the benchmark sets (`--no-benchmarks`, `--no-reverb` to skip parts); `evaluate gate [--checkpoint]` tries a grid of gate settings on the validation set (Chapter 14.11). |
+| `soundspy evaluate` | `evaluate detection [--experiment] [--split test]`: fine-tuned vs zero-shot (Chapter 12.5); `evaluate extraction --method mask_baseline [--split test] [--n 500] [--sample-rate 48000]`: the five-system comparison (Chapter 13.7) | **works** (step 05; extraction: step 06) | *Step 07:* `evaluate extraction --method neural_tse` adds the neural extractor (whole-file, streaming, and at the live attenuation) to the same table and repeats it in simulated rooms (Chapter 14.9). *Step 07b:* `--name` (the output folder), the earlier model, the network without its gate, the 40 dB setting and the benchmark sets (`--no-benchmarks`, `--no-reverb` to skip parts); `evaluate gate [--checkpoint]` tries a grid of gate settings on the validation set (Chapter 14.11). *Step 07c:* `--method hybrid`, `--benchmark real [--session]`, `evaluate hybrid-gate` (Chapter 15.6, 15.9). *Step 07d:* `evaluate speech-gate --session <tuning session> [--n 1000] [--bench-n 40]` / `--check`; `--benchmark real --session A+B --max-seconds S --role tuning|held-out --name ext_hybrid_07d` (Chapter 15.11). |
 | `soundspy detect` | per-class timeline of a recording (Chapter 12.9) | **works** (step 05) |
 | `soundspy extract` | `extract <wav> --labels speech [music …] [--attenuation-db 15] [--method neural_tse|mask_baseline] [--out out.wav]`: keep the named sound types of a recording, as a processing run in `outputs/processed` (Chapter 13.6); *step 07b:* `--gate` / `--no-gate` (the neural output gate) | **works** (step 06) |
 | `soundspy db` | `db rebuild`: drop the database and index the sidecar files again (Chapter 17) | **works** (step 06) |
@@ -4993,6 +5229,7 @@ here so the later chapters will make sense when they arrive.
 | 06 | first extractor (classical masking) + quality scores; clean up saved recordings and compare before/after — **done** (Chapter 13) | 1 |
 | 07 | neural extractor that runs live — **done** (Chapter 14) | 1 |
 | 07c | hybrid extraction: DeepFilterNet3 for Speech, v1 for the rest, a gate the detector closes and the output reopens, real-room benchmark — **done** | 1 |
+| 07d | the speech route's own gate, driven by DeepFilterNet3's output; pause measures; tuning and held-out real-room sessions — **done** | 1 |
 | 08 | full evaluation, robustness, documentation for the university report | 1 |
 | modules 3–4 | simulated array, direction finding, beamforming, Spatial tab | 2 |
 | module 5 | source tracking, Sources tab | 3 |
@@ -5164,7 +5401,7 @@ longer warns about noise suppression.
 
 ```powershell
 # backend (in backend/, with the venv active)
-pytest              # 617 tests (after step 07c; 572 after step 07b), about 3 minutes
+pytest              # 636 tests (after step 07d; 617 after step 07c), about 3 minutes
                     # (measured while an evaluation ran alongside; 105 s after step 07)
 ruff check .        # code-quality check
 
@@ -6084,6 +6321,46 @@ scaled back; chosen without the benchmark, Chapter 15.3): interruption 0.2 % (0.
 real-room separation up by 3–9 dB; the owner's live retest confirmed it (the first seconds of
 speech come through). The price is a longer start-up leak for music (Chapter 26 item 38).
 
+### 24.58 The held-out session had no speech and no music
+
+**Symptom.** The spec named `20261119-154036-f5f8` as the held-out real-room session; its folder held
+only `room_01.wav`: the speech and music parts had been skipped (the room part was recorded to look at
+the "muted or very quiet input" warning, which the room part no longer gives, step 07d §4).
+
+**Fix.** The owner recorded a new session (`20261119-164017-bb5e`) and, because its speech take had
+no pause of 2 s or more, a second speech take with long pauses (`20261119-164508-2d33`); a phone rang
+at the end of that take (a 2.11 kHz tone from 57.0 s, a click at 56.4 s, found in the spectrum).
+`--session A+B` scores the two sessions' takes together and `--max-seconds 56` leaves the phone out
+without touching the recordings (rule 9).
+
+### 24.59 A 30 s room take cut every real-room mixture to 30 s
+
+**Symptom.** The tuning session's mixtures held only 4 short pauses each, though its speech take had
+13; the held-out speech take's long pauses lay after 30 s.
+
+**Cause.** `build_cases` cut each mixture to the shortest of speech, music and room take, and the
+room part is 30 s (the speech and music parts 60 s): half of every speech take had never been scored
+(step 07c's numbers too).
+
+**Fix.** The room tone (stationary) is repeated to the mixture's length (`room_for`); the tuning was
+run again on the 60 s mixtures (it moved the choice from a 150 ms to a 100 ms hold).
+
+### 24.60 Two pause measures that measured something else
+
+**Symptom 1.** On the owner's 19 Nov talking-over-music recording the music-only parts were "only
+about −10 dB lower", the starting point of step 07d; the new gate changed nothing there, nor did
+removing the gate. **Cause.** Those parts were the detector's centred timeline saying "music, no
+speech": mostly the owner talking while the detector was unsure (probability 0.5–0.65), with
+DeepFilterNet3's output −2 to −8 dB from its input (a voice). **Fix.** In the owner's recordings,
+real pauses are taken where DeepFilterNet3 hears no voice for 250 ms (Chapter 15.11); the benchmark
+uses the clean speech take.
+
+**Symptom 2.** On the held-out session every system, DeepFilterNet3 alone included, came out at
+about −17.5 dB in short and long pauses. **Cause.** The pooled number is dominated by the song with
+vocals (its singer is kept as a voice) and, at +5 / +10 dB, by the speaker's own quiet sounds in the
+pauses, which are as loud as the quiet music there. **Fix.** None to the measure (it was fixed
+before the held-out session was scored); the report gives the pauses per music and per ratio.
+
 ---
 
 ## 25. Design decisions and why
@@ -6403,6 +6680,34 @@ live detector's lag no setting costs less than 0.58 dB, so 0.3 dB would have cho
 all, which is the opposite of the step's goal. 1.0 dB is about what the lag costs at the spec's
 default setting (0.94 dB).
 
+**Why does the speech route get its own gate, driven by DeepFilterNet3's output?** (step 07d) In
+pauses while someone talks over music the live detector stays unsure for 0.6–1 s, so the 07c gate's
+"sure for 400 ms" never came. On the speech route the extractor itself is a fast and reliable
+indicator: its output is about 5 dB below its input on the owner's speech and 30–45 dB below on
+music. The detector only sets how long the gate waits before closing; it can never close the gate
+while DeepFilterNet3 still lets something through. The Waveformer route keeps the 07c gate, because
+the Waveformer's confident mistakes leak at −12 to −20 dB and would hold this gate open.
+
+**Why tune on one real-room session and report on another?** (step 07d) Synthetic validation
+mixtures did not predict the real room (step 07b), and a gate tuned on the session it is judged on
+would look better than it is. The tuning session (19 Nov morning) and validation recipes chose the
+settings; the held-out session (19 Nov afternoon) was scored once, with the final settings.
+
+**Why a −9 dB opening threshold instead of the spec's −12 dB?** (step 07d) The selection rule chose
+it: with −12 dB DeepFilterNet3's own leaks of music reopened the gate (music only −32 instead of
+−45 dB on the tuning session). The spec's grid contained −9 dB.
+
+**Why keep the detector's 1 s "speech" hold, which makes short pauses wait?** (step 07d) It is the
+spec's default and the only measured value that keeps speech over music within 0.3 dB of the 07c
+gate with the 100 ms hold chosen by the rule's grid; 500 ms gave 0.7 dB deeper short pauses with
+the 150 ms hold and also kept the rule. It protects quiet speech that DeepFilterNet3 turns down while
+the detector hears it. Changing it is a one-line choice for the owner (`detector_override_max_ms`).
+
+**Why does offline processing use the new gate too, although the old one is better offline?** (step
+07d) One code path for live and offline (rule 5, "offline == streaming" is tested), and offline is
+mostly used to prepare what the owner then hears live. The price is measured: 0.5–2 dB of SI-SDRi on
+synthetic Speech recipes, where the centred detector makes the 07c gate almost an oracle.
+
 ---
 
 ## 26. Known limitations
@@ -6540,29 +6845,45 @@ These are understood and accepted for now, not oversights.
 33. **Overlapping non-speech still depends on the Waveformer** (step 07c): Music, Alarm, Dishes
     and the other classes, and Speech together with any of them, go through Waveformer v1 with
     its modest gains (Chapter 14.9); the hybrid gate only adds the silent pauses.
-34. **The hybrid gate trusts the detector's certainty** (step 07c): when the detector is sure
+34. **The hybrid gate trusts the detector's certainty** (step 07c; since step 07d only on the
+    Waveformer route): when the detector is sure
     but wrong ("no speech" during quiet speech), only the extractor's own output can reopen the
     gate, and a target more than 6 dB below the rest of the sound does not. With the live
     detector's lag the gate costs about 0.9 dB of SI-SDRi on validation mixtures (offline about
     nothing, Chapter 15.6). Detector mistakes in the other direction (vocals → speech) keep the
     gate open.
-35. **The first second after Speech is selected** (step 07c): only the detector can open the
-    gate then (the speech enhancer's start-up leak is not trusted, Chapter 24.53), so a word in
-    that second starts about 0.3 s late, as with the baseline.
+35. **The first second after Speech is selected** (step 07c): only the detector could open the
+    gate then (the speech enhancer's start-up leak was not trusted, Chapter 24.53), so a word in
+    that second started about 0.3 s late, as with the baseline. *Gone in step 07d*: the
+    speech-route gate opens when DeepFilterNet3 hears the word (word starts cut 3 %, 07c 17 %).
 36. **The speech route needs 48 kHz** (step 07c): DeepFilterNet3 is trained at 48 kHz (the
     laptop microphone's rate). A session at another rate sends Speech to the Waveformer and says
     so.
 37. **The interruption rate is only clean on real recordings** (step 07c): on the synthetic
     mixtures the dataset's speech clips carry their own background, which the speech enhancer
     removes as well, and the rate counts that too (Chapter 24.56).
-38. **Music at the start of a stream** (step 07c): the speech enhancer's start-up leak lasts
-    about 2 s with its +10 dB input gain, longer than the gate's 1 s warm-up, so music playing
-    when a session starts (or when Speech is selected) is heard for about 2 s before the
-    silence (the owner's classical recording: −25.4 dB over the file, −55 to −69 dB after
-    the first 2 s). A longer warm-up cost the speech route 0.6–3 dB live on validation. Without
-    the gain the first 5–10 s of speech on the quiet laptop microphone were removed instead
-    (Chapter 15.3).
-
+38. **Music at the start of a stream** (step 07c): the speech enhancer's start-up leak lasted
+    about 2 s with its +10 dB input gain, longer than the 07c gate's 1 s warm-up, so music playing
+    when a session started was heard for about 2 s (the owner's classical recording: −25.4 dB).
+    *Since step 07d* the speech route starts closed and only a voice opens it: 0.0–0.3 s with
+    the benchmark's music, live and offline; music that DeepFilterNet3 takes for a voice still
+    opens it (item 40).
+39. **The speech-route gate trusts DeepFilterNet3** (step 07d): a "speech" sound that
+    DeepFilterNet3 itself removes (shouting, laughter, crowds among the dataset's speech clips) closes
+    the gate completely, where the 07c gate let DeepFilterNet3's partial output through. On the
+    synthetic test recipes the speech route is 0.5–2.1 dB below the 07c gate offline (live it is
+    better, the detector's lag hurting the 07c gate more).
+40. **Music that DeepFilterNet3 takes for a voice reopens the gate** (step 07d): singing (the song with
+    vocals stays at about −15 dB in the pauses), some passages of the owner's 15 Nov classical
+    recording (−22 dB over the file, 1.4 s of music at a stream start), and on the synthetic "music
+    only" benchmark 3.3 dB less suppression than the 07c gate (−42.8 dB).
+41. **Short pauses wait for the lagging live detector** (step 07d): while the live detector still says
+    "speech" (0.6–1 s after the last word) the gate waits up to `detector_override_max_ms` (1 s) before
+    closing, so in pauses shorter than about a second only DeepFilterNet3's own suppression (about
+    −30 dB) works. 500 ms would close them sooner at a small cost to speech over music (Chapter 15.11).
+42. **A pause is not always "music only"** (step 07d): the speaker's own quiet sounds (breathing, the
+    voice's tail) are kept as voice; with quiet music (5–10 dB below the voice) they are as loud as
+    the music, and the pause measure reports them as leak (Chapter 24.60).
 ---
 
 ## 27. Third-party code
@@ -6707,6 +7028,7 @@ WS   /ws/session                        status 1/s, levels 20/s (input and outpu
 | Extractor (baseline) | STFT 1,024 / 256 at 48 kHz; gate 10 ms open, 300 ms hold, 200 ms close; SI-SDRi on 500 test mixtures: +2.2 dB offline, −4.9 dB live, +8.1 dB with true timing, +24.5 dB ideal mask |
 | Extractor (neural) | Waveformer E512/D256, 3.86 M parameters, 44.1 kHz, steps of 416 samples (9.4 ms), lookahead 32; delay 509 samples (10.6 ms) at 48 kHz; SI-SDRi on 500 test mixtures: +3.28 dB live and offline (median +3.32), +2.92 dB in simulated rooms; 0 % targets missed; 12.5 dB quieter when the target is absent. *Configured since step 07b, v2b + output gate (−12 / −18 / 15 dB):* +2.51 dB at 30 dB (+3.10 at 15 dB), +2.07 dB in simulated rooms; 2 % missed; 17.1 dB quieter when the target is absent |
 | Extractor (hybrid, step 07c) | Speech alone → DeepFilterNet3 (2.14 M parameters, 48 kHz, 10 ms frames, ONNX Runtime on the CPU, 2.4 ms per 20 ms chunk live); other selections → Waveformer v1; gate 400 ms hold / 0.5 × threshold / reopen at −6 dB, 1 s warm-up; delay 1919 samples (40.0 ms), session 144 ms; speech input gain +10 dB; test SI-SDRi +3.20 dB offline (+2.06 live detector), music only with Speech selected −45 dB at 30 dB, −56 dB at 40 dB; real room at 0 dB +12 dB, interruption 0.2 % |
+| Speech-route gate (step 07d) | r = DeepFilterNet3's output against its input; close below −12 dB for 100 ms (50 ms when the detector is sure, up to 1 s while it says speech), open above −9 dB in 5 ms, closing ramp 50 ms, no warm-up, starts closed; held-out real room, classical, live: long pauses −42.5 dB, short −33.0 dB, speech cut 0.3 %, stream start 0.0 s; live RTF p95 0.34 |
 | Neural training | 20,000 mixtures (25.4 GB cache on D:, half reverberant), 3 s crops, batch 4 × 4, ~12 min per round of 10,000 crops; second run 26 rounds, 5.4 h, best round 16: validation +3.72 dB. *Step 07b:* new random mixtures every round (4 workers, ~12.3 min per round), from v1, LR 1e-4; v2 15 rounds 3.3 h (+2.32 dB), v2b 30 rounds 6.2 h, best round 20: validation +3.17 dB, leak −17.8 dB |
 | Offline processing | 62 s recording in 6.5 s (step 07: 6.8 s with either method, 12 s the first time; step 07b: 6.1 s with v2b + gate, 6.8 s baseline); at most 5 minutes per recording on the page; one job at a time |
 | Speaker cushion / max queue / limiter | 2 chunks / 8 chunks / −1 dBFS ceiling, 50 ms release |
@@ -6716,7 +7038,7 @@ WS   /ws/session                        status 1/s, levels 20/s (input and outpu
 | Honest noise floor (enhancements off) | about −65 dBFS |
 | WASAPI start-up silence (discarded) | 500 ms with enhancements on, none with them off |
 | Mic stall timeout / live chunk queue | 2 s / 32 chunks, oldest dropped first |
-| Backend tests / website tests | 264 / 18 (after step 03); 344 / 18 (after step 04); 387 / 23 (after step 05); 482 / 36 (after step 06); 540 / 46 (after step 07); 572 / 50 (after step 07b); 617 / 54 (after step 07c) |
+| Backend tests / website tests | 264 / 18 (after step 03); 344 / 18 (after step 04); 387 / 23 (after step 05); 482 / 36 (after step 06); 540 / 46 (after step 07); 572 / 50 (after step 07b); 617 / 54 (after step 07c); 636 / 54 (after step 07d) |
 | Detector | EfficientAT mn10_as, 4.88 M parameters, 32 kHz, 1 s window padded to 10 s, a result every 0.25 s |
 | Training data | `D:/SoundSpyData/` (external, processed, mixtures, models) |
 | Mixtures | 6 s, 20,000 / 2,000 / 2,000 recipes (train / val / test), seeds 1 / 2 / 3 |

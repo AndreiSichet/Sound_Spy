@@ -1,0 +1,4467 @@
+[
+ {
+  "gate": "07c",
+  "session": {
+   "live": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.835,
+      "interruption": 0.3007,
+      "pause_brief_n": 108,
+      "pause_brief_db": -29.1,
+      "pause_short_n": 26,
+      "pause_short_db": -31.0,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.9488,
+      "interruption": 0.1271,
+      "pause_brief_n": 432,
+      "pause_brief_db": -27.16,
+      "pause_short_n": 104,
+      "pause_short_db": -29.55,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.9,
+      "interruption": 0.4444,
+      "pause_brief_n": 54,
+      "pause_brief_db": -31.78,
+      "pause_short_n": 13,
+      "pause_short_db": -32.64,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.2275,
+      "interruption": 0.1703,
+      "pause_brief_n": 216,
+      "pause_brief_db": -28.63,
+      "pause_short_n": 52,
+      "pause_short_db": -30.63,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.36,
+      "interruption": 0.1341,
+      "pause_brief_n": 108,
+      "pause_brief_db": -27.02,
+      "pause_short_n": 26,
+      "pause_short_db": -28.96,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.69,
+      "interruption": 0.1691,
+      "pause_brief_n": 54,
+      "pause_brief_db": -28.33,
+      "pause_short_n": 13,
+      "pause_short_db": -29.48,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 9.11,
+      "interruption": 0.0519,
+      "pause_brief_n": 108,
+      "pause_brief_db": -23.46,
+      "pause_short_n": 26,
+      "pause_short_db": -26.37,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.5,
+      "interruption": 0.0483,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.06,
+      "pause_short_n": 13,
+      "pause_short_db": -26.74,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.49,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -18.97,
+      "pause_short_n": 26,
+      "pause_short_db": -23.15,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.82,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.23,
+      "pause_short_n": 13,
+      "pause_short_db": -24.12,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.77,
+      "interruption": 0.157,
+      "pause_brief_n": 54,
+      "pause_brief_db": -27.82,
+      "pause_short_n": 13,
+      "pause_short_db": -29.12,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.67,
+      "interruption": 0.0839,
+      "pause_brief_n": 216,
+      "pause_brief_db": -26.31,
+      "pause_short_n": 52,
+      "pause_short_db": -28.17,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 11.03,
+      "interruption": 0.099,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.25,
+      "pause_short_n": 13,
+      "pause_short_db": -28.18,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.72,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.07,
+      "pause_short_n": 13,
+      "pause_short_db": -25.8,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.16,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -18.77,
+      "pause_short_n": 13,
+      "pause_short_db": -21.93,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.39
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 1.323,
+      "suppression_db": -45.246,
+      "leak_s_max": 4.72
+     },
+     "music_start music": {
+      "leak_s": 0.0,
+      "suppression_db": -57.033,
+      "leak_s_max": 0.0
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.48
+     },
+     "music_start music_pop": {
+      "leak_s": 2.646,
+      "suppression_db": -33.459,
+      "leak_s_max": 4.72
+     },
+     "speech_only": {
+      "si_sdr": 17.62,
+      "level_db": -0.35,
+      "interruption": 0.0048
+     },
+     "speech_start": {
+      "si_sdr": 13.1013,
+      "level_db": -0.6025,
+      "interruption": 0.0997
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.85,
+      "interruption": 0.308,
+      "pause_brief_n": 108,
+      "pause_brief_db": -33.65,
+      "pause_short_n": 26,
+      "pause_short_db": -37.98,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.9,
+      "interruption": 0.1304,
+      "pause_brief_n": 432,
+      "pause_brief_db": -29.93,
+      "pause_short_n": 104,
+      "pause_short_db": -34.36,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.84,
+      "interruption": 0.4517,
+      "pause_brief_n": 54,
+      "pause_brief_db": -37.64,
+      "pause_short_n": 13,
+      "pause_short_db": -39.22,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.145,
+      "interruption": 0.1745,
+      "pause_brief_n": 216,
+      "pause_brief_db": -31.46,
+      "pause_short_n": 52,
+      "pause_short_db": -35.05,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.33,
+      "interruption": 0.1401,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.06,
+      "pause_short_n": 26,
+      "pause_short_db": -33.63,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.63,
+      "interruption": 0.1787,
+      "pause_brief_n": 54,
+      "pause_brief_db": -31.91,
+      "pause_short_n": 13,
+      "pause_short_db": -33.66,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 9.035,
+      "interruption": 0.0519,
+      "pause_brief_n": 108,
+      "pause_brief_db": -24.97,
+      "pause_short_n": 26,
+      "pause_short_db": -29.4,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.41,
+      "interruption": 0.0483,
+      "pause_brief_n": 54,
+      "pause_brief_db": -25.68,
+      "pause_short_n": 13,
+      "pause_short_db": -29.76,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.385,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.69,
+      "pause_short_n": 26,
+      "pause_short_db": -24.86,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.7,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.97,
+      "pause_short_n": 13,
+      "pause_short_db": -26.05,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.86,
+      "interruption": 0.1643,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.03,
+      "pause_short_n": 13,
+      "pause_short_db": -36.45,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.655,
+      "interruption": 0.0864,
+      "pause_brief_n": 216,
+      "pause_brief_db": -29.06,
+      "pause_short_n": 52,
+      "pause_short_db": -33.34,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 11.03,
+      "interruption": 0.1014,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.04,
+      "pause_short_n": 13,
+      "pause_short_db": -33.54,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.66,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.51,
+      "pause_short_n": 13,
+      "pause_short_db": -28.82,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.07,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.49,
+      "pause_short_n": 13,
+      "pause_short_db": -23.48,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.435
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.149,
+      "suppression_db": -55.3585,
+      "leak_s_max": 0.76
+     },
+     "music_start music": {
+      "leak_s": 0.0,
+      "suppression_db": -70.693,
+      "leak_s_max": 0.0
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.84
+     },
+     "music_start music_pop": {
+      "leak_s": 0.298,
+      "suppression_db": -40.024,
+      "leak_s_max": 0.76
+     },
+     "speech_only": {
+      "si_sdr": 17.43,
+      "level_db": -0.36,
+      "interruption": 0.0048
+     },
+     "speech_start": {
+      "si_sdr": 12.9275,
+      "level_db": -0.6113,
+      "interruption": 0.0997
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 13.025,
+      "interruption": 0.2935,
+      "pause_brief_n": 108,
+      "pause_brief_db": -29.01,
+      "pause_short_n": 26,
+      "pause_short_db": -31.39,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 10.0338,
+      "interruption": 0.1226,
+      "pause_brief_n": 432,
+      "pause_brief_db": -27.11,
+      "pause_short_n": 104,
+      "pause_short_db": -29.6,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 13.24,
+      "interruption": 0.4372,
+      "pause_brief_n": 54,
+      "pause_brief_db": -31.37,
+      "pause_short_n": 13,
+      "pause_short_db": -33.66,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.3575,
+      "interruption": 0.1648,
+      "pause_brief_n": 216,
+      "pause_brief_db": -28.47,
+      "pause_short_n": 52,
+      "pause_short_db": -31.04,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.465,
+      "interruption": 0.1232,
+      "pause_brief_n": 108,
+      "pause_brief_db": -27.02,
+      "pause_short_n": 26,
+      "pause_short_db": -28.9,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.86,
+      "interruption": 0.1522,
+      "pause_brief_n": 54,
+      "pause_brief_db": -28.32,
+      "pause_short_n": 13,
+      "pause_short_db": -29.66,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 9.12,
+      "interruption": 0.0519,
+      "pause_brief_n": 108,
+      "pause_brief_db": -23.45,
+      "pause_short_n": 26,
+      "pause_short_db": -26.1,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.48,
+      "interruption": 0.0507,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.01,
+      "pause_short_n": 13,
+      "pause_short_db": -26.81,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.525,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -18.95,
+      "pause_short_n": 26,
+      "pause_short_db": -22.51,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.85,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.19,
+      "pause_short_n": 13,
+      "pause_short_db": -23.6,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.81,
+      "interruption": 0.1498,
+      "pause_brief_n": 54,
+      "pause_brief_db": -27.82,
+      "pause_short_n": 13,
+      "pause_short_db": -29.08,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.71,
+      "interruption": 0.0803,
+      "pause_brief_n": 216,
+      "pause_brief_db": -26.31,
+      "pause_short_n": 52,
+      "pause_short_db": -27.89,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 11.07,
+      "interruption": 0.0942,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.25,
+      "pause_short_n": 13,
+      "pause_short_db": -27.85,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.76,
+      "interruption": 0.0531,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.07,
+      "pause_short_n": 13,
+      "pause_short_db": -25.11,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.2,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -18.77,
+      "pause_short_n": 13,
+      "pause_short_db": -21.17,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.365
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 1.404,
+      "suppression_db": -45.5865,
+      "leak_s_max": 5.0
+     },
+     "music_start music": {
+      "leak_s": 0.0,
+      "suppression_db": -57.033,
+      "leak_s_max": 0.0
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.43
+     },
+     "music_start music_pop": {
+      "leak_s": 2.808,
+      "suppression_db": -34.14,
+      "leak_s_max": 5.0
+     },
+     "speech_only": {
+      "si_sdr": 17.7,
+      "level_db": -0.35,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.815,
+      "level_db": -0.4138,
+      "interruption": 0.0361
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 13.05,
+      "interruption": 0.3032,
+      "pause_brief_n": 108,
+      "pause_brief_db": -33.61,
+      "pause_short_n": 26,
+      "pause_short_db": -38.33,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.99,
+      "interruption": 0.1265,
+      "pause_brief_n": 432,
+      "pause_brief_db": -29.93,
+      "pause_short_n": 104,
+      "pause_short_db": -33.93,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 13.2,
+      "interruption": 0.4469,
+      "pause_brief_n": 54,
+      "pause_brief_db": -37.46,
+      "pause_short_n": 13,
+      "pause_short_db": -40.2,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.285,
+      "interruption": 0.1697,
+      "pause_brief_n": 216,
+      "pause_brief_db": -31.43,
+      "pause_short_n": 52,
+      "pause_short_db": -34.94,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.44,
+      "interruption": 0.1292,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.11,
+      "pause_short_n": 26,
+      "pause_short_db": -33.29,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.81,
+      "interruption": 0.1618,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.11,
+      "pause_short_n": 13,
+      "pause_short_db": -33.75,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 9.05,
+      "interruption": 0.0519,
+      "pause_brief_n": 108,
+      "pause_brief_db": -24.97,
+      "pause_short_n": 26,
+      "pause_short_db": -28.47,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.4,
+      "interruption": 0.0507,
+      "pause_brief_n": 54,
+      "pause_brief_db": -25.68,
+      "pause_short_n": 13,
+      "pause_short_db": -29.09,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.42,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.68,
+      "pause_short_n": 26,
+      "pause_short_db": -23.95,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.73,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.94,
+      "pause_short_n": 13,
+      "pause_short_db": -25.14,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.9,
+      "interruption": 0.1594,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.03,
+      "pause_short_n": 13,
+      "pause_short_db": -36.3,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.695,
+      "interruption": 0.0833,
+      "pause_brief_n": 216,
+      "pause_brief_db": -29.06,
+      "pause_short_n": 52,
+      "pause_short_db": -32.57,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 11.07,
+      "interruption": 0.0966,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.04,
+      "pause_short_n": 13,
+      "pause_short_db": -32.58,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.7,
+      "interruption": 0.0531,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.51,
+      "pause_short_n": 13,
+      "pause_short_db": -27.59,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.11,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.49,
+      "pause_short_n": 13,
+      "pause_short_db": -22.51,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.41
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.143,
+      "suppression_db": -55.958,
+      "leak_s_max": 0.84
+     },
+     "music_start music": {
+      "leak_s": 0.0,
+      "suppression_db": -70.693,
+      "leak_s_max": 0.0
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.79
+     },
+     "music_start music_pop": {
+      "leak_s": 0.286,
+      "suppression_db": -41.223,
+      "leak_s_max": 0.84
+     },
+     "speech_only": {
+      "si_sdr": 17.5,
+      "level_db": -0.36,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.6125,
+      "level_db": -0.4263,
+      "interruption": 0.0361
+     }
+    }
+   }
+  },
+  "val": {
+   "live": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 4.716,
+      "suppression_db": -31.932,
+      "interruption": 0.32,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 6.952,
+      "suppression_db": null,
+      "interruption": 0.33,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -38.05,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.762,
+      "suppression_db": null,
+      "interruption": 0.099,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 3.919,
+      "suppression_db": -36.983,
+      "interruption": 0.326,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 6.415,
+      "suppression_db": null,
+      "interruption": 0.336,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -46.696,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.394,
+      "suppression_db": null,
+      "interruption": 0.104,
+      "n": 40
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 8.51,
+      "suppression_db": -31.453,
+      "interruption": 0.255,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 9.099,
+      "suppression_db": null,
+      "interruption": 0.29,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -39.554,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.859,
+      "suppression_db": null,
+      "interruption": 0.073,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 8.181,
+      "suppression_db": -35.11,
+      "interruption": 0.261,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 8.663,
+      "suppression_db": null,
+      "interruption": 0.296,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -48.657,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.558,
+      "suppression_db": null,
+      "interruption": 0.079,
+      "n": 40
+     }
+    }
+   }
+  },
+  "headline": {
+   "pause_brief_db": -29.93,
+   "pause_short_db": -34.36,
+   "pause_long_db": null,
+   "speech_cut": 0.0048,
+   "si_classical": 11.63,
+   "si_pop": 11.03,
+   "music_only_db": -45.435,
+   "leak_s_max": 0.76,
+   "leak_s": 0.149,
+   "speech_start_cut": 0.0997,
+   "val_speech": 4.716,
+   "val_pair_a": 6.952,
+   "val_pair_absent": -38.05
+  },
+  "headline_centred": {
+   "pause_brief_db": -29.93,
+   "pause_short_db": -33.93,
+   "pause_long_db": null,
+   "speech_cut": 0.0024,
+   "si_classical": 11.81,
+   "si_pop": 11.07,
+   "music_only_db": -45.41,
+   "leak_s_max": 0.84,
+   "leak_s": 0.143,
+   "speech_start_cut": 0.0361,
+   "val_speech": 8.51,
+   "val_pair_a": 9.099,
+   "val_pair_absent": -39.554
+  }
+ },
+ {
+  "gate": 150.0,
+  "session": {
+   "live": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.1,
+      "interruption": 0.3889,
+      "pause_brief_n": 108,
+      "pause_brief_db": -35.96,
+      "pause_short_n": 26,
+      "pause_short_db": -43.07,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.565,
+      "interruption": 0.1543,
+      "pause_brief_n": 432,
+      "pause_brief_db": -30.15,
+      "pause_short_n": 104,
+      "pause_short_db": -36.07,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.9,
+      "interruption": 0.4614,
+      "pause_brief_n": 54,
+      "pause_brief_db": -35.95,
+      "pause_short_n": 13,
+      "pause_short_db": -46.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.06,
+      "interruption": 0.1775,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.48,
+      "pause_short_n": 52,
+      "pause_short_db": -36.95,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 10.98,
+      "interruption": 0.1497,
+      "pause_brief_n": 108,
+      "pause_brief_db": -29.75,
+      "pause_short_n": 26,
+      "pause_short_db": -34.57,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.46,
+      "interruption": 0.1739,
+      "pause_brief_n": 54,
+      "pause_brief_db": -30.41,
+      "pause_short_n": 13,
+      "pause_short_db": -34.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.835,
+      "interruption": 0.0568,
+      "pause_brief_n": 108,
+      "pause_brief_db": -24.28,
+      "pause_short_n": 26,
+      "pause_short_db": -30.05,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.24,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.8,
+      "pause_short_n": 13,
+      "pause_short_db": -30.78,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.345,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.43,
+      "pause_short_n": 26,
+      "pause_short_db": -25.76,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.64,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.68,
+      "pause_short_n": 13,
+      "pause_short_db": -27.16,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.3,
+      "interruption": 0.3164,
+      "pause_brief_n": 54,
+      "pause_brief_db": -35.99,
+      "pause_short_n": 13,
+      "pause_short_db": -40.17,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.07,
+      "interruption": 0.131,
+      "pause_brief_n": 216,
+      "pause_brief_db": -29.91,
+      "pause_short_n": 52,
+      "pause_short_db": -34.83,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.5,
+      "interruption": 0.1256,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.32,
+      "pause_short_n": 13,
+      "pause_short_db": -34.79,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.43,
+      "interruption": 0.058,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.93,
+      "pause_short_n": 13,
+      "pause_short_db": -29.06,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.05,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.24,
+      "pause_short_n": 13,
+      "pause_short_db": -24.14,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.555
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 0.048,
+      "suppression_db": -53.1575,
+      "leak_s_max": 0.5
+     },
+     "music_start music": {
+      "leak_s": 0.046,
+      "suppression_db": -52.511,
+      "leak_s_max": 0.26
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.81
+     },
+     "music_start music_pop": {
+      "leak_s": 0.05,
+      "suppression_db": -53.804,
+      "leak_s_max": 0.5
+     },
+     "speech_only": {
+      "si_sdr": 17.43,
+      "level_db": -0.35,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.515,
+      "level_db": -0.42,
+      "interruption": 0.0361
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.045,
+      "interruption": 0.3937,
+      "pause_brief_n": 108,
+      "pause_brief_db": -39.68,
+      "pause_short_n": 26,
+      "pause_short_db": -48.85,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.4938,
+      "interruption": 0.1567,
+      "pause_brief_n": 432,
+      "pause_brief_db": -31.79,
+      "pause_short_n": 104,
+      "pause_short_db": -37.95,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.82,
+      "interruption": 0.4686,
+      "pause_brief_n": 54,
+      "pause_brief_db": -39.86,
+      "pause_short_n": 13,
+      "pause_short_db": -51.34,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 9.97,
+      "interruption": 0.1812,
+      "pause_brief_n": 216,
+      "pause_brief_db": -32.25,
+      "pause_short_n": 52,
+      "pause_short_db": -38.44,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 10.93,
+      "interruption": 0.1546,
+      "pause_brief_n": 108,
+      "pause_brief_db": -32.11,
+      "pause_short_n": 26,
+      "pause_short_db": -36.5,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.39,
+      "interruption": 0.1812,
+      "pause_brief_n": 54,
+      "pause_brief_db": -33.06,
+      "pause_short_n": 13,
+      "pause_short_db": -35.73,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.755,
+      "interruption": 0.0568,
+      "pause_brief_n": 108,
+      "pause_brief_db": -25.56,
+      "pause_short_n": 26,
+      "pause_short_db": -31.48,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.14,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.13,
+      "pause_short_n": 13,
+      "pause_short_db": -32.15,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.245,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -20.07,
+      "pause_short_n": 26,
+      "pause_short_db": -26.8,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.53,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -20.34,
+      "pause_short_n": 13,
+      "pause_short_db": -28.33,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.27,
+      "interruption": 0.3188,
+      "pause_brief_n": 54,
+      "pause_brief_db": -39.6,
+      "pause_short_n": 13,
+      "pause_short_db": -46.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.0175,
+      "interruption": 0.1323,
+      "pause_brief_n": 216,
+      "pause_brief_db": -31.5,
+      "pause_short_n": 52,
+      "pause_short_db": -37.13,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.47,
+      "interruption": 0.128,
+      "pause_brief_n": 54,
+      "pause_brief_db": -31.49,
+      "pause_short_n": 13,
+      "pause_short_db": -38.24,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.37,
+      "interruption": 0.058,
+      "pause_brief_n": 54,
+      "pause_brief_db": -25.15,
+      "pause_short_n": 13,
+      "pause_short_db": -30.54,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 5.96,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.88,
+      "pause_short_n": 13,
+      "pause_short_db": -25.1,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.48
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.034,
+      "suppression_db": -65.981,
+      "leak_s_max": 0.26
+     },
+     "music_start music": {
+      "leak_s": 0.044,
+      "suppression_db": -63.802,
+      "leak_s_max": 0.26
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.93
+     },
+     "music_start music_pop": {
+      "leak_s": 0.024,
+      "suppression_db": -68.16,
+      "leak_s_max": 0.24
+     },
+     "speech_only": {
+      "si_sdr": 17.25,
+      "level_db": -0.36,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.3113,
+      "level_db": -0.43,
+      "interruption": 0.0361
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.09,
+      "interruption": 0.3901,
+      "pause_brief_n": 108,
+      "pause_brief_db": -35.35,
+      "pause_short_n": 26,
+      "pause_short_db": -43.15,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.5625,
+      "interruption": 0.1555,
+      "pause_brief_n": 432,
+      "pause_brief_db": -30.03,
+      "pause_short_n": 104,
+      "pause_short_db": -36.07,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.88,
+      "interruption": 0.4638,
+      "pause_brief_n": 54,
+      "pause_brief_db": -35.84,
+      "pause_short_n": 13,
+      "pause_short_db": -46.87,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.055,
+      "interruption": 0.18,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.47,
+      "pause_short_n": 52,
+      "pause_short_db": -37.04,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 10.975,
+      "interruption": 0.1534,
+      "pause_brief_n": 108,
+      "pause_brief_db": -29.75,
+      "pause_short_n": 26,
+      "pause_short_db": -34.68,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.45,
+      "interruption": 0.1812,
+      "pause_brief_n": 54,
+      "pause_brief_db": -30.39,
+      "pause_short_n": 13,
+      "pause_short_db": -34.62,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.83,
+      "interruption": 0.0568,
+      "pause_brief_n": 108,
+      "pause_brief_db": -24.3,
+      "pause_short_n": 26,
+      "pause_short_db": -30.13,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.23,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.84,
+      "pause_short_n": 13,
+      "pause_short_db": -31.0,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.355,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.43,
+      "pause_short_n": 26,
+      "pause_short_db": -25.52,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.66,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.66,
+      "pause_short_n": 13,
+      "pause_short_db": -26.75,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.3,
+      "interruption": 0.3164,
+      "pause_brief_n": 54,
+      "pause_brief_db": -34.99,
+      "pause_short_n": 13,
+      "pause_short_db": -40.17,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.07,
+      "interruption": 0.131,
+      "pause_brief_n": 216,
+      "pause_brief_db": -29.74,
+      "pause_short_n": 52,
+      "pause_short_db": -34.79,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.5,
+      "interruption": 0.1256,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.32,
+      "pause_short_n": 13,
+      "pause_short_db": -34.79,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.43,
+      "interruption": 0.058,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.93,
+      "pause_short_n": 13,
+      "pause_short_db": -28.94,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.05,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.24,
+      "pause_short_n": 13,
+      "pause_short_db": -24.03,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.555
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 0.039,
+      "suppression_db": -53.3525,
+      "leak_s_max": 0.5
+     },
+     "music_start music": {
+      "leak_s": 0.028,
+      "suppression_db": -52.901,
+      "leak_s_max": 0.18
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.81
+     },
+     "music_start music_pop": {
+      "leak_s": 0.05,
+      "suppression_db": -53.804,
+      "leak_s_max": 0.5
+     },
+     "speech_only": {
+      "si_sdr": 17.43,
+      "level_db": -0.35,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.5213,
+      "level_db": -0.42,
+      "interruption": 0.0361
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.04,
+      "interruption": 0.3937,
+      "pause_brief_n": 108,
+      "pause_brief_db": -38.59,
+      "pause_short_n": 26,
+      "pause_short_db": -48.85,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.4938,
+      "interruption": 0.1576,
+      "pause_brief_n": 432,
+      "pause_brief_db": -31.66,
+      "pause_short_n": 104,
+      "pause_short_db": -37.88,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.81,
+      "interruption": 0.4686,
+      "pause_brief_n": 54,
+      "pause_brief_db": -39.74,
+      "pause_short_n": 13,
+      "pause_short_db": -51.34,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 9.9675,
+      "interruption": 0.183,
+      "pause_brief_n": 216,
+      "pause_brief_db": -32.22,
+      "pause_short_n": 52,
+      "pause_short_db": -38.44,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 10.925,
+      "interruption": 0.1582,
+      "pause_brief_n": 108,
+      "pause_brief_db": -32.11,
+      "pause_short_n": 26,
+      "pause_short_db": -36.55,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.38,
+      "interruption": 0.1884,
+      "pause_brief_n": 54,
+      "pause_brief_db": -33.06,
+      "pause_short_n": 13,
+      "pause_short_db": -35.81,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.76,
+      "interruption": 0.0568,
+      "pause_brief_n": 108,
+      "pause_brief_db": -25.56,
+      "pause_short_n": 26,
+      "pause_short_db": -31.53,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.14,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.16,
+      "pause_short_n": 13,
+      "pause_short_db": -32.36,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.25,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -20.07,
+      "pause_short_n": 26,
+      "pause_short_db": -26.49,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.54,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -20.34,
+      "pause_short_n": 13,
+      "pause_short_db": -27.81,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.27,
+      "interruption": 0.3188,
+      "pause_brief_n": 54,
+      "pause_brief_db": -37.9,
+      "pause_short_n": 13,
+      "pause_short_db": -46.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.02,
+      "interruption": 0.1323,
+      "pause_brief_n": 216,
+      "pause_brief_db": -31.28,
+      "pause_short_n": 52,
+      "pause_short_db": -37.05,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.47,
+      "interruption": 0.128,
+      "pause_brief_n": 54,
+      "pause_brief_db": -31.49,
+      "pause_short_n": 13,
+      "pause_short_db": -38.24,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.38,
+      "interruption": 0.058,
+      "pause_brief_n": 54,
+      "pause_brief_db": -25.15,
+      "pause_short_n": 13,
+      "pause_short_db": -30.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 5.96,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.88,
+      "pause_short_n": 13,
+      "pause_short_db": -25.01,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.48
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.026,
+      "suppression_db": -66.1855,
+      "leak_s_max": 0.24
+     },
+     "music_start music": {
+      "leak_s": 0.028,
+      "suppression_db": -64.211,
+      "leak_s_max": 0.18
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.93
+     },
+     "music_start music_pop": {
+      "leak_s": 0.024,
+      "suppression_db": -68.16,
+      "leak_s_max": 0.24
+     },
+     "speech_only": {
+      "si_sdr": 17.25,
+      "level_db": -0.36,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.3163,
+      "level_db": -0.43,
+      "interruption": 0.0361
+     }
+    }
+   }
+  },
+  "val": {
+   "live": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 6.625,
+      "suppression_db": -34.653,
+      "interruption": 0.267,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 7.136,
+      "suppression_db": null,
+      "interruption": 0.302,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -39.101,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.095,
+      "suppression_db": null,
+      "interruption": 0.091,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 5.893,
+      "suppression_db": -39.231,
+      "interruption": 0.273,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 6.111,
+      "suppression_db": null,
+      "interruption": 0.308,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -47.497,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.568,
+      "suppression_db": null,
+      "interruption": 0.096,
+      "n": 40
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 6.703,
+      "suppression_db": -34.663,
+      "interruption": 0.267,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 7.593,
+      "suppression_db": null,
+      "interruption": 0.302,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -39.246,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.105,
+      "suppression_db": null,
+      "interruption": 0.088,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 5.966,
+      "suppression_db": -39.24,
+      "interruption": 0.273,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 6.72,
+      "suppression_db": null,
+      "interruption": 0.308,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -47.592,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.579,
+      "suppression_db": null,
+      "interruption": 0.094,
+      "n": 40
+     }
+    }
+   }
+  },
+  "headline": {
+   "pause_brief_db": -31.79,
+   "pause_short_db": -37.95,
+   "pause_long_db": null,
+   "speech_cut": 0.0024,
+   "si_classical": 11.39,
+   "si_pop": 10.47,
+   "music_only_db": -45.48,
+   "leak_s_max": 0.26,
+   "leak_s": 0.034,
+   "speech_start_cut": 0.0361,
+   "val_speech": 6.625,
+   "val_pair_a": 7.136,
+   "val_pair_absent": -39.101
+  },
+  "headline_centred": {
+   "pause_brief_db": -31.66,
+   "pause_short_db": -37.88,
+   "pause_long_db": null,
+   "speech_cut": 0.0024,
+   "si_classical": 11.38,
+   "si_pop": 10.47,
+   "music_only_db": -45.48,
+   "leak_s_max": 0.24,
+   "leak_s": 0.026,
+   "speech_start_cut": 0.0361,
+   "val_speech": 6.703,
+   "val_pair_a": 7.593,
+   "val_pair_absent": -39.246
+  }
+ },
+ {
+  "gate": 300.0,
+  "session": {
+   "live": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.3,
+      "interruption": 0.3635,
+      "pause_brief_n": 108,
+      "pause_brief_db": -34.1,
+      "pause_short_n": 26,
+      "pause_short_db": -39.98,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.6513,
+      "interruption": 0.1464,
+      "pause_brief_n": 432,
+      "pause_brief_db": -29.23,
+      "pause_short_n": 104,
+      "pause_short_db": -34.67,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.9,
+      "interruption": 0.4589,
+      "pause_brief_n": 54,
+      "pause_brief_db": -35.77,
+      "pause_short_n": 13,
+      "pause_short_db": -46.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.0775,
+      "interruption": 0.1769,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.25,
+      "pause_short_n": 52,
+      "pause_short_db": -36.24,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.05,
+      "interruption": 0.1437,
+      "pause_brief_n": 108,
+      "pause_brief_db": -28.36,
+      "pause_short_n": 26,
+      "pause_short_db": -33.52,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.46,
+      "interruption": 0.1739,
+      "pause_brief_n": 54,
+      "pause_brief_db": -30.13,
+      "pause_short_n": 13,
+      "pause_short_db": -34.02,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.875,
+      "interruption": 0.0568,
+      "pause_brief_n": 108,
+      "pause_brief_db": -23.88,
+      "pause_short_n": 26,
+      "pause_short_db": -29.08,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.26,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.66,
+      "pause_short_n": 13,
+      "pause_short_db": -29.94,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.38,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.15,
+      "pause_short_n": 26,
+      "pause_short_db": -24.63,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.69,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.39,
+      "pause_short_n": 13,
+      "pause_short_db": -25.87,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.7,
+      "interruption": 0.2681,
+      "pause_brief_n": 54,
+      "pause_brief_db": -33.16,
+      "pause_short_n": 13,
+      "pause_short_db": -36.3,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.225,
+      "interruption": 0.1159,
+      "pause_brief_n": 216,
+      "pause_brief_db": -28.61,
+      "pause_short_n": 52,
+      "pause_short_db": -32.85,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.64,
+      "interruption": 0.1135,
+      "pause_brief_n": 54,
+      "pause_brief_db": -27.39,
+      "pause_short_n": 13,
+      "pause_short_db": -32.73,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.49,
+      "interruption": 0.058,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.36,
+      "pause_short_n": 13,
+      "pause_short_db": -27.93,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.07,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -18.98,
+      "pause_short_n": 13,
+      "pause_short_db": -23.17,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.555
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 0.048,
+      "suppression_db": -53.1575,
+      "leak_s_max": 0.5
+     },
+     "music_start music": {
+      "leak_s": 0.046,
+      "suppression_db": -52.511,
+      "leak_s_max": 0.26
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.81
+     },
+     "music_start music_pop": {
+      "leak_s": 0.05,
+      "suppression_db": -53.804,
+      "leak_s_max": 0.5
+     },
+     "speech_only": {
+      "si_sdr": 17.58,
+      "level_db": -0.35,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.6562,
+      "level_db": -0.4175,
+      "interruption": 0.0361
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.265,
+      "interruption": 0.3684,
+      "pause_brief_n": 108,
+      "pause_brief_db": -38.32,
+      "pause_short_n": 26,
+      "pause_short_db": -46.16,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.5888,
+      "interruption": 0.1489,
+      "pause_brief_n": 432,
+      "pause_brief_db": -31.17,
+      "pause_short_n": 104,
+      "pause_short_db": -37.07,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.83,
+      "interruption": 0.4662,
+      "pause_brief_n": 54,
+      "pause_brief_db": -39.68,
+      "pause_short_n": 13,
+      "pause_short_db": -51.34,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 9.9875,
+      "interruption": 0.1806,
+      "pause_brief_n": 216,
+      "pause_brief_db": -32.07,
+      "pause_short_n": 52,
+      "pause_short_db": -37.87,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.01,
+      "interruption": 0.1486,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.8,
+      "pause_short_n": 26,
+      "pause_short_db": -35.92,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.39,
+      "interruption": 0.1812,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.94,
+      "pause_short_n": 13,
+      "pause_short_db": -35.55,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.8,
+      "interruption": 0.0568,
+      "pause_brief_n": 108,
+      "pause_brief_db": -25.23,
+      "pause_short_n": 26,
+      "pause_short_db": -30.87,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.16,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.08,
+      "pause_short_n": 13,
+      "pause_short_db": -31.63,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.28,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.85,
+      "pause_short_n": 26,
+      "pause_short_db": -25.81,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.57,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -20.08,
+      "pause_short_n": 13,
+      "pause_short_db": -27.11,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.7,
+      "interruption": 0.2705,
+      "pause_brief_n": 54,
+      "pause_brief_db": -37.52,
+      "pause_short_n": 13,
+      "pause_short_db": -42.85,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.19,
+      "interruption": 0.1172,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.61,
+      "pause_short_n": 52,
+      "pause_short_db": -35.92,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.63,
+      "interruption": 0.1159,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.69,
+      "pause_short_n": 13,
+      "pause_short_db": -36.71,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.44,
+      "interruption": 0.058,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.69,
+      "pause_short_n": 13,
+      "pause_short_db": -29.78,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 5.99,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.67,
+      "pause_short_n": 13,
+      "pause_short_db": -24.29,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.48
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.034,
+      "suppression_db": -65.981,
+      "leak_s_max": 0.26
+     },
+     "music_start music": {
+      "leak_s": 0.044,
+      "suppression_db": -63.802,
+      "leak_s_max": 0.26
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.93
+     },
+     "music_start music_pop": {
+      "leak_s": 0.024,
+      "suppression_db": -68.16,
+      "leak_s_max": 0.24
+     },
+     "speech_only": {
+      "si_sdr": 17.39,
+      "level_db": -0.36,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.45,
+      "level_db": -0.4275,
+      "interruption": 0.0361
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.31,
+      "interruption": 0.3611,
+      "pause_brief_n": 108,
+      "pause_brief_db": -33.5,
+      "pause_short_n": 26,
+      "pause_short_db": -40.31,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.6588,
+      "interruption": 0.1468,
+      "pause_brief_n": 432,
+      "pause_brief_db": -29.12,
+      "pause_short_n": 104,
+      "pause_short_db": -34.83,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.89,
+      "interruption": 0.4614,
+      "pause_brief_n": 54,
+      "pause_brief_db": -35.77,
+      "pause_short_n": 13,
+      "pause_short_db": -46.15,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.0775,
+      "interruption": 0.1794,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.29,
+      "pause_short_n": 52,
+      "pause_short_db": -36.46,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.05,
+      "interruption": 0.1474,
+      "pause_brief_n": 108,
+      "pause_brief_db": -28.46,
+      "pause_short_n": 26,
+      "pause_short_db": -33.66,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.46,
+      "interruption": 0.1812,
+      "pause_brief_n": 54,
+      "pause_brief_db": -30.24,
+      "pause_short_n": 13,
+      "pause_short_db": -34.23,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.88,
+      "interruption": 0.0568,
+      "pause_brief_n": 108,
+      "pause_brief_db": -23.88,
+      "pause_short_n": 26,
+      "pause_short_db": -29.37,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.26,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.67,
+      "pause_short_n": 13,
+      "pause_short_db": -30.52,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.395,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.15,
+      "pause_short_n": 26,
+      "pause_short_db": -24.57,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.7,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.38,
+      "pause_short_n": 13,
+      "pause_short_db": -25.84,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.73,
+      "interruption": 0.2609,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.34,
+      "pause_short_n": 13,
+      "pause_short_db": -36.77,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.24,
+      "interruption": 0.1142,
+      "pause_brief_n": 216,
+      "pause_brief_db": -28.42,
+      "pause_short_n": 52,
+      "pause_short_db": -32.97,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.64,
+      "interruption": 0.1135,
+      "pause_brief_n": 54,
+      "pause_brief_db": -27.48,
+      "pause_short_n": 13,
+      "pause_short_db": -32.83,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.5,
+      "interruption": 0.058,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.36,
+      "pause_short_n": 13,
+      "pause_short_db": -27.89,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.09,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -18.98,
+      "pause_short_n": 13,
+      "pause_short_db": -23.05,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.555
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 0.039,
+      "suppression_db": -53.3525,
+      "leak_s_max": 0.5
+     },
+     "music_start music": {
+      "leak_s": 0.028,
+      "suppression_db": -52.901,
+      "leak_s_max": 0.18
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.81
+     },
+     "music_start music_pop": {
+      "leak_s": 0.05,
+      "suppression_db": -53.804,
+      "leak_s_max": 0.5
+     },
+     "speech_only": {
+      "si_sdr": 17.52,
+      "level_db": -0.35,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.7037,
+      "level_db": -0.4175,
+      "interruption": 0.0361
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.275,
+      "interruption": 0.3648,
+      "pause_brief_n": 108,
+      "pause_brief_db": -37.37,
+      "pause_short_n": 26,
+      "pause_short_db": -46.51,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.5938,
+      "interruption": 0.1489,
+      "pause_brief_n": 432,
+      "pause_brief_db": -31.06,
+      "pause_short_n": 104,
+      "pause_short_db": -37.07,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.82,
+      "interruption": 0.4662,
+      "pause_brief_n": 54,
+      "pause_brief_db": -39.68,
+      "pause_short_n": 13,
+      "pause_short_db": -50.92,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 9.99,
+      "interruption": 0.1824,
+      "pause_brief_n": 216,
+      "pause_brief_db": -32.07,
+      "pause_short_n": 52,
+      "pause_short_db": -37.98,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.005,
+      "interruption": 0.1522,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.91,
+      "pause_short_n": 26,
+      "pause_short_db": -36.07,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.39,
+      "interruption": 0.1884,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.98,
+      "pause_short_n": 13,
+      "pause_short_db": -35.66,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.8,
+      "interruption": 0.0568,
+      "pause_brief_n": 108,
+      "pause_brief_db": -25.25,
+      "pause_short_n": 26,
+      "pause_short_db": -31.01,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.16,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.08,
+      "pause_short_n": 13,
+      "pause_short_db": -32.05,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.295,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.83,
+      "pause_short_n": 26,
+      "pause_short_db": -25.6,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.59,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -20.08,
+      "pause_short_n": 13,
+      "pause_short_db": -26.84,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.73,
+      "interruption": 0.2633,
+      "pause_brief_n": 54,
+      "pause_brief_db": -36.23,
+      "pause_short_n": 13,
+      "pause_short_db": -43.29,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.1975,
+      "interruption": 0.1153,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.43,
+      "pause_short_n": 52,
+      "pause_short_db": -35.92,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.62,
+      "interruption": 0.1159,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.83,
+      "pause_short_n": 13,
+      "pause_short_db": -36.79,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.44,
+      "interruption": 0.058,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.69,
+      "pause_short_n": 13,
+      "pause_short_db": -29.74,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.0,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.67,
+      "pause_short_n": 13,
+      "pause_short_db": -24.14,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.48
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.026,
+      "suppression_db": -66.1855,
+      "leak_s_max": 0.24
+     },
+     "music_start music": {
+      "leak_s": 0.028,
+      "suppression_db": -64.211,
+      "leak_s_max": 0.18
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.93
+     },
+     "music_start music_pop": {
+      "leak_s": 0.024,
+      "suppression_db": -68.16,
+      "leak_s_max": 0.24
+     },
+     "speech_only": {
+      "si_sdr": 17.33,
+      "level_db": -0.36,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.4975,
+      "level_db": -0.4275,
+      "interruption": 0.0361
+     }
+    }
+   }
+  },
+  "val": {
+   "live": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 6.621,
+      "suppression_db": -34.624,
+      "interruption": 0.267,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 7.147,
+      "suppression_db": null,
+      "interruption": 0.302,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -39.101,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.164,
+      "suppression_db": null,
+      "interruption": 0.088,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 5.888,
+      "suppression_db": -39.205,
+      "interruption": 0.273,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 6.122,
+      "suppression_db": null,
+      "interruption": 0.308,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -47.497,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.651,
+      "suppression_db": null,
+      "interruption": 0.092,
+      "n": 40
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 6.726,
+      "suppression_db": -34.635,
+      "interruption": 0.267,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 7.746,
+      "suppression_db": null,
+      "interruption": 0.302,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -39.246,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.174,
+      "suppression_db": null,
+      "interruption": 0.085,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 5.988,
+      "suppression_db": -39.214,
+      "interruption": 0.273,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 6.869,
+      "suppression_db": null,
+      "interruption": 0.308,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -47.592,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.66,
+      "suppression_db": null,
+      "interruption": 0.091,
+      "n": 40
+     }
+    }
+   }
+  },
+  "headline": {
+   "pause_brief_db": -31.17,
+   "pause_short_db": -37.07,
+   "pause_long_db": null,
+   "speech_cut": 0.0024,
+   "si_classical": 11.39,
+   "si_pop": 10.63,
+   "music_only_db": -45.48,
+   "leak_s_max": 0.26,
+   "leak_s": 0.034,
+   "speech_start_cut": 0.0361,
+   "val_speech": 6.621,
+   "val_pair_a": 7.147,
+   "val_pair_absent": -39.101
+  },
+  "headline_centred": {
+   "pause_brief_db": -31.06,
+   "pause_short_db": -37.07,
+   "pause_long_db": null,
+   "speech_cut": 0.0024,
+   "si_classical": 11.39,
+   "si_pop": 10.62,
+   "music_only_db": -45.48,
+   "leak_s_max": 0.24,
+   "leak_s": 0.026,
+   "speech_start_cut": 0.0361,
+   "val_speech": 6.726,
+   "val_pair_a": 7.746,
+   "val_pair_absent": -39.246
+  }
+ },
+ {
+  "gate": 500.0,
+  "session": {
+   "live": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.43,
+      "interruption": 0.3418,
+      "pause_brief_n": 108,
+      "pause_brief_db": -31.38,
+      "pause_short_n": 26,
+      "pause_short_db": -37.98,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.725,
+      "interruption": 0.1401,
+      "pause_brief_n": 432,
+      "pause_brief_db": -28.3,
+      "pause_short_n": 104,
+      "pause_short_db": -33.53,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.92,
+      "interruption": 0.4565,
+      "pause_brief_n": 54,
+      "pause_brief_db": -35.56,
+      "pause_short_n": 13,
+      "pause_short_db": -46.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.095,
+      "interruption": 0.1757,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.12,
+      "pause_short_n": 52,
+      "pause_short_db": -35.65,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.12,
+      "interruption": 0.1413,
+      "pause_brief_n": 108,
+      "pause_brief_db": -27.8,
+      "pause_short_n": 26,
+      "pause_short_db": -32.46,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.48,
+      "interruption": 0.1715,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.81,
+      "pause_short_n": 13,
+      "pause_short_db": -33.45,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.94,
+      "interruption": 0.0556,
+      "pause_brief_n": 108,
+      "pause_brief_db": -23.75,
+      "pause_short_n": 26,
+      "pause_short_db": -28.0,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.28,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.6,
+      "pause_short_n": 13,
+      "pause_short_db": -29.01,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.41,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.09,
+      "pause_short_n": 26,
+      "pause_short_db": -24.06,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.7,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.38,
+      "pause_short_n": 13,
+      "pause_short_db": -25.47,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.94,
+      "interruption": 0.2271,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.72,
+      "pause_short_n": 13,
+      "pause_short_db": -34.06,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.355,
+      "interruption": 0.1045,
+      "pause_brief_n": 216,
+      "pause_brief_db": -27.3,
+      "pause_short_n": 52,
+      "pause_short_db": -31.31,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.76,
+      "interruption": 0.1111,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.74,
+      "pause_short_n": 13,
+      "pause_short_db": -31.14,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.6,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.21,
+      "pause_short_n": 13,
+      "pause_short_db": -26.72,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.12,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -18.88,
+      "pause_short_n": 13,
+      "pause_short_db": -22.46,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.555
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 0.048,
+      "suppression_db": -53.1575,
+      "leak_s_max": 0.5
+     },
+     "music_start music": {
+      "leak_s": 0.046,
+      "suppression_db": -52.511,
+      "leak_s_max": 0.26
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.81
+     },
+     "music_start music_pop": {
+      "leak_s": 0.05,
+      "suppression_db": -53.804,
+      "leak_s_max": 0.5
+     },
+     "speech_only": {
+      "si_sdr": 17.62,
+      "level_db": -0.35,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.665,
+      "level_db": -0.4163,
+      "interruption": 0.0361
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.405,
+      "interruption": 0.3467,
+      "pause_brief_n": 108,
+      "pause_brief_db": -35.83,
+      "pause_short_n": 26,
+      "pause_short_db": -44.52,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.6625,
+      "interruption": 0.1425,
+      "pause_brief_n": 432,
+      "pause_brief_db": -30.65,
+      "pause_short_n": 104,
+      "pause_short_db": -36.4,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.84,
+      "interruption": 0.4638,
+      "pause_brief_n": 54,
+      "pause_brief_db": -39.5,
+      "pause_short_n": 13,
+      "pause_short_db": -51.34,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.0025,
+      "interruption": 0.1793,
+      "pause_brief_n": 216,
+      "pause_brief_db": -32.01,
+      "pause_short_n": 52,
+      "pause_short_db": -37.51,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.08,
+      "interruption": 0.1461,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.52,
+      "pause_short_n": 26,
+      "pause_short_db": -35.36,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.41,
+      "interruption": 0.1787,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.82,
+      "pause_short_n": 13,
+      "pause_short_db": -35.24,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.86,
+      "interruption": 0.0556,
+      "pause_brief_n": 108,
+      "pause_brief_db": -25.16,
+      "pause_short_n": 26,
+      "pause_short_db": -30.17,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.18,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.03,
+      "pause_short_n": 13,
+      "pause_short_db": -31.08,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.305,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.78,
+      "pause_short_n": 26,
+      "pause_short_db": -25.36,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.58,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -20.06,
+      "pause_short_n": 13,
+      "pause_short_db": -26.88,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 11.97,
+      "interruption": 0.2295,
+      "pause_brief_n": 54,
+      "pause_brief_db": -34.29,
+      "pause_short_n": 13,
+      "pause_short_db": -40.84,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.3225,
+      "interruption": 0.1057,
+      "pause_brief_n": 216,
+      "pause_brief_db": -29.85,
+      "pause_short_n": 52,
+      "pause_short_db": -34.97,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.75,
+      "interruption": 0.1135,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.36,
+      "pause_short_n": 13,
+      "pause_short_db": -35.59,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.54,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.6,
+      "pause_short_n": 13,
+      "pause_short_db": -29.02,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.03,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.57,
+      "pause_short_n": 13,
+      "pause_short_db": -23.68,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.48
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.034,
+      "suppression_db": -65.981,
+      "leak_s_max": 0.26
+     },
+     "music_start music": {
+      "leak_s": 0.044,
+      "suppression_db": -63.802,
+      "leak_s_max": 0.26
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.93
+     },
+     "music_start music_pop": {
+      "leak_s": 0.024,
+      "suppression_db": -68.16,
+      "leak_s_max": 0.24
+     },
+     "speech_only": {
+      "si_sdr": 17.43,
+      "level_db": -0.36,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.46,
+      "level_db": -0.4263,
+      "interruption": 0.0361
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.495,
+      "interruption": 0.3382,
+      "pause_brief_n": 108,
+      "pause_brief_db": -31.56,
+      "pause_short_n": 26,
+      "pause_short_db": -38.33,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.7363,
+      "interruption": 0.1404,
+      "pause_brief_n": 432,
+      "pause_brief_db": -28.45,
+      "pause_short_n": 104,
+      "pause_short_db": -33.98,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.9,
+      "interruption": 0.4589,
+      "pause_brief_n": 54,
+      "pause_brief_db": -35.77,
+      "pause_short_n": 13,
+      "pause_short_db": -45.0,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.0925,
+      "interruption": 0.1787,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.25,
+      "pause_short_n": 52,
+      "pause_short_db": -36.27,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.1,
+      "interruption": 0.1462,
+      "pause_brief_n": 108,
+      "pause_brief_db": -28.17,
+      "pause_short_n": 26,
+      "pause_short_db": -32.91,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.47,
+      "interruption": 0.1812,
+      "pause_brief_n": 54,
+      "pause_brief_db": -30.2,
+      "pause_short_n": 13,
+      "pause_short_db": -34.02,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.92,
+      "interruption": 0.0556,
+      "pause_brief_n": 108,
+      "pause_brief_db": -23.77,
+      "pause_short_n": 26,
+      "pause_short_db": -28.83,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.28,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.62,
+      "pause_short_n": 13,
+      "pause_short_db": -30.46,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.43,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.08,
+      "pause_short_n": 26,
+      "pause_short_db": -24.29,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.72,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.33,
+      "pause_short_n": 13,
+      "pause_short_db": -25.84,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.09,
+      "interruption": 0.2174,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.9,
+      "pause_short_n": 13,
+      "pause_short_db": -34.61,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.38,
+      "interruption": 0.1021,
+      "pause_brief_n": 216,
+      "pause_brief_db": -27.47,
+      "pause_short_n": 52,
+      "pause_short_db": -31.69,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.73,
+      "interruption": 0.1111,
+      "pause_brief_n": 54,
+      "pause_brief_db": -27.1,
+      "pause_short_n": 13,
+      "pause_short_db": -31.51,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.56,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.22,
+      "pause_short_n": 13,
+      "pause_short_db": -27.0,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.14,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -18.89,
+      "pause_short_n": 13,
+      "pause_short_db": -22.59,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.555
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 0.039,
+      "suppression_db": -53.3525,
+      "leak_s_max": 0.5
+     },
+     "music_start music": {
+      "leak_s": 0.028,
+      "suppression_db": -52.901,
+      "leak_s_max": 0.18
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.81
+     },
+     "music_start music_pop": {
+      "leak_s": 0.05,
+      "suppression_db": -53.804,
+      "leak_s_max": 0.5
+     },
+     "speech_only": {
+      "si_sdr": 17.55,
+      "level_db": -0.35,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.7125,
+      "level_db": -0.4163,
+      "interruption": 0.0361
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.48,
+      "interruption": 0.3418,
+      "pause_brief_n": 108,
+      "pause_brief_db": -35.96,
+      "pause_short_n": 26,
+      "pause_short_db": -45.0,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.68,
+      "interruption": 0.1425,
+      "pause_brief_n": 432,
+      "pause_brief_db": -30.74,
+      "pause_short_n": 104,
+      "pause_short_db": -36.7,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.83,
+      "interruption": 0.4638,
+      "pause_brief_n": 54,
+      "pause_brief_db": -39.68,
+      "pause_short_n": 13,
+      "pause_short_db": -50.55,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.005,
+      "interruption": 0.1818,
+      "pause_brief_n": 216,
+      "pause_brief_db": -32.04,
+      "pause_short_n": 52,
+      "pause_short_db": -37.87,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.065,
+      "interruption": 0.151,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.82,
+      "pause_short_n": 26,
+      "pause_short_db": -35.68,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.4,
+      "interruption": 0.1884,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.94,
+      "pause_short_n": 13,
+      "pause_short_db": -35.55,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.845,
+      "interruption": 0.0556,
+      "pause_brief_n": 108,
+      "pause_brief_db": -25.18,
+      "pause_short_n": 26,
+      "pause_short_db": -30.68,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.18,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.06,
+      "pause_short_n": 13,
+      "pause_short_db": -31.95,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.33,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.78,
+      "pause_short_n": 26,
+      "pause_short_db": -25.36,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.61,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -20.04,
+      "pause_short_n": 13,
+      "pause_short_db": -26.84,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.13,
+      "interruption": 0.2198,
+      "pause_brief_n": 54,
+      "pause_brief_db": -34.41,
+      "pause_short_n": 13,
+      "pause_short_db": -41.49,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.355,
+      "interruption": 0.1033,
+      "pause_brief_n": 216,
+      "pause_brief_db": -29.97,
+      "pause_short_n": 52,
+      "pause_short_db": -35.17,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.73,
+      "interruption": 0.1135,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.7,
+      "pause_short_n": 13,
+      "pause_short_db": -35.91,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.51,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.6,
+      "pause_short_n": 13,
+      "pause_short_db": -29.14,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.05,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.58,
+      "pause_short_n": 13,
+      "pause_short_db": -23.75,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.48
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.026,
+      "suppression_db": -66.1855,
+      "leak_s_max": 0.24
+     },
+     "music_start music": {
+      "leak_s": 0.028,
+      "suppression_db": -64.211,
+      "leak_s_max": 0.18
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.93
+     },
+     "music_start music_pop": {
+      "leak_s": 0.024,
+      "suppression_db": -68.16,
+      "leak_s_max": 0.24
+     },
+     "speech_only": {
+      "si_sdr": 17.37,
+      "level_db": -0.36,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.5075,
+      "level_db": -0.4263,
+      "interruption": 0.0361
+     }
+    }
+   }
+  },
+  "val": {
+   "live": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 6.622,
+      "suppression_db": -34.605,
+      "interruption": 0.267,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 7.151,
+      "suppression_db": null,
+      "interruption": 0.302,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -39.101,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.185,
+      "suppression_db": null,
+      "interruption": 0.085,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 5.894,
+      "suppression_db": -39.188,
+      "interruption": 0.273,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 6.131,
+      "suppression_db": null,
+      "interruption": 0.308,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -47.497,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.681,
+      "suppression_db": null,
+      "interruption": 0.089,
+      "n": 40
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 6.748,
+      "suppression_db": -34.624,
+      "interruption": 0.267,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 8.01,
+      "suppression_db": null,
+      "interruption": 0.302,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -39.246,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.206,
+      "suppression_db": null,
+      "interruption": 0.083,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 6.008,
+      "suppression_db": -39.205,
+      "interruption": 0.273,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 7.149,
+      "suppression_db": null,
+      "interruption": 0.308,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -47.592,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.699,
+      "suppression_db": null,
+      "interruption": 0.089,
+      "n": 40
+     }
+    }
+   }
+  },
+  "headline": {
+   "pause_brief_db": -30.65,
+   "pause_short_db": -36.4,
+   "pause_long_db": null,
+   "speech_cut": 0.0024,
+   "si_classical": 11.41,
+   "si_pop": 10.75,
+   "music_only_db": -45.48,
+   "leak_s_max": 0.26,
+   "leak_s": 0.034,
+   "speech_start_cut": 0.0361,
+   "val_speech": 6.622,
+   "val_pair_a": 7.151,
+   "val_pair_absent": -39.101
+  },
+  "headline_centred": {
+   "pause_brief_db": -30.74,
+   "pause_short_db": -36.7,
+   "pause_long_db": null,
+   "speech_cut": 0.0024,
+   "si_classical": 11.4,
+   "si_pop": 10.73,
+   "music_only_db": -45.48,
+   "leak_s_max": 0.24,
+   "leak_s": 0.026,
+   "speech_start_cut": 0.0361,
+   "val_speech": 6.748,
+   "val_pair_a": 8.01,
+   "val_pair_absent": -39.246
+  }
+ },
+ {
+  "gate": 1000.0,
+  "session": {
+   "live": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.545,
+      "interruption": 0.3236,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.33,
+      "pause_short_n": 26,
+      "pause_short_db": -36.0,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.7725,
+      "interruption": 0.1347,
+      "pause_brief_n": 432,
+      "pause_brief_db": -27.88,
+      "pause_short_n": 104,
+      "pause_short_db": -32.28,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.92,
+      "interruption": 0.4565,
+      "pause_brief_n": 54,
+      "pause_brief_db": -35.11,
+      "pause_short_n": 13,
+      "pause_short_db": -46.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.0975,
+      "interruption": 0.1757,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.0,
+      "pause_short_n": 52,
+      "pause_short_db": -35.14,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.17,
+      "interruption": 0.1377,
+      "pause_brief_n": 108,
+      "pause_brief_db": -27.67,
+      "pause_short_n": 26,
+      "pause_short_db": -31.18,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.49,
+      "interruption": 0.1715,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.68,
+      "pause_short_n": 13,
+      "pause_short_db": -32.97,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.95,
+      "interruption": 0.0556,
+      "pause_brief_n": 108,
+      "pause_brief_db": -23.75,
+      "pause_short_n": 26,
+      "pause_short_db": -27.18,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.28,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.6,
+      "pause_short_n": 13,
+      "pause_short_db": -28.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.425,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.06,
+      "pause_short_n": 26,
+      "pause_short_db": -23.36,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.7,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.38,
+      "pause_short_n": 13,
+      "pause_short_db": -24.88,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.17,
+      "interruption": 0.1908,
+      "pause_brief_n": 54,
+      "pause_brief_db": -28.57,
+      "pause_short_n": 13,
+      "pause_short_db": -31.91,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.4475,
+      "interruption": 0.0936,
+      "pause_brief_n": 216,
+      "pause_brief_db": -26.78,
+      "pause_short_n": 52,
+      "pause_short_db": -29.68,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.85,
+      "interruption": 0.1039,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.6,
+      "pause_short_n": 13,
+      "pause_short_db": -29.19,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.62,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.21,
+      "pause_short_n": 13,
+      "pause_short_db": -25.69,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.15,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -18.84,
+      "pause_short_n": 13,
+      "pause_short_db": -21.65,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.555
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 0.048,
+      "suppression_db": -53.1575,
+      "leak_s_max": 0.5
+     },
+     "music_start music": {
+      "leak_s": 0.046,
+      "suppression_db": -52.511,
+      "leak_s_max": 0.26
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.81
+     },
+     "music_start music_pop": {
+      "leak_s": 0.05,
+      "suppression_db": -53.804,
+      "leak_s_max": 0.5
+     },
+     "speech_only": {
+      "si_sdr": 17.64,
+      "level_db": -0.35,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.665,
+      "level_db": -0.4163,
+      "interruption": 0.0361
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.535,
+      "interruption": 0.3297,
+      "pause_brief_n": 108,
+      "pause_brief_db": -34.52,
+      "pause_short_n": 26,
+      "pause_short_db": -42.91,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.7188,
+      "interruption": 0.1374,
+      "pause_brief_n": 432,
+      "pause_brief_db": -30.33,
+      "pause_short_n": 104,
+      "pause_short_db": -35.65,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.85,
+      "interruption": 0.4638,
+      "pause_brief_n": 54,
+      "pause_brief_db": -39.33,
+      "pause_short_n": 13,
+      "pause_short_db": -51.34,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.0125,
+      "interruption": 0.1793,
+      "pause_brief_n": 216,
+      "pause_brief_db": -31.99,
+      "pause_short_n": 52,
+      "pause_short_db": -37.13,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.14,
+      "interruption": 0.1425,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.46,
+      "pause_short_n": 26,
+      "pause_short_db": -34.76,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.43,
+      "interruption": 0.1787,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.74,
+      "pause_short_n": 13,
+      "pause_short_db": -35.04,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.875,
+      "interruption": 0.0556,
+      "pause_brief_n": 108,
+      "pause_brief_db": -25.16,
+      "pause_short_n": 26,
+      "pause_short_db": -29.57,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.18,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.03,
+      "pause_short_n": 13,
+      "pause_short_db": -30.56,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.325,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.76,
+      "pause_short_n": 26,
+      "pause_short_db": -24.73,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.59,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -20.06,
+      "pause_short_n": 13,
+      "pause_short_db": -26.31,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.22,
+      "interruption": 0.1957,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.76,
+      "pause_short_n": 13,
+      "pause_short_db": -38.97,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.425,
+      "interruption": 0.0955,
+      "pause_brief_n": 216,
+      "pause_brief_db": -29.4,
+      "pause_short_n": 52,
+      "pause_short_db": -33.93,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.85,
+      "interruption": 0.1063,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.29,
+      "pause_short_n": 13,
+      "pause_short_db": -34.31,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.57,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.6,
+      "pause_short_n": 13,
+      "pause_short_db": -28.26,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.06,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.55,
+      "pause_short_n": 13,
+      "pause_short_db": -23.0,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.48
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.034,
+      "suppression_db": -65.981,
+      "leak_s_max": 0.26
+     },
+     "music_start music": {
+      "leak_s": 0.044,
+      "suppression_db": -63.802,
+      "leak_s_max": 0.26
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.93
+     },
+     "music_start music_pop": {
+      "leak_s": 0.024,
+      "suppression_db": -68.16,
+      "leak_s_max": 0.24
+     },
+     "speech_only": {
+      "si_sdr": 17.45,
+      "level_db": -0.36,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.46,
+      "level_db": -0.4263,
+      "interruption": 0.0361
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.61,
+      "interruption": 0.3212,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.61,
+      "pause_short_n": 26,
+      "pause_short_db": -36.77,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.7788,
+      "interruption": 0.1356,
+      "pause_brief_n": 432,
+      "pause_brief_db": -28.09,
+      "pause_short_n": 104,
+      "pause_short_db": -33.29,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.9,
+      "interruption": 0.4589,
+      "pause_brief_n": 54,
+      "pause_brief_db": -35.77,
+      "pause_short_n": 13,
+      "pause_short_db": -44.81,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.0925,
+      "interruption": 0.1787,
+      "pause_brief_n": 216,
+      "pause_brief_db": -30.25,
+      "pause_short_n": 52,
+      "pause_short_db": -36.24,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.14,
+      "interruption": 0.1437,
+      "pause_brief_n": 108,
+      "pause_brief_db": -28.12,
+      "pause_short_n": 26,
+      "pause_short_db": -32.35,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.47,
+      "interruption": 0.1812,
+      "pause_brief_n": 54,
+      "pause_brief_db": -30.2,
+      "pause_short_n": 13,
+      "pause_short_db": -34.02,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.93,
+      "interruption": 0.0556,
+      "pause_brief_n": 108,
+      "pause_brief_db": -23.77,
+      "pause_short_n": 26,
+      "pause_short_db": -28.52,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.28,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.62,
+      "pause_short_n": 13,
+      "pause_short_db": -30.46,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.435,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.05,
+      "pause_short_n": 26,
+      "pause_short_db": -24.09,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.72,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.33,
+      "pause_short_n": 13,
+      "pause_short_db": -25.84,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.32,
+      "interruption": 0.1836,
+      "pause_brief_n": 54,
+      "pause_brief_db": -28.79,
+      "pause_short_n": 13,
+      "pause_short_db": -32.87,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.465,
+      "interruption": 0.0924,
+      "pause_brief_n": 216,
+      "pause_brief_db": -26.97,
+      "pause_short_n": 52,
+      "pause_short_db": -30.61,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.81,
+      "interruption": 0.1063,
+      "pause_brief_n": 54,
+      "pause_brief_db": -27.02,
+      "pause_short_n": 13,
+      "pause_short_db": -30.46,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.58,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -23.22,
+      "pause_short_n": 13,
+      "pause_short_db": -26.49,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.15,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -18.86,
+      "pause_short_n": 13,
+      "pause_short_db": -22.23,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -38.555
+     },
+     "music_only music": {
+      "suppression_db": -57.3
+     },
+     "music_start": {
+      "leak_s": 0.039,
+      "suppression_db": -53.3525,
+      "leak_s_max": 0.5
+     },
+     "music_start music": {
+      "leak_s": 0.028,
+      "suppression_db": -52.901,
+      "leak_s_max": 0.18
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.81
+     },
+     "music_start music_pop": {
+      "leak_s": 0.05,
+      "suppression_db": -53.804,
+      "leak_s_max": 0.5
+     },
+     "speech_only": {
+      "si_sdr": 17.56,
+      "level_db": -0.35,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.7125,
+      "level_db": -0.4163,
+      "interruption": 0.0361
+     }
+    },
+    "40": {
+     "mix -5 dB": {
+      "si_sdr_i": 12.605,
+      "interruption": 0.3261,
+      "pause_brief_n": 108,
+      "pause_brief_db": -34.66,
+      "pause_short_n": 26,
+      "pause_short_db": -43.78,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes": {
+      "si_sdr_i": 9.725,
+      "interruption": 0.138,
+      "pause_brief_n": 432,
+      "pause_brief_db": -30.43,
+      "pause_short_n": 104,
+      "pause_short_db": -36.4,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music": {
+      "si_sdr_i": 12.83,
+      "interruption": 0.4638,
+      "pause_brief_n": 54,
+      "pause_brief_db": -39.68,
+      "pause_short_n": 13,
+      "pause_short_db": -50.2,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music": {
+      "si_sdr_i": 10.005,
+      "interruption": 0.1818,
+      "pause_brief_n": 216,
+      "pause_brief_db": -32.04,
+      "pause_short_n": 52,
+      "pause_short_db": -37.87,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB": {
+      "si_sdr_i": 11.105,
+      "interruption": 0.1486,
+      "pause_brief_n": 108,
+      "pause_brief_db": -30.78,
+      "pause_short_n": 26,
+      "pause_short_db": -35.45,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music": {
+      "si_sdr_i": 11.4,
+      "interruption": 0.1884,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.94,
+      "pause_short_n": 13,
+      "pause_short_db": -35.55,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB": {
+      "si_sdr_i": 8.855,
+      "interruption": 0.0556,
+      "pause_brief_n": 108,
+      "pause_brief_db": -25.18,
+      "pause_short_n": 26,
+      "pause_short_db": -30.51,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music": {
+      "si_sdr_i": 9.18,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -26.06,
+      "pause_short_n": 13,
+      "pause_short_db": -31.95,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB": {
+      "si_sdr_i": 6.335,
+      "interruption": 0.0217,
+      "pause_brief_n": 108,
+      "pause_brief_db": -19.76,
+      "pause_short_n": 26,
+      "pause_short_db": -25.21,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music": {
+      "si_sdr_i": 6.61,
+      "interruption": 0.0193,
+      "pause_brief_n": 54,
+      "pause_brief_db": -20.04,
+      "pause_short_n": 13,
+      "pause_short_db": -26.84,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix -5 dB music_pop": {
+      "si_sdr_i": 12.38,
+      "interruption": 0.1884,
+      "pause_brief_n": 54,
+      "pause_brief_db": -32.87,
+      "pause_short_n": 13,
+      "pause_short_db": -40.05,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mixes music_pop": {
+      "si_sdr_i": 9.445,
+      "interruption": 0.0942,
+      "pause_brief_n": 216,
+      "pause_brief_db": -29.52,
+      "pause_short_n": 52,
+      "pause_short_db": -34.61,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +0 dB music_pop": {
+      "si_sdr_i": 10.81,
+      "interruption": 0.1087,
+      "pause_brief_n": 54,
+      "pause_brief_db": -29.65,
+      "pause_short_n": 13,
+      "pause_short_db": -35.29,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +5 dB music_pop": {
+      "si_sdr_i": 8.53,
+      "interruption": 0.0556,
+      "pause_brief_n": 54,
+      "pause_brief_db": -24.6,
+      "pause_short_n": 13,
+      "pause_short_db": -28.85,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "mix +10 dB music_pop": {
+      "si_sdr_i": 6.06,
+      "interruption": 0.0242,
+      "pause_brief_n": 54,
+      "pause_brief_db": -19.56,
+      "pause_short_n": 13,
+      "pause_short_db": -23.42,
+      "pause_long_n": 0,
+      "pause_long_db": null
+     },
+     "music_only": {
+      "suppression_db": -45.48
+     },
+     "music_only music": {
+      "suppression_db": -71.03
+     },
+     "music_start": {
+      "leak_s": 0.026,
+      "suppression_db": -66.1855,
+      "leak_s_max": 0.24
+     },
+     "music_start music": {
+      "leak_s": 0.028,
+      "suppression_db": -64.211,
+      "leak_s_max": 0.18
+     },
+     "music_only music_pop": {
+      "suppression_db": -19.93
+     },
+     "music_start music_pop": {
+      "leak_s": 0.024,
+      "suppression_db": -68.16,
+      "leak_s_max": 0.24
+     },
+     "speech_only": {
+      "si_sdr": 17.38,
+      "level_db": -0.36,
+      "interruption": 0.0024
+     },
+     "speech_start": {
+      "si_sdr": 17.5075,
+      "level_db": -0.4263,
+      "interruption": 0.0361
+     }
+    }
+   }
+  },
+  "val": {
+   "live": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 6.615,
+      "suppression_db": -34.569,
+      "interruption": 0.266,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 7.147,
+      "suppression_db": null,
+      "interruption": 0.302,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -39.101,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.176,
+      "suppression_db": null,
+      "interruption": 0.085,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 5.892,
+      "suppression_db": -39.155,
+      "interruption": 0.272,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 6.13,
+      "suppression_db": null,
+      "interruption": 0.308,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -47.497,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.678,
+      "suppression_db": null,
+      "interruption": 0.089,
+      "n": 40
+     }
+    }
+   },
+   "centred": {
+    "30": {
+     "speech": {
+      "si_sdr_i": 6.771,
+      "suppression_db": -34.623,
+      "interruption": 0.267,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 8.064,
+      "suppression_db": null,
+      "interruption": 0.302,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -39.246,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 10.216,
+      "suppression_db": null,
+      "interruption": 0.083,
+      "n": 40
+     }
+    },
+    "40": {
+     "speech": {
+      "si_sdr_i": 6.033,
+      "suppression_db": -39.204,
+      "interruption": 0.272,
+      "n": 81
+     },
+     "pair_a": {
+      "si_sdr_i": 7.171,
+      "suppression_db": null,
+      "interruption": 0.308,
+      "n": 40
+     },
+     "pair_absent": {
+      "si_sdr_i": null,
+      "suppression_db": -47.592,
+      "interruption": null,
+      "n": 40
+     },
+     "librispeech": {
+      "si_sdr_i": 9.711,
+      "suppression_db": null,
+      "interruption": 0.089,
+      "n": 40
+     }
+    }
+   }
+  },
+  "headline": {
+   "pause_brief_db": -30.33,
+   "pause_short_db": -35.65,
+   "pause_long_db": null,
+   "speech_cut": 0.0024,
+   "si_classical": 11.43,
+   "si_pop": 10.85,
+   "music_only_db": -45.48,
+   "leak_s_max": 0.26,
+   "leak_s": 0.034,
+   "speech_start_cut": 0.0361,
+   "val_speech": 6.615,
+   "val_pair_a": 7.147,
+   "val_pair_absent": -39.101
+  },
+  "headline_centred": {
+   "pause_brief_db": -30.43,
+   "pause_short_db": -36.4,
+   "pause_long_db": null,
+   "speech_cut": 0.0024,
+   "si_classical": 11.4,
+   "si_pop": 10.81,
+   "music_only_db": -45.48,
+   "leak_s_max": 0.24,
+   "leak_s": 0.026,
+   "speech_start_cut": 0.0361,
+   "val_speech": 6.771,
+   "val_pair_a": 8.064,
+   "val_pair_absent": -39.246
+  }
+ }
+]

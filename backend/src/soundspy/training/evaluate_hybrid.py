@@ -7,11 +7,13 @@ evaluation, the step-06 baseline systems plus:
 wf                  Waveformer v1 alone (whole file, no gate)
 wf_hgate            Waveformer v1 + the hybrid gate
 dfn                 DeepFilterNet3 alone (Speech-only selections; the other recipes have no row)
-dfn_hgate           DeepFilterNet3 + the hybrid gate
+dfn_hgate           DeepFilterNet3 + the hybrid gate (the speech route of step 07c)
+dfn_sgate           DeepFilterNet3 + the speech-route gate (step 07d, offline detector)
 cascade             Waveformer v1 -> DeepFilterNet3 (Speech only)
 cascade_hgate       the cascade + the hybrid gate
-hybrid_offline      the hybrid as configured: route by selection + gate, detector timeline
-                    centred (offline mode), whole file
+hybrid_offline      the hybrid as configured: route by selection + that route's gate (speech
+                    route: the speech-route gate; Waveformer: the hybrid gate), detector
+                    timeline centred (offline mode), whole file
 hybrid_stream       the same fed 20 ms chunks through ``HybridExtractor`` (as live): must match
                     ``hybrid_offline``
 hybrid_live         the hybrid with the live detector's lag (causal timeline), whole file
@@ -20,8 +22,9 @@ hybrid_high_db      ``hybrid_offline`` at ``evaluation.high_attenuation_db`` (40
 ==================  ==============================================================================
 
 The whole-file systems use the same gate code as the streaming extractor
-(:func:`gate_output`: the gate runs over the estimate and the input as the extractor sees them,
-``latency`` samples late), so ``hybrid_offline == hybrid_stream`` up to float rounding.
+(:func:`gate_output`, :func:`speech_gate_output`: the gate runs over the estimate and the input
+as the extractor sees them, ``latency`` samples late), so ``hybrid_offline == hybrid_stream`` up
+to float rounding.
 
 **Gate tuning** (``soundspy evaluate hybrid-gate``): the routes run once over validation recipes
 (a fixed subset plus validation copies of the pair benchmarks, made from validation clips),
@@ -43,21 +46,22 @@ from typing import Any
 
 import numpy as np
 
-from soundspy.config import AppConfig, HybridGateConfig
+from soundspy.config import AppConfig, HybridGateConfig, SpeechGateConfig
 from soundspy.core.target import TargetSpec
 from soundspy.extraction import metrics as M
 from soundspy.extraction.activity import ActivitySource
 from soundspy.extraction.hybrid_gate import HybridGate
 
-HYBRID_SYSTEMS = ("wf", "wf_hgate", "dfn", "dfn_hgate", "cascade", "cascade_hgate",
-                  "hybrid_offline", "hybrid_stream", "hybrid_live", "hybrid_live_db",
-                  "hybrid_high_db")
-SPEECH_ONLY_SYSTEMS = ("dfn", "dfn_hgate", "cascade", "cascade_hgate")
+HYBRID_SYSTEMS = ("wf", "wf_hgate", "dfn", "dfn_hgate", "dfn_sgate", "cascade",
+                  "cascade_hgate", "hybrid_offline", "hybrid_stream", "hybrid_live",
+                  "hybrid_live_db", "hybrid_high_db")
+SPEECH_ONLY_SYSTEMS = ("dfn", "dfn_hgate", "dfn_sgate", "cascade", "cascade_hgate")
 SYSTEM_NAMES = {
     "wf": "Waveformer v1 (whole file, no gate)",
     "wf_hgate": "Waveformer v1 + hybrid gate",
     "dfn": "DeepFilterNet3 alone (Speech only)",
     "dfn_hgate": "DeepFilterNet3 + hybrid gate (Speech only)",
+    "dfn_sgate": "DeepFilterNet3 + speech-route gate (Speech only)",
     "cascade": "Waveformer v1 -> DeepFilterNet3 (Speech only)",
     "cascade_hgate": "cascade + hybrid gate (Speech only)",
     "hybrid_offline": "hybrid offline (whole file, centred detector)",
@@ -68,6 +72,7 @@ SYSTEM_NAMES = {
 }
 SHORT_NAMES = {
     "wf": "v1", "wf_hgate": "v1 + gate", "dfn": "DFN3", "dfn_hgate": "DFN3 + gate",
+    "dfn_sgate": "DFN3 + speech gate",
     "cascade": "cascade", "cascade_hgate": "cascade + gate", "hybrid_offline": "hybrid",
     "hybrid_stream": "hybrid stream", "hybrid_live": "hybrid live",
     "hybrid_live_db": "hybrid 15 dB", "hybrid_high_db": "hybrid 40 dB",
@@ -126,6 +131,61 @@ def gate_output(est: np.ndarray, mixture: np.ndarray, labels: Collection[str],
     return (g_gate * (est + g * (x - est))).astype(np.float32)
 
 
+def speech_gate_positions(est: np.ndarray, mixture: np.ndarray, labels: Collection[str],
+                          gate: SpeechGateConfig, source: ActivitySource | None,
+                          sample_rate: int, latency: int, *, warmup: bool = True) -> np.ndarray:
+    """The speech-route gate's positions for a whole signal, as the streaming extractor
+    computes them (``latency`` zeros first, the warm-up of a stream that starts on the speech
+    route), aligned with the input."""
+    from soundspy.extraction.speech_gate import SpeechRouteGate
+
+    x = np.asarray(mixture, dtype=np.float32).reshape(-1)
+    est = np.asarray(est, dtype=np.float32).reshape(-1)
+    pad = np.zeros(latency, dtype=np.float32)
+    sg = SpeechRouteGate(gate, sample_rate, latency, source)
+    sg.restart(0, warmup=warmup)
+    return sg.positions(np.concatenate((pad, est)), np.concatenate((pad, x)),
+                        frozenset(labels))[latency:]
+
+
+def mix_with_positions(positions: np.ndarray, est: np.ndarray, mixture: np.ndarray,
+                       attenuation_db: float) -> np.ndarray:
+    """``y = G (est + g (x - est))`` with the gate gains of these positions."""
+    from soundspy.extraction.speech_gate import position_gains
+
+    x = np.asarray(mixture, dtype=np.float32).reshape(-1)
+    est = np.asarray(est, dtype=np.float32).reshape(-1)
+    g = 10.0 ** (-attenuation_db / 20.0)
+    return (position_gains(positions, attenuation_db) * (est + g * (x - est))).astype(np.float32)
+
+
+def speech_gate_output(est: np.ndarray, mixture: np.ndarray, labels: Collection[str],
+                       attenuation_db: float, gate: SpeechGateConfig,
+                       source: ActivitySource | None, sample_rate: int, latency: int, *,
+                       warmup: bool = True) -> np.ndarray:
+    """The speech route's output for a whole signal (step 07d): :class:`SpeechRouteGate`
+    over DeepFilterNet3's estimate, then residual mixing."""
+    pos = speech_gate_positions(est, mixture, labels, gate, source, sample_rate, latency,
+                                warmup=warmup)
+    return mix_with_positions(pos, est, mixture, attenuation_db)
+
+
+def configured_output(config: AppConfig, route: str, est: np.ndarray, mixture: np.ndarray,
+                      labels: Collection[str], attenuation_db: float,
+                      source: ActivitySource | None, sample_rate: int, latency: int
+                      ) -> np.ndarray:
+    """The configured hybrid's output for one route's whole-file estimate: the speech routes
+    (``dfn``, ``cascade``) through the speech-route gate, the Waveformer through the hybrid
+    gate (both switched on, as the evaluation always scores the gated hybrid)."""
+    hy = config.extraction.hybrid
+    if route != "wf":
+        gate = dataclasses.replace(hy.speech_gate, enabled=True)
+        return speech_gate_output(est, mixture, labels, attenuation_db, gate, source,
+                                  sample_rate, latency)
+    return gate_output(est, mixture, labels, attenuation_db,
+                       dataclasses.replace(hy.gate, enabled=True), source, sample_rate, latency)
+
+
 def route_estimates(cores: HybridCores, mixture: np.ndarray, sample_rate: int,
                     labels: Collection[str], speech_labels: Collection[str]
                     ) -> dict[str, np.ndarray]:
@@ -175,16 +235,22 @@ def process_recipe_hybrid(config: AppConfig, rendered, sources: dict[str, Activi
     if "dfn" in est:
         out["dfn"] = residual_mix(est["dfn"], x, attenuation_db)
         out["dfn_hgate"] = gated(est["dfn"], lat["enhancer_route"], warmup=True)
+        out["dfn_sgate"] = configured_output(config, "dfn", est["dfn"], x, labels,
+                                             attenuation_db, timeline, sr,
+                                             lat["enhancer_route"])
         out["cascade"] = residual_mix(est["cascade"], x, attenuation_db)
         out["cascade_hgate"] = gated(est["cascade"], lat["cascade_route"], warmup=True)
     route = chosen_route(config, labels)
-    chosen, warm = est[route], route != "wf"
-    out["hybrid_offline"] = gated(chosen, route_latency, warmup=warm)
-    out["hybrid_live"] = gated(chosen, route_latency, source=live, warmup=warm)
-    out["hybrid_live_db"] = gated(chosen, route_latency,
-                                  att=config.extraction.default_attenuation_db, warmup=warm)
-    out["hybrid_high_db"] = gated(chosen, route_latency, att=ev.high_attenuation_db,
-                                  warmup=warm)
+    chosen = est[route]
+
+    def hybrid(att=attenuation_db, source=timeline):
+        return configured_output(config, route, chosen, x, labels, att, source, sr,
+                                 route_latency)
+
+    out["hybrid_offline"] = hybrid()
+    out["hybrid_live"] = hybrid(source=live)
+    out["hybrid_live_db"] = hybrid(att=config.extraction.default_attenuation_db)
+    out["hybrid_high_db"] = hybrid(att=ev.high_attenuation_db)
     if stream:
         out["hybrid_stream"] = stream_output(config, rendered, timeline, cores, attenuation_db)
     return out

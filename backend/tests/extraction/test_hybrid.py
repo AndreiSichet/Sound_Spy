@@ -102,7 +102,7 @@ def test_streaming_equals_the_whole_file_functions(hybrid_config, labels) -> Non
     from soundspy.training.evaluate_hybrid import (
         HybridCores,
         chosen_route,
-        gate_output,
+        configured_output,
         route_estimates,
     )
 
@@ -117,10 +117,13 @@ def test_streaming_equals_the_whole_file_functions(hybrid_config, labels) -> Non
                         hybrid_config.extraction.hybrid.speech.input_gain_db)
     est = route_estimates(cores, x, SR, labels, hybrid_config.extraction.hybrid.speech.labels)
     route = chosen_route(hybrid_config, labels)
-    whole = gate_output(est[route], x, labels, 30, hybrid_config.extraction.hybrid.gate, source,
-                        SR, cores.latencies(SR)["enhancer_route"], warmup=route != "wf")
+    whole = configured_output(hybrid_config, route, est[route], x, labels, 30, source, SR,
+                              cores.latencies(SR)["enhancer_route"])
     assert np.abs(stream - whole).max() < 1e-4
-    assert ext.status_info()["route"] == (SPEECH if labels == ("speech",) else WAVEFORMER)
+    info = ext.status_info()
+    assert info["route"] == (SPEECH if labels == ("speech",) else WAVEFORMER)
+    # the speech route uses its own gate (step 07d), the Waveformer route the 07c gate
+    assert info["gate_kind"] == ("speech_route" if labels == ("speech",) else "detector")
 
 
 def test_route_switch_crossfades_without_jumps(hybrid_config) -> None:

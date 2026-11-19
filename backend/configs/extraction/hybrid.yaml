@@ -71,6 +71,48 @@ gate:                            # HybridGate (extraction/hybrid_gate.py)
                                  # detector or (after warmup_ms) the output opens it. Needs the
                                  # detector: without one the gate starts open
 
+speech_gate:                     # SpeechRouteGate (extraction/speech_gate.py, step 07d): the gate of
+                                 # the SPEECH ROUTE, driven by DeepFilterNet3's own output. r =
+                                 # level of its output - level of its input (dB): music only -30
+                                 # to -45, speech about -5 (tuning session, 19 Nov). The "gate"
+                                 # above stays the Waveformer route's gate
+  enabled: true                  # the page's "Gate" switch turns both gates off
+  close_db: -12                  # r below this ...
+  close_hold_ms: 100             # ... for this long without a break: close
+  close_ms: 50                   # closing ramp
+  open_db: -9                    # r above this: open (above close_db: no chattering)
+                                 # close_db / close_hold_ms / open_db: chosen by `soundspy
+                                 # evaluate speech-gate` (19 Nov) on validation + the tuning
+                                 # session 20261119-105248-00c1 (60 s mixtures, live detector,
+                                 # rule in speech_tuning): short pauses -34.4 -> -35.7 dB, speech
+                                 # cut 0.5 -> 0.2 %, worst start leak 0.76 -> 0.22 s, classical at
+                                 # 0 dB -0.29 dB, val Speech alone +4.72 -> +6.62 dB against the
+                                 # 07c gate (spec defaults -15 / 150 / -12: -35.2 dB, but music
+                                 # only -32.4 instead of -45.4: DeepFilterNet3's own music leaks
+                                 # reopened the gate)
+  open_ms: 5                     # opening ramp (a word start must not wait)
+  close_hold_confident_ms: 50    # the hold when the detector is SURE nothing selected is there
+  detector_override_max_ms: 1000 # the hold while the detector says "speech": the detector alone
+                                 # never closes the gate (r must be low) and never keeps it open
+                                 # for longer than this while r stays low. Not in the spec's
+                                 # tuning grid; measured on the tuning data (live, 40 dB, with
+                                 # -12 / 150 / -9): 150 / 300 / 500 / 1000 ms -> short pauses
+                                 # -38.0 / -37.1 / -36.4 / -35.7 dB, pop at 0 dB 0.56 / 0.40 /
+                                 # 0.28 / 0.18 dB below the 07c gate (classical 0.20-0.24):
+                                 # 500 and 1000 keep the 0.3 dB rule; the spec's 1000 is kept
+  close_prob_factor: 0.5         # "sure" = probability below this x the class threshold
+  ratio_attack_ms: 5             # level envelopes of output and input: rise ...
+  ratio_release_ms: 50           # ... and fall
+  min_level_dbfs: -60            # an input quieter than this cannot open the gate
+  block_ms: 1                    # decision grid (no added latency)
+  warmup_ms: 0                   # after the speech route starts, r is not used for this long (the
+                                 # gate stays closed). Tuning session: 0 ms already leaks at most
+                                 # 0.22 s at a stream start; 300 / 500 / 1000 ms cut the word
+                                 # starts (speech-start cut 4.2 / 13 / 28 %, val Speech alone
+                                 # +5.9 / +4.6 / +2.9 dB instead of +6.6)
+  start_closed: true             # a stream (or the speech route when it starts) starts closed and
+                                 # opens when r > open_db (speech appears)
+
 live:
   ramp_ms: 20                    # crossfade between routes and pass-through
   performance_cores: true        # keep the audio thread on the CPU's performance cores (Intel
@@ -85,3 +127,11 @@ tuning:                          # soundspy evaluate hybrid-gate (validation rec
                                  # whose SI-SDRi cost against no gate stays within this. (0.3 as
                                  # in step 07b is met by no setting with the live detector: its
                                  # lag alone costs ~0.9 dB; offline the gate costs ~0.05 dB)
+
+speech_tuning:                   # soundspy evaluate speech-gate (validation recipes + the tuning
+                                 # real-room session; never the held-out session, never test)
+  close_db: [-20, -15, -12]
+  open_db: [-14, -12, -9]        # only combinations with open_db > close_db
+  close_hold_ms: [100, 150, 250]
+  max_speech_cut: 0.02           # speech-cut rate allowed on the tuning session (live detector)
+  max_cost_db: 0.3               # speech over music: SI-SDRi at most this below the 07c gate

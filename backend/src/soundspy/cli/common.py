@@ -32,6 +32,7 @@ USER_ERRORS = (AudioBackendUnavailable, DeviceResolutionError, ConfigError, MicS
 
 CLIPPING_WARN = 0.001  # 0.1 %
 QUIET_WARN_DBFS = -55.0
+DEAD_INPUT_DBFS = -90.0  # quieter than any real room: a dead or disconnected input
 NOISY_WARN_DBFS = -45.0
 SILENCE_WARN = 0.01  # more than 1 % of the recording in >= 5 ms runs of exact zeros
 TOO_CLEAN_WARN_DBFS = -100.0  # below any real mic + converter self-noise
@@ -85,7 +86,9 @@ def print_device_line(resolved: ResolvedInput) -> None:
     )
 
 
-def level_warnings(buf: AudioBuffer) -> list[str]:
+def level_warnings(buf: AudioBuffer, *, quiet_expected: bool = False) -> list[str]:
+    """Problems with a recording's level. ``quiet_expected`` (room tone: a quiet room is the
+    goal): no "very quiet" warning, only one for a dead input below ``DEAD_INPUT_DBFS``."""
     warnings = []
     clip = clipping_ratio(buf)
     for ch in np.flatnonzero(clip > CLIPPING_WARN):
@@ -93,7 +96,14 @@ def level_warnings(buf: AudioBuffer) -> list[str]:
             f"channel {ch}: clipping on {clip[ch] * 100:.2f} % of samples - "
             "lower the input gain or move away from the microphone"
         )
-    if np.all(rms_dbfs(buf) < QUIET_WARN_DBFS):
+    rms = rms_dbfs(buf)
+    if quiet_expected:
+        if np.all(rms < DEAD_INPUT_DBFS):
+            warnings.append(
+                f"all channels below {DEAD_INPUT_DBFS:.0f} dBFS RMS: quieter than any real room "
+                "- a muted, disconnected or dead input"
+            )
+    elif np.all(rms < QUIET_WARN_DBFS):
         warnings.append(
             f"all channels below {QUIET_WARN_DBFS:.0f} dBFS RMS: muted or very quiet input"
         )
@@ -131,7 +141,8 @@ def similarity_verdict(identical: bool, lag: int, corr_zero_lag: float) -> str:
     return "distinct signals"
 
 
-def print_level_report(buf: AudioBuffer, *, compare_channels: bool = True) -> None:
+def print_level_report(buf: AudioBuffer, *, compare_channels: bool = True,
+                       quiet_expected: bool = False) -> None:
     rms, peak = rms_dbfs(buf), peak_dbfs(buf)
     floor, clip = noise_floor_dbfs(buf), clipping_ratio(buf)
     print()
@@ -161,7 +172,7 @@ def print_level_report(buf: AudioBuffer, *, compare_channels: bool = True) -> No
             "with two real microphones the lag sign should flip."
         )
 
-    warnings = level_warnings(buf)
+    warnings = level_warnings(buf, quiet_expected=quiet_expected)
     print()
     if warnings:
         print("Warnings:")
