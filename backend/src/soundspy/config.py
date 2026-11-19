@@ -418,6 +418,7 @@ class HybridSpeechConfig:
     device: str  # cpu | cuda | auto
     backend: str  # onnx | torch
     cpu_threads: int
+    input_gain_db: float = 0.0  # the network sees the input this much louder (output scaled back)
     model_dir: Path | None = None  # None: <model_cache>/deepfilternet/<model_file stem> (tests
     #                                point it elsewhere)
 
@@ -1162,7 +1163,8 @@ def load_hybrid_config(path: Path, labels: LabelSet) -> HybridConfig:
                    source)
     top.name = ""
     sp = _Section(top.data, "speech", ("labels", "route", "model", "atten_lim_db",
-                                       "post_filter", "device", "backend", "cpu_threads"), source)
+                                       "post_filter", "device", "backend", "cpu_threads",
+                                       "input_gain_db"), source)
     chosen = sp.data["labels"]
     if (not isinstance(chosen, list) or not chosen
             or not all(isinstance(c, str) and c in labels for c in chosen)):
@@ -1214,6 +1216,7 @@ def load_hybrid_config(path: Path, labels: LabelSet) -> HybridConfig:
             device=_choice(sp, "device", ("cpu", "cuda", "auto")),
             backend=_choice(sp, "backend", ("onnx", "torch")),
             cpu_threads=sp.integer("cpu_threads", ge=1),
+            input_gain_db=sp.number("input_gain_db", ge=-20, le=40),
         ),
         gate=gate,
         ramp_ms=live.number("ramp_ms", ge=0, le=1000),

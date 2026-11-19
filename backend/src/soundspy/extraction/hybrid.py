@@ -451,7 +451,7 @@ def build_hybrid_extractor(config, activity: ActivitySource | None = None, *,
                                        post_filter=sp.post_filter, backend=sp.backend,
                                        cpu_threads=sp.cpu_threads)
         speech = SpeechEnhancer(speech_core, atten_lim_db=sp.atten_lim_db,
-                                cpu_threads=sp.cpu_threads)
+                                cpu_threads=sp.cpu_threads, input_gain_db=sp.input_gain_db)
     except SpeechUnavailable as exc:
         notes.append(f"speech enhancer: {exc}")
     if waveformer is None and speech is None:

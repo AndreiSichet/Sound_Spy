@@ -81,6 +81,7 @@ class HybridCores:
     waveformer: Any
     speech: Any
     live: Any  # NeuralLiveConfig
+    speech_gain_db: float = 0.0  # hybrid.speech.input_gain_db
 
     def latencies(self, sample_rate: int) -> dict[str, int]:
         from soundspy.extraction.neural_tse import WaveformerStream
@@ -105,7 +106,7 @@ def load_cores(config: AppConfig, device: str = "auto") -> HybridCores:
                           device if device != "auto" else neural.live.device)
     speech = load_speech_core(speech_model_dir(config), sp.device, post_filter=sp.post_filter,
                               backend=sp.backend, cpu_threads=sp.cpu_threads)
-    return HybridCores(wf, speech, neural.live)
+    return HybridCores(wf, speech, neural.live, sp.input_gain_db)
 
 
 def gate_output(est: np.ndarray, mixture: np.ndarray, labels: Collection[str],
@@ -136,8 +137,9 @@ def route_estimates(cores: HybridCores, mixture: np.ndarray, sample_rate: int,
     labels = frozenset(labels)
     out = {"wf": whole_estimates(cores.waveformer, mixture, sample_rate, labels)[0]}
     if labels == frozenset(speech_labels):
-        out["dfn"] = enhance_whole(cores.speech, mixture)
-        out["cascade"] = enhance_whole(cores.speech, out["wf"])
+        gain = cores.speech_gain_db
+        out["dfn"] = enhance_whole(cores.speech, mixture, input_gain_db=gain)
+        out["cascade"] = enhance_whole(cores.speech, out["wf"], input_gain_db=gain)
     return out
 
 
@@ -201,7 +203,8 @@ def stream_output(config: AppConfig, rendered, source: ActivitySource, cores: Hy
                else None)
     ext = HybridExtractor(dataclasses.replace(hy, performance_cores=False),
                           waveformer=WaveformerStream(cores.waveformer, cores.live),
-                          speech=SpeechEnhancer(cores.speech), cascade_waveformer=cascade,
+                          speech=SpeechEnhancer(cores.speech, input_gain_db=cores.speech_gain_db),
+                          cascade_waveformer=cascade,
                           activity=source, gate=True)
     target = TargetSpec(labels=frozenset(rendered.recipe.target), attenuation_db=attenuation_db)
     chunk = config.engine.chunk_frames(rendered.mixture.sample_rate)

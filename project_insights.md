@@ -193,8 +193,11 @@ reopens at once. Measured: music only with Speech selected is removed by 48–60
 owner's classical recording, live as offline; the baseline 40, the neural network 19); speech over
 music +7.6 dB SI-SDRi offline (v1 +5.3). With the live detector's lag the gate costs 1–3 dB on
 mixtures that start with speech, and in **short pauses** while someone talks the music stays at
-about −27 dB. The delay grows to 144 ms. The real-room benchmark is ready and waits for the
-owner's recordings.
+about −27 dB. The delay grows to 144 ms. The real-room benchmark (recorded by the owner on
+19 Nov) confirmed the separation (+11 to +12 dB with voice and music equally loud, after a
++10 dB input gain fixed the speech enhancer's cold start on the quiet microphone), and in the
+owner's live listening test only the owner's own voice was left while talking over music, where the
+baseline let the music through.
 
 ### The story so far, step by step
 
@@ -4158,6 +4161,18 @@ The last two rows are a property of the laptop's processor (Intel i5-12450H: 4 f
 bursts to the slow cores. The hybrid therefore keeps its audio thread on the performance cores
 (`live.performance_cores`, `engine/cpu.py`: Windows is asked which cores are the fast ones).
 
+**Input gain: +10 dB.** From a cold start DeepFilterNet3 treats very quiet input as noise. On
+the laptop microphone (the owner's speech peaks around −29 dBFS) it removed the first 5–10 s
+of speech, found by the real-room benchmark and heard by the owner live (15.9). The speech
+enhancer therefore sees its input 10 dB louder and its output is turned down by the same
+amount (`speech.input_gain_db`; the level that comes out is unchanged). The value was chosen
+without the benchmark: the smallest gain that removes the loss on the owner's earlier
+recordings and costs at most 0.3 dB on validation (0 / 10 / 20 / 30 dB: validation SI-SDRi of
+the speech route +8.70 / +8.61 / +7.76 / +6.40; the synthetic mixtures are ~−27 dBFS, 10–20 dB
+louder than this microphone, so more gain overdrives them). Its price: on its own the speech
+enhancer removes less music (validation −25.6 → −23.2 dB) and its start-up leak lasts longer
+(15.7).
+
 **A start-up leak.** A network that has just started has heard nothing yet. On the owner's
 classical recording DeepFilterNet3's estimate was −9 dB against the input in the first second,
 −18 dB in the second, and below **−75 dB** from then on. The gate handles this (15.4).
@@ -4261,11 +4276,11 @@ What the table says:
 | mask_baseline + live detector | -4.85 | 175 | -28.69 |
 | Waveformer v1 alone (Neural) | +3.28 | 51 | -12.48 |
 | v1 + hybrid gate | +3.00 | 56 | -19.60 |
-| **hybrid, offline detector** | +3.14 | 58 | -22.51 |
-| hybrid streaming (20 ms chunks) | +3.14 | 58 | -22.51 |
-| **hybrid, live detector** | +1.97 | 68 | -20.87 |
-| hybrid offline at 15 dB (the app's default) | +3.79 | 27 | -14.31 |
-| hybrid offline at 40 dB | +2.67 | 64 | -26.02 |
+| **hybrid, offline detector** | +3.20 | 57 | -23.06 |
+| hybrid streaming (20 ms chunks) | +3.20 | 57 | -23.06 |
+| **hybrid, live detector** | +2.06 | 65 | -21.42 |
+| hybrid offline at 15 dB (the app's default) | +3.82 | 28 | -14.52 |
+| hybrid offline at 40 dB | +2.76 | 62 | -26.94 |
 
 Streaming gives exactly the offline numbers. The hybrid is the Waveformer for every selection but Speech alone, so most of the 500 recipes are scored by v1 plus the gate; the Speech-only recipes are where the speech enhancer works:
 
@@ -4276,69 +4291,75 @@ Streaming gives exactly the offline numbers. The hybrid is the Waveformer for ev
 | baseline, offline detector | +6.17 | 3 | 22 % |
 | baseline, live detector | -8.23 | 29 | 80 % |
 | Waveformer v1 | +4.85 | 3 | 29 % |
-| DeepFilterNet3 alone | +6.08 | 5 | 40 % |
-| DeepFilterNet3 + gate (= hybrid offline) | +6.60 | 5 | 40 % |
-| cascade: v1 → DeepFilterNet3 | +4.83 | 1 | 57 % |
-| cascade + gate | +5.83 | 1 | 57 % |
-| hybrid, live detector | +3.80 | 9 | 44 % |
+| DeepFilterNet3 alone | +6.97 | 4 | 39 % |
+| DeepFilterNet3 + gate (= hybrid offline) | +7.13 | 4 | 39 % |
+| cascade: v1 → DeepFilterNet3 | +5.57 | 1 | 54 % |
+| cascade + gate | +6.17 | 1 | 54 % |
+| hybrid, live detector | +4.70 | 6 | 43 % |
 
 **Benchmarks** (the 07b sets; Speech selected unless said otherwise):
 
 | Benchmark | hybrid offline | hybrid live | v1 | baseline offline | baseline live |
 |---|---|---|---|---|---|
-| every class selected while absent (200), suppression | -18.18 | -19.15 | -12.60 | -26.12 | -26.53 |
-| music only, Speech selected (100), suppression at 30 dB | -48.13 | -48.66 | -15.26 | -29.57 | -29.25 |
-| the same at 40 dB | -60.45 | – | – | – | – |
-| speech + music, Speech selected (100), SI-SDRi | +7.59 | +4.22 | +5.33 | +7.09 | -4.64 |
+| every class selected while absent (200), suppression | -17.95 | -18.91 | -12.60 | -26.12 | -26.53 |
+| music only, Speech selected (100), suppression at 30 dB | -45.22 | -46.12 | -15.26 | -29.57 | -29.25 |
+| the same at 40 dB | -56.00 | – | – | – | – |
+| speech + music, Speech selected (100), SI-SDRi | +7.00 | +4.03 | +5.33 | +7.09 | -4.64 |
 | speech + music, **Music** selected (100), SI-SDRi | +2.17 | +1.59 | +2.11 | +0.04 | -6.88 |
-| LibriSpeech read speech + one other class (100), SI-SDRi | +12.08 | +10.23 | +8.06 | +7.52 | -5.39 |
+| LibriSpeech read speech + one other class (100), SI-SDRi | +12.49 | +10.65 | +8.06 | +7.52 | -5.39 |
 
-On the speech + music pairs DeepFilterNet3 alone scores +6.81 dB, with the gate +7.59; the cascade +2.56 / +3.75. **The cascade is not better** on any Speech benchmark except silence (it removes more when nothing is there, because two networks remove it): the configured speech route stays DeepFilterNet3 on the input.
+On the speech + music pairs DeepFilterNet3 alone scores +6.27 dB, with the gate +7.00; the cascade +3.18 / +4.06. **The cascade is not better** on any Speech benchmark except silence (it removes more when nothing is there, because two networks remove it): the configured speech route stays DeepFilterNet3 on the input.
 
 **The owner's recordings**, Speech at **40 dB** (level of the output against the input; "music only" = the parts where the detector hears music and no speech, "speech" = where it hears speech). Listening files: `outputs/eval/ext_hybrid/owner/`.
 
 | Recording, part | hybrid offline | hybrid live | v1 | v1 + gate | baseline offline | baseline live |
 |---|---|---|---|---|---|---|
-| classical music, nobody talking (48 s), music only | -65.3 | -65.3 | -18.8 | -21.5 | -40.0 | -40.0 |
-| classical music, nobody talking (48 s), whole | -66.2 | -66.2 | -19.5 | -22.2 | -40.0 | -40.0 |
-| the owner talking and other sounds (62 s; `ui-test`), speech | -14.9 | -14.9 | -2.8 | -2.8 | -0.2 | -0.3 |
-| the owner talking and other sounds (62 s; `ui-test`), whole | -14.0 | -14.0 | -3.3 | -3.4 | -0.9 | -0.9 |
-| 18 Nov 10:16, talking over music (71 s), music only | -28.6 | -28.5 | -36.0 | -41.8 | -23.3 | -5.9 |
-| 18 Nov 10:16, talking over music (71 s), speech | -2.9 | -2.9 | -3.7 | -3.7 | -1.0 | -1.4 |
-| 18 Nov 10:16, talking over music (71 s), whole | -3.0 | -3.0 | -3.8 | -3.8 | -1.1 | -1.5 |
-| 18 Nov 10:22, talking over music (48 s), music only | -26.9 | -26.7 | -35.4 | -39.2 | -19.1 | -4.9 |
-| 18 Nov 10:22, talking over music (48 s), speech | -5.2 | -5.2 | -6.0 | -6.0 | -1.8 | -3.3 |
-| 18 Nov 10:22, talking over music (48 s), whole | -6.8 | -6.8 | -7.7 | -7.7 | -3.5 | -4.0 |
+| classical music, nobody talking (48 s), music only | -24.3 | -24.3 | -18.8 | -21.5 | -40.0 | -40.0 |
+| classical music, nobody talking (48 s), whole | -25.4 | -25.4 | -19.5 | -22.2 | -40.0 | -40.0 |
+| the owner talking and other sounds (62 s; `ui-test`), speech | -13.6 | -13.6 | -2.8 | -2.8 | -0.2 | -0.3 |
+| the owner talking and other sounds (62 s; `ui-test`), whole | -13.0 | -13.0 | -3.3 | -3.4 | -0.9 | -0.9 |
+| 18 Nov 10:16, talking over music (71 s), music only | -27.4 | -27.7 | -36.0 | -41.8 | -23.3 | -5.9 |
+| 18 Nov 10:16, talking over music (71 s), speech | -2.7 | -2.7 | -3.7 | -3.7 | -1.0 | -1.4 |
+| 18 Nov 10:16, talking over music (71 s), whole | -2.9 | -2.9 | -3.8 | -3.8 | -1.1 | -1.5 |
+| 18 Nov 10:22, talking over music (48 s), music only | -26.1 | -26.0 | -35.4 | -39.2 | -19.1 | -4.9 |
+| 18 Nov 10:22, talking over music (48 s), speech | -4.4 | -4.5 | -6.0 | -6.0 | -1.8 | -3.3 |
+| 18 Nov 10:22, talking over music (48 s), whole | -6.1 | -6.1 | -7.7 | -7.7 | -3.5 | -4.0 |
+| 19 Nov 11:12, the live listening test (60 s), music only | -10.4 | -10.5 | -10.8 | -10.9 | -20.8 | -5.6 |
+| 19 Nov 11:12, the live listening test (60 s), speech | -3.3 | -3.3 | -3.2 | -3.2 | -2.0 | -2.9 |
+| 19 Nov 11:12, the live listening test (60 s), whole | -4.1 | -4.1 | -4.0 | -4.0 | -3.0 | -3.3 |
+
+*All numbers in this section are with the speech enhancer's input gain of +10 dB (15.3),
+configured after the real-room benchmark had found its cold start. Without it the hybrid scored
++3.14 / +1.97 dB overall (offline / live), +6.60 / +3.80 with Speech alone, −48.1 / −60.5 dB on
+"music only" at 30 / 40 dB and −66.2 dB on the owner's classical recording.*
 
 **What it means.**
 
-- **Silence when absent: reached, offline and live.** With Speech selected and only music
-  playing, the hybrid removes 48 dB at 30 dB (60 dB at 40 dB) on the test pairs, against the
-  baseline's 30 and v1's 15, and on the owner's classical recording 66 dB, live as offline. The
-  detector decides *that* the music is not speech; DeepFilterNet3 removes it even before the gate
-  closes (−26 dB alone).
-- **Separation when overlapping: reached offline, not with the live detector's lag.** With
-  speech and music together the speech enhancer is clearly better than everything before it
-  (+7.6 dB against v1's +5.3 and the live baseline's −4.6; read speech +12.1 against +8.1). With
-  the live detector it drops to +4.2: the gate, closed in a pause, opens only when the voice is
-  loud enough against the input (−6 dB) or the detector catches up, and the start of a quieter
-  phrase is lost. That is the gate, not the speech enhancer: without the gate it scores +6.8.
-- **The overall score** stays within 0.14 dB of v1 offline (most of the 500 recipes are not
-  Speech alone and go through v1 with the gate, which costs 0.3 dB there) and 1.3 dB below v1
-  with the live detector.
-- **The owner's listening-test recordings** (talking over music, 18 Nov) show the weak spot that
-  matters most: in **short pauses** the detector never becomes sure enough for long enough
-  (400 ms below half its threshold), so the gate stays open and only DeepFilterNet3's own
-  suppression works: −27 to −29 dB, where v1 removed −35 / −36 dB and the live baseline only
-  −5 / −6. While the owner talks, the hybrid keeps the voice about as loud as v1 (−2.9 / −5.2 dB
-  against −3.7 / −6.0) and removes the music under it, which neither earlier method did.
-- **The `ui-test` recording** (the owner talking plus other sounds he made) comes out 14 dB
-  quieter overall: per second, the speech passes almost untouched (about −0.5 dB) while loud
-  non-speech events are removed by 20–40 dB, which is what Speech means here.
-- **The cascade** (v1 first) is worse for speech (+3.8 against +7.6 on the pairs): v1 already
-  damages the voice that DeepFilterNet3 would have kept. Not used.
-- **Interruption on synthetic mixtures** is not meaningful (Chapter 24.56: the dataset's speech
-  clips carry their own background); the 5 % criterion waits for the real-room benchmark.
+- **Silence when absent: reached on the benchmarks, not at the start of a stream.** With Speech
+  selected and only music playing, the hybrid removes 45 dB at 30 dB (56 dB at 40 dB) on the test
+  pairs, against the baseline's 30 and v1's 15. On the owner's classical recording it is
+  −25.4 dB over the whole file: closed (−55 to −69 dB) everywhere except the first 2 s, where the
+  speech enhancer's start-up leak lasts longer than the 1 s warm-up and opens the gate (without
+  the input gain −66.2 dB, but then the owner's first seconds of speech were removed). Live this
+  means: music playing when the session starts, or when Speech is selected, is heard for about
+  2 s before the silence.
+- **Separation when overlapping: reached offline; with the live detector below v1 on the test
+  pairs, above it in the real room.** Speech over music +7.0 dB offline (v1 +5.3), +4.0 live: the
+  gate, closed in a pause, opens only when the voice is loud enough against the input (−6 dB) or
+  the detector catches up. In the real room the live hybrid gains +11.8 dB (classical) and
+  +10.6 dB (pop) at 0 dB (15.9).
+- **The overall score** is within 0.08 dB of v1 offline (+3.20 vs +3.28) and 1.2 dB below it with
+  the live detector; Speech alone gains the most (+7.1 offline, +4.7 live, v1 +4.9).
+- **The owner's talking-over-music recordings**: in short pauses the detector never becomes sure
+  for long enough, the gate stays open and only the speech enhancer's own suppression works:
+  −26 to −28 dB on 18 Nov, about −10 dB in the listening-test recording of 19 Nov (where the
+  detector heard speech almost throughout); the owner did not hear the music in those pauses.
+  While talking, the voice stays as loud as with v1 (−2.7 / −4.4 / −3.3 dB).
+- **`ui-test`** (the owner talking plus other sounds) comes out 13 dB quieter overall:
+  the speech passes almost untouched, loud non-speech events are removed by 20–40 dB.
+- **The cascade** (v1 first) stays worse for speech (+6.2 against +7.1). Not used.
+- **Interruption on synthetic mixtures** is not meaningful (Chapter 24.56); on the real-room
+  recording it is 0.2 % (0.5 % live) with the input gain, 12.1 % without (15.9).
 
 **Acceptance (spec 07c §9).**
 
@@ -4346,12 +4367,12 @@ On the speech + music pairs DeepFilterNet3 alone scores +6.81 dB, with the gate 
 |---|---|---|
 | v1 restored; cleanup done | v1 configured; v2, probes, logs deleted | met |
 | DeepFilterNet3 integrated, license recorded, streaming = offline | adapted copy + ONNX step; MIT/Apache-2.0 in Chapter 27; stream = whole (2·10⁻⁸), hybrid stream = offline (0.00 dB) | met |
-| Music only, Speech at 40 dB: ≥ 35 dB on the 07b benchmark and the owner's recording | −60.5 dB (offline; live −48.7 at 30 dB); owner −66.2 dB live and offline | met |
-| Speech over music and the real-room benchmark at 0 dB: clearly above v1 and the baseline | offline +7.59 vs v1 +5.33, baseline +7.09 offline / −4.64 live; **live +4.22, below v1**; real room: waiting | partly |
-| Interruption ≤ 5 % on real-room speech | waiting for the recordings (synthetic not meaningful) | open |
-| 500-recipe SI-SDRi ≥ v1 − 0.3 dB (+2.98) | offline +3.14; **live +1.97** | met offline, missed live |
-| Live: RTF p95 < 0.8, 0 underruns, latency with DeepFilterNet's share | Speech route 0.39 (worst 0.58), 0 underruns; Waveformer route 0.72, **worst 0.86** (Neural alone the same day: 0.74 / 0.86); 1 underrun in each first session after a fresh server start; 144 ms, of which 40.0 ms DeepFilterNet3 (+29.4 against Neural) | partly |
-| pytest without GPU / data, ruff, frontend | 617 passed, ruff clean; 54 frontend tests, eslint, tsc, build | met |
+| Music only, Speech at 40 dB: ≥ 35 dB on the 07b benchmark and the owner's recording | test pairs −56.0 dB (live −46.1 at 30 dB); real room (classical) −70.0 dB; owner's classical recording **−25.4 dB** (the first 2 s of the stream; −55 to −69 dB afterwards; −66.2 without the input gain) | met on the benchmarks, missed on the owner's file |
+| Speech over music and the real-room benchmark at 0 dB: clearly above v1 and the baseline | real room at 0 dB: **+12.0 / +11.8 (classical, offline / live), +10.7 / +10.6 (pop)** vs v1 +5.2 / −3.3, baseline +1.6 / −8.1 and +1.3 / −1.2; test pairs offline +7.0 vs v1 +5.3, **live +4.0, below v1** | met in the real room, partly on the test pairs |
+| Interruption ≤ 5 % on real-room speech | **0.2 % offline, 0.5 % live** (12.1 % before the input gain; v1 4.8 %, baseline 2.4 % / 19.8 %) | met |
+| 500-recipe SI-SDRi ≥ v1 − 0.3 dB (+2.98) | offline +3.20; **live +2.06** | met offline, missed live |
+| Live: RTF p95 < 0.8, 0 underruns, latency with DeepFilterNet's share | Speech route 0.39 (worst 0.58), 0 underruns; Waveformer route 0.72, **worst 0.86** (Neural alone the same day: 0.74 / 0.86); 1 underrun in each first session after a fresh server start; 144 ms, of which 40.0 ms DeepFilterNet3 | partly |
+| pytest without GPU / data, ruff, frontend | 618 passed, ruff clean; 54 frontend tests, eslint, tsc, build | met |
 | Nothing large in the repository; no git write commands | weights and the ONNX file on D:, fixture 128 kB | met |
 
 ### 15.8 Live
@@ -4402,16 +4423,76 @@ Scoring (`soundspy evaluate extraction --method hybrid --benchmark real`), Speec
   **interruption rate**: the share of 50 ms speech frames the output turned down by more than
   6 dB (cut word starts, ducked syllables).
 
-**Status: waiting for recordings.** The commands, the case builder and the scoring are
-implemented and tested with fixture recordings (synthetic "speech" bursts, noise as "music");
-the owner records once (about 3 minutes) and runs the evaluation (Chapter 2.11).
+**Results, session `20261119-105248-00c1`** (recorded by the owner on 19 Nov: speech 60 s,
+classical music 30 s, a song with vocals 30 s, room tone; `experiments/ext_hybrid/real_room.md`,
+listening files in `outputs/eval/ext_hybrid/real/`), **with the configured input gain of
++10 dB** (the first run, without it, follows below). Speech selected; mixtures SI-SDRi at 30 dB,
+music only and speech only at 40 dB:
+
+| System | classical mix −5 / 0 / +5 / +10 dB | pop (vocals) mix −5 / 0 / +5 / +10 dB | classical only | pop only | speech only: SI-SDR / interruption |
+|---|---|---|---|---|---|
+| baseline, offline detector | +2.4 / +1.6 / +1.7 / +0.3 | +0.6 / +1.3 / +1.2 / +1.3 | −40.0 | −7.5 | +14.7 / 2.4 % |
+| baseline, live detector | −7.8 / −8.1 / −3.1 / −6.1 | −0.6 / −1.2 / −0.1 / −0.3 | −40.0 | −15.0 | +8.0 / 19.8 % |
+| Waveformer v1 | +5.6 / +5.2 / +3.7 / +1.3 | −9.0 / −3.3 / +0.3 / +0.5 | −30.1 | −8.2 | +14.0 / 4.8 % |
+| DeepFilterNet3 alone | +14.6 / +12.6 / +9.7 / +6.7 | +12.6 / +10.7 / +8.4 / +5.8 | −30.0 | −17.1 | +17.5 / 0.2 % |
+| **hybrid, offline detector** | **+13.7 / +12.0 / +9.4 / +6.6** | **+12.6 / +10.7 / +8.3 / +5.8** | **−70.0** | −17.1 | **+17.5 / 0.2 %** |
+| **hybrid, live detector** | **+13.6 / +11.8 / +9.5 / +6.6** | **+12.5 / +10.6 / +8.3 / +5.8** | **−70.0** | −17.1 | **+17.4 / 0.5 %** |
+
+With the gain the hybrid is clearly the best at every speech-to-music ratio, live as offline;
+the classical music alone is removed by 70 dB; speech alone keeps 99.5 % of its frames. The pop
+song alone is the one weak case (−17 dB): its singing is a voice for the speech enhancer and
+mostly speech for the detector.
+
+**The first run, without the input gain** (the same recordings):
+
+| System | classical mix −5 / 0 / +5 / +10 dB | pop (vocals) mix −5 / 0 / +5 / +10 dB | classical only | pop only | speech only: SI-SDR / interruption |
+|---|---|---|---|---|---|
+| baseline, offline detector | +2.4 / +1.6 / +1.7 / +0.3 | +0.6 / +1.3 / +1.2 / +1.3 | −40.0 | −7.5 | +14.7 / 2.4 % |
+| baseline, live detector | −7.8 / −8.1 / −3.1 / −6.1 | −0.6 / −1.2 / −0.1 / −0.3 | −40.0 | −15.0 | +8.0 / 19.8 % |
+| Waveformer v1 | +5.6 / +5.2 / +3.7 / +1.3 | −9.0 / −3.3 / +0.3 / +0.5 | −30.1 | −8.2 | +14.0 / 4.8 % |
+| DeepFilterNet3 alone | +9.7 / +8.4 / +1.9 / −2.1 | +8.0 / +10.2 / +0.2 / −2.7 | −39.7 | −25.3 | +10.8 / 12.1 % |
+| **hybrid, offline detector** | **+8.8 / +8.3 / +1.8 / −2.2** | **+8.0 / +10.2 / +0.4 / −2.7** | **−79.7** | −25.5 | +10.8 / 12.1 % |
+| **hybrid, live detector** | **+8.4 / +8.1 / +1.8 / −2.2** | **+7.9 / +10.2 / +0.3 / −2.7** | **−79.7** | −35.1 | +10.8 / 12.1 % |
+
+What the first run said (its conclusions on separation and silence still hold, the numbers
+above are better):
+
+- **Separation when overlapping: clearly reached, live too.** With the voice as loud as the music
+  or quieter (−5 and 0 dB) the hybrid gains 8–10 dB, live as offline; v1 gains 5 dB with
+  classical music and makes the pop song *worse* (−9 / −3 dB: it keeps the singing), the live
+  baseline loses 1–8 dB.
+- **Silence when absent: classical −80 dB** at 40 dB (the speech enhancer alone −40, the gate the
+  rest). The pop song with vocals is the expected hard case: the singing counts as voice for the
+  speech enhancer (−25 dB) and often as speech for the detector (the gate stays open): −25 dB
+  offline, −35 dB live.
+- **When the voice is much louder than the music (+5, +10 dB) the hybrid gains little or loses
+  2 dB**, as DeepFilterNet3 alone does: SI-SDR also counts what it changes in the voice itself
+  (it removes the room's echo and noise from the recorded speech too, and see the next point),
+  and with little music to remove that change outweighs the gain. With the input gain this
+  is gone (+9.4 / +6.6 dB): most of the loss was the cut speech of the next point.
+- **Word starts: 12.1 % of the speech frames turned down, the target is 5 %** (v1 4.8 %, baseline
+  offline 2.4 %, live 19.8 %). The gate adds nothing (DeepFilterNet3 alone: the same 12.1 %).
+  Looking closer: the 50 frames are ordinary voiced speech (as much energy below 1 kHz as the
+  kept speech, the same level), turned down by 40 dB (median), and **all in the first 15 s**.
+  It is a **cold-start effect of DeepFilterNet3 on the quiet laptop microphone** (the owner's
+  speech peaks at −29 dBFS, −46 dBFS on average): started at 0 s it removes 24 of the first 26
+  speech frames and 22 of the next 29, then keeps everything; started at 30 s, 33 of 33 and 18 of
+  38. A fixed gain in front of it (divided out afterwards) removes the effect in a diagnostic:
+  +10 dB → 0.2–1.0 %, +20 dB → 0.0–1.0 %, but it also makes DeepFilterNet3 remove less music on
+  its own (classical −55.7 → −37.5 dB at +20 dB; the gate's silence comes on top). The owner
+  heard the effect live too (the first seconds of speech missing), so a gain was added:
+  **+10 dB**, chosen without this benchmark (15.3); its results are the table above.
+
+**The owner's live listening test (19 Nov, backend + page, Speech, 40 dB, music from the phone):** "the hybrid one is clearly better than the baseline: with the baseline I can still hear the music while talking, with the hybrid I can only hear myself talking, a major improvement." The step's central case (music under the voice, Chapter 15.1) is solved in the real room as the benchmark predicted. **Retest with the +10 dB input gain (19 Nov):** the first seconds of speech now come through (they had been missing in the first test, 24.57).
 
 ### 15.10 Limitations
 
-Chapter 26, items 31–37: the 40 ms delay for every selection, all voices kept (several
+Chapter 26, items 31–38: the 40 ms delay for every selection, all voices kept (several
 talkers, singing), non-speech overlap still with the Waveformer, the gate trusting the
 detector's certainty (and its live lag), the first second after Speech is selected, 48 kHz only,
-and the interruption rate being clean only on real recordings.
+the interruption rate being clean only on real recordings, and music heard for about 2 s at the
+start of a stream (the price of the input gain that fixed the speech enhancer's cold start on the
+quiet microphone; 15.3, 15.9).
 
 ---
 
@@ -5942,7 +6023,8 @@ gate like "the extractor hears the selected sound" and kept it open, exactly the
 second outweighed the other 47 (the rest was at −75 dB).
 
 **Fix.** After the speech enhancer starts, its output cannot reopen the gate for `warmup_ms`
-(only the detector can), and a stream that starts with a selection starts closed: −66.2 dB.
+(only the detector can), and a stream that starts with a selection starts closed: −66.2 dB
+(before the input gain of 24.57; with it −25.4 dB, Chapter 26 item 38).
 The first choice, 2 s, cost the speech route 2.2 dB with the live detector on validation
 recipes (every recipe is a fresh start, where only the detector, 0.3 s late, could open the
 gate); 1 s keeps most of the gain for less (Chapter 15.6). Starting the speech enhancer's
@@ -5985,6 +6067,22 @@ clip is mostly background count as "speech turned down".
 **Fix.** A frame counts as speech only within 20 dB of the clip's loudest frame (was 30); on
 synthetic data the rate is compared between systems (gate on vs off), and the 5 % criterion is
 judged on the real-room benchmark, whose speech is recorded in a quiet room.
+
+### 24.57 The speech enhancer removed the first seconds of speech
+
+**Symptom.** In the real-room benchmark 12.1 % of the owner's speech frames were turned down
+by more than 6 dB (target 5 %), all within the first 15 s, and the owner heard the start of
+the speech missing in the live test.
+
+**Cause.** Not the gate (DeepFilterNet3 alone: the same frames) and not breaths: the removed
+frames were ordinary voiced speech at the level of the kept speech, turned down by 40 dB.
+Restarting the stream later in the same take repeated it: from a cold start DeepFilterNet3
+takes the very quiet laptop microphone's speech (peaks −29 dBFS) for noise for 5–10 s.
+
+**Fix.** The speech enhancer sees its input 10 dB louder (`speech.input_gain_db`, output
+scaled back; chosen without the benchmark, Chapter 15.3): interruption 0.2 % (0.5 % live),
+real-room separation up by 3–9 dB; the owner's live retest confirmed it (the first seconds of
+speech come through). The price is a longer start-up leak for music (Chapter 26 item 38).
 
 ---
 
@@ -6457,6 +6555,13 @@ These are understood and accepted for now, not oversights.
 37. **The interruption rate is only clean on real recordings** (step 07c): on the synthetic
     mixtures the dataset's speech clips carry their own background, which the speech enhancer
     removes as well, and the rate counts that too (Chapter 24.56).
+38. **Music at the start of a stream** (step 07c): the speech enhancer's start-up leak lasts
+    about 2 s with its +10 dB input gain, longer than the gate's 1 s warm-up, so music playing
+    when a session starts (or when Speech is selected) is heard for about 2 s before the
+    silence (the owner's classical recording: −25.4 dB over the file, −55 to −69 dB after
+    the first 2 s). A longer warm-up cost the speech route 0.6–3 dB live on validation. Without
+    the gain the first 5–10 s of speech on the quiet laptop microphone were removed instead
+    (Chapter 15.3).
 
 ---
 
@@ -6601,7 +6706,7 @@ WS   /ws/session                        status 1/s, levels 20/s (input and outpu
 | Processing load (laptop) | RTF p95 0.06; ~12 % of one CPU core; *since step 06 (detector on GPU + extractor):* RTF p95 0.17; ~24 %; *since step 07, Neural on the GPU + detector on the CPU:* RTF p95 0.63, network 7.5 ms per call, ~71 % of one core, 0 underruns in 60 s; *step 07b, v2b + gate:* RTF p95 0.64 (worst 0.785), 7.8 ms per call, 72 %, 0 underruns |
 | Extractor (baseline) | STFT 1,024 / 256 at 48 kHz; gate 10 ms open, 300 ms hold, 200 ms close; SI-SDRi on 500 test mixtures: +2.2 dB offline, −4.9 dB live, +8.1 dB with true timing, +24.5 dB ideal mask |
 | Extractor (neural) | Waveformer E512/D256, 3.86 M parameters, 44.1 kHz, steps of 416 samples (9.4 ms), lookahead 32; delay 509 samples (10.6 ms) at 48 kHz; SI-SDRi on 500 test mixtures: +3.28 dB live and offline (median +3.32), +2.92 dB in simulated rooms; 0 % targets missed; 12.5 dB quieter when the target is absent. *Configured since step 07b, v2b + output gate (−12 / −18 / 15 dB):* +2.51 dB at 30 dB (+3.10 at 15 dB), +2.07 dB in simulated rooms; 2 % missed; 17.1 dB quieter when the target is absent |
-| Extractor (hybrid, step 07c) | Speech alone → DeepFilterNet3 (2.14 M parameters, 48 kHz, 10 ms frames, ONNX Runtime on the CPU, 2.4 ms per 20 ms chunk live); other selections → Waveformer v1; gate 400 ms hold / 0.5 × threshold / reopen at −6 dB, 1 s warm-up; delay 1919 samples (40.0 ms), session 144 ms; test SI-SDRi +3.14 dB offline (+1.97 live detector), music only with Speech selected −48 dB at 30 dB, −60 dB at 40 dB |
+| Extractor (hybrid, step 07c) | Speech alone → DeepFilterNet3 (2.14 M parameters, 48 kHz, 10 ms frames, ONNX Runtime on the CPU, 2.4 ms per 20 ms chunk live); other selections → Waveformer v1; gate 400 ms hold / 0.5 × threshold / reopen at −6 dB, 1 s warm-up; delay 1919 samples (40.0 ms), session 144 ms; speech input gain +10 dB; test SI-SDRi +3.20 dB offline (+2.06 live detector), music only with Speech selected −45 dB at 30 dB, −56 dB at 40 dB; real room at 0 dB +12 dB, interruption 0.2 % |
 | Neural training | 20,000 mixtures (25.4 GB cache on D:, half reverberant), 3 s crops, batch 4 × 4, ~12 min per round of 10,000 crops; second run 26 rounds, 5.4 h, best round 16: validation +3.72 dB. *Step 07b:* new random mixtures every round (4 workers, ~12.3 min per round), from v1, LR 1e-4; v2 15 rounds 3.3 h (+2.32 dB), v2b 30 rounds 6.2 h, best round 20: validation +3.17 dB, leak −17.8 dB |
 | Offline processing | 62 s recording in 6.5 s (step 07: 6.8 s with either method, 12 s the first time; step 07b: 6.1 s with v2b + gate, 6.8 s baseline); at most 5 minutes per recording on the page; one job at a time |
 | Speaker cushion / max queue / limiter | 2 chunks / 8 chunks / −1 dBFS ceiling, 50 ms release |

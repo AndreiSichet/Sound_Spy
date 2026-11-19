@@ -25,6 +25,16 @@ speech:
   backend: onnx                  # onnx: the streaming step exported once and run by ONNX Runtime
                                  # (2.6 ms per 20 ms chunk on the laptop); torch: PyTorch (8-16 ms)
   cpu_threads: 1                 # ONNX Runtime / PyTorch threads of the speech enhancer
+  input_gain_db: 10              # the speech enhancer sees the input this much louder (its output
+                                 # is turned down again: the level is unchanged). From a cold start
+                                 # DeepFilterNet3 treats very quiet input as noise: on the laptop
+                                 # microphone (speech peaks ~-29 dBFS) it removed the owner's
+                                 # speech for 5-10 s (real-room benchmark, and heard live, 19 Nov).
+                                 # Chosen without the benchmark: the smallest gain that removes the
+                                 # cold-start loss on the owner's earlier recordings and costs
+                                 # <= 0.3 dB on validation (0 / 10 / 20 / 30 dB: val SI-SDRi of the
+                                 # speech route +8.70 / +8.61 / +7.76 / +6.40; validation mixtures
+                                 # are ~-27 dBFS, 10-20 dB louder than this microphone)
 
 gate:                            # HybridGate (extraction/hybrid_gate.py)
   enabled: true                  # the page's "Gate" switch turns it off for a session

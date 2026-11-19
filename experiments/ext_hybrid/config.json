@@ -47,6 +47,7 @@
       "device": "cpu",
       "backend": "onnx",
       "cpu_threads": 1,
+      "input_gain_db": 10.0,
       "model_dir": "D:\\SoundSpyData\\models\\deepfilternet\\DeepFilterNet3"
     },
     "gate": {
@@ -128,7 +129,7 @@
   ],
   "app_version": "0.1.0",
   "git": {
-    "commit": "60230a239f8ced0f94f9f6ab989d2143a3a1e84d",
+    "commit": "338212a2d2bba014152d8cba609935986ab3774d",
     "dirty": true
   }
 }

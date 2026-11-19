@@ -113,7 +113,8 @@ def test_streaming_equals_the_whole_file_functions(hybrid_config, labels) -> Non
     stream = run_offline(ext, AudioBuffer(x.reshape(-1, 1), SR), target,
                          chunk_frames=960).samples.ravel()
     cores = HybridCores(ext._routes[WAVEFORMER].stream.core, ext._speech.core,
-                        hybrid_config.extraction.neural_tse.live)
+                        hybrid_config.extraction.neural_tse.live,
+                        hybrid_config.extraction.hybrid.speech.input_gain_db)
     est = route_estimates(cores, x, SR, labels, hybrid_config.extraction.hybrid.speech.labels)
     route = chosen_route(hybrid_config, labels)
     whole = gate_output(est[route], x, labels, 30, hybrid_config.extraction.hybrid.gate, source,

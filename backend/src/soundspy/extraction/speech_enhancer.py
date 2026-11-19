@@ -23,6 +23,10 @@ the hybrid extractor decides when it runs and mixes its output with the input.
   date (cheap) but does not run the network and outputs zeros; its GRU states start from zero
   again on the next active call. So selecting Speech gives a correctly normalised network at
   once, without a start-up dip.
+* **Input gain** (``input_gain_db``, step 07c follow-up): the network sees the input this much
+  louder, and its output is turned down by the same amount, so the level that comes out is
+  unchanged. From a cold start DeepFilterNet3 treats very quiet input as noise: the laptop
+  microphone (speech peaks around −29 dBFS) lost the owner's speech for its first 5–10 s.
 * **Attenuation limit** (``atten_lim_db``, DeepFilterNet's own option): mixes the delayed input
   back at that level. ``None`` (configured) leaves all attenuation to the session's slider.
 """
@@ -294,11 +298,13 @@ class SpeechEnhancer:
     ``latency`` samples late."""
 
     def __init__(self, core: SpeechCore, *, atten_lim_db: float | None = None,
-                 cpu_threads: int = 1) -> None:
+                 cpu_threads: int = 1, input_gain_db: float = 0.0) -> None:
         self.core = core
         self.p = core.p
         self.atten_lim_db = atten_lim_db
         self.cpu_threads = int(cpu_threads)
+        self.input_gain_db = float(input_gain_db)
+        self._gain = np.float32(10.0 ** (self.input_gain_db / 20.0))
         self.latency = latency_samples(self.p, core.lag_frames)
         self._times: deque[float] = deque(maxlen=200)
         self.reset()
@@ -343,7 +349,7 @@ class SpeechEnhancer:
     def process(self, x: np.ndarray, active: bool = True) -> np.ndarray:
         x = np.asarray(x, dtype=np.float32).reshape(-1)
         p, core = self.p, self.core
-        self._input.push(x)
+        self._input.push(x * self._gain if self._gain != 1.0 else x)
         if self._dry is not None:
             self._dry.push(x)
         k = len(self._input) // p.hop_size
@@ -373,6 +379,8 @@ class SpeechEnhancer:
                     self._resting = True
             self._frames += k
         est = self._output.read(x.size)
+        if self._gain != 1.0:
+            est = est / self._gain
         if self._dry is not None:
             dry = self._dry.read(x.size)
             lim = 10.0 ** (-abs(self.atten_lim_db) / 20.0)
@@ -386,8 +394,8 @@ class SpeechEnhancer:
                 "model_ms": mean, "model_ms_p95": p95}
 
 
-def enhance_whole(core: SpeechCore, x: np.ndarray, *, atten_lim_db: float | None = None
-                  ) -> np.ndarray:
+def enhance_whole(core: SpeechCore, x: np.ndarray, *, atten_lim_db: float | None = None,
+                  input_gain_db: float = 0.0) -> np.ndarray:
     """The whole signal through the network in one call (no streaming state hand-over),
     aligned with ``x`` and as long. Equals ``SpeechEnhancer`` output shifted by its latency."""
     p = core.p
@@ -395,13 +403,14 @@ def enhance_whole(core: SpeechCore, x: np.ndarray, *, atten_lim_db: float | None
     n = x.size
     # enough zeros that every frame covering x has lag_frames real frames after it
     total = -(-(n + (core.lag_frames + 2) * p.hop_size) // p.hop_size) * p.hop_size
+    gain = np.float32(10.0 ** (float(input_gain_db) / 20.0))
     padded = np.zeros(total, dtype=np.float32)
-    padded[:n] = x
+    padded[:n] = x * gain
     spec = Analysis(p).frames(padded.reshape(-1, p.hop_size))
     erb, low = Features(p).frames(spec)
     out = Synthesis(p).frames(core.whole(spec, erb, low))
     d = p.fft_size - p.hop_size
-    est = out[d:d + n]
+    est = out[d:d + n] / gain
     if atten_lim_db:
         lim = 10.0 ** (-abs(atten_lim_db) / 20.0)
         est = lim * x + (1.0 - lim) * est

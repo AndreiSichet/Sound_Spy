@@ -528,7 +528,7 @@ Real-room benchmark: `soundspy record-benchmark` → `data/benchmark/<session>/<
 (sidecar `benchmark_session`, `part`); `training/real_benchmark.py` (`build_cases`,
 `score_case`, `model_systems`, `evaluate_real`) → `experiments/ext_hybrid/real_room.json|md`.
 
-Result (`experiments/ext_hybrid/`): gate 400 ms / 0.5 / −6 dB, warm-up 1 s (val). Test +3.14 dB offline = streaming, +1.97 with the live detector (v1 +3.28); music only with Speech selected −48.1 dB at 30 dB, −60.5 at 40 dB; speech over music +7.59 offline / +4.22 live (v1 +5.33); owner's classical recording −66.2 dB live and offline. Live: Speech route RTF p95 0.39, Waveformer route 0.72 (worst 0.86, as Neural alone), 144 ms.
+Result (`experiments/ext_hybrid/`): gate 400 ms / 0.5 / −6 dB, warm-up 1 s (val), speech input gain +10 dB (`SpeechEnhancer(input_gain_db=)`, `enhance_whole(input_gain_db=)`, `HybridCores.speech_gain_db`). Test +3.20 dB offline = streaming, +2.06 with the live detector (v1 +3.28); music only with Speech selected −45.2 dB at 30 dB, −56.0 at 40 dB; speech over music +7.0 offline / +4.0 live (v1 +5.33); real room at 0 dB +12.0 / +11.8 (classical), +10.7 (pop), speech-only interruption 0.2 %; owner's classical recording −25.4 dB (the first 2 s of the stream). Live: Speech route RTF p95 0.39, Waveformer route 0.72 (worst 0.86, as Neural alone), 144 ms.
 
 ## Training data (step 04, `soundspy.data`)
 

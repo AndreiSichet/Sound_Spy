@@ -229,3 +229,16 @@ def test_missing_model_is_a_user_message(tmp_path) -> None:
 
     with pytest.raises(SpeechUnavailable, match="soundspy data download deepfilternet"):
         load_speech_core(tmp_path / "nothing", "cpu")
+
+
+def test_input_gain_leaves_the_level_unchanged() -> None:
+    from soundspy.extraction.speech_enhancer import SpeechEnhancer, enhance_whole
+
+    rng = np.random.default_rng(8)
+    x = (0.01 * rng.standard_normal(12 * 480)).astype(np.float32)
+    plain = SpeechEnhancer(_stub_core())
+    louder = SpeechEnhancer(_stub_core(), input_gain_db=10)
+    a, b = _stream(plain, x, (960,)), _stream(louder, x, (960,))
+    assert np.abs(a - b).max() < 1e-6  # the stub passes the spectrum: only the scaling shows
+    core = _stub_core()
+    assert np.abs(enhance_whole(core, x) - enhance_whole(core, x, input_gain_db=10)).max() < 1e-6
