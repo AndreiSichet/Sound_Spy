@@ -4564,7 +4564,8 @@ validation copies of speech + music, music only and LibriSpeech). *Held-out*, ne
 choice: the owner's afternoon session `20261119-164017-bb5e` (speech, classical music, a song with
 vocals, room tone) and the speech take of `20261119-164508-2d33` (recorded right after, with long
 pauses), scored together as `bb5e+2d33` with every take cut at 56 s (a phone rang from 56.4 s in
-the second take; Chapter 24.58). The session the spec named as held-out holds only room tone.
+the second take; Chapter 24.58). The session the spec named as held-out held only room tone (deleted
+at the owner's request).
 
 **What is measured** (`training/real_benchmark.py`, both sessions the same way):
 
@@ -4594,7 +4595,8 @@ The rule (strongest short-pause suppression with speech cut ≤ 2 % and speech o
 opening let DeepFilterNet3's own music leaks reopen the gate (music only −32.4 dB). Warm-up: none
 (300 / 500 / 1000 ms cut 4.2 / 13 / 28 % of the word starts). The detector's "speech" hold stays at
 the spec's 1000 ms; 500 ms would also keep the rule (−36.4 dB in short pauses) but is outside the
-spec's grid (left to the owner). A first run on 30 s mixtures (`speech_gate_tuning_30s.*`) had chosen
+spec's grid, and the owner kept 1000 ms: a value picked after seeing the results makes the numbers
+quietly optimistic. A first run on 30 s mixtures (`speech_gate_tuning_30s.*`) had chosen
 −12 / 150 / −9; the room-tone fix of Chapter 24.59 made the mixtures 60 s and the tuning was run
 again.
 
@@ -6331,7 +6333,8 @@ the "muted or very quiet input" warning, which the room part no longer gives, st
 no pause of 2 s or more, a second speech take with long pauses (`20261119-164508-2d33`); a phone rang
 at the end of that take (a 2.11 kHz tone from 57.0 s, a click at 56.4 s, found in the spectrum).
 `--session A+B` scores the two sessions' takes together and `--max-seconds 56` leaves the phone out
-without touching the recordings (rule 9).
+without touching the recordings (rule 9). The room-tone-only session was deleted at the owner's
+request.
 
 ### 24.59 A 30 s room take cut every real-room mixture to 30 s
 
@@ -6701,12 +6704,16 @@ it: with −12 dB DeepFilterNet3's own leaks of music reopened the gate (music o
 spec's default and the only measured value that keeps speech over music within 0.3 dB of the 07c
 gate with the 100 ms hold chosen by the rule's grid; 500 ms gave 0.7 dB deeper short pauses with
 the 150 ms hold and also kept the rule. It protects quiet speech that DeepFilterNet3 turns down while
-the detector hears it. Changing it is a one-line choice for the owner (`detector_override_max_ms`).
+the detector hears it. **The owner's decision (19 Nov): keep 1000 ms.** The gain was only 0.7 dB,
+the value was not in the tuning grid, and choosing it after seeing the results is the kind of
+step that makes numbers quietly optimistic.
 
 **Why does offline processing use the new gate too, although the old one is better offline?** (step
-07d) One code path for live and offline (rule 5, "offline == streaming" is tested), and offline is
+07d; confirmed by the owner on 19 Nov: the new gate everywhere) One code path for live and offline (rule 5, "offline == streaming" is tested), and offline is
 mostly used to prepare what the owner then hears live. The price is measured: 0.5–2 dB of SI-SDRi on
-synthetic Speech recipes, where the centred detector makes the 07c gate almost an oracle.
+synthetic Speech recipes, where the centred detector makes the 07c gate almost an oracle. It is better on real recordings (the
+held-out session, the owner's recordings), and the synthetic loss comes mostly from dataset clips
+labelled speech that DeepFilterNet3 does not treat as speech (limitation 39).
 
 ---
 
@@ -6880,7 +6887,8 @@ These are understood and accepted for now, not oversights.
 41. **Short pauses wait for the lagging live detector** (step 07d): while the live detector still says
     "speech" (0.6–1 s after the last word) the gate waits up to `detector_override_max_ms` (1 s) before
     closing, so in pauses shorter than about a second only DeepFilterNet3's own suppression (about
-    −30 dB) works. 500 ms would close them sooner at a small cost to speech over music (Chapter 15.11).
+    −30 dB) works. 500 ms would close them sooner at a small cost to speech over music; the owner
+    kept 1 s (not in the tuning grid; Chapter 15.11, 25).
 42. **A pause is not always "music only"** (step 07d): the speaker's own quiet sounds (breathing, the
     voice's tail) are kept as voice; with quiet music (5–10 dB below the voice) they are as loud as
     the music, and the pause measure reports them as leak (Chapter 24.60).
