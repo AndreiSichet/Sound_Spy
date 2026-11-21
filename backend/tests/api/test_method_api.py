@@ -159,15 +159,15 @@ def test_config_lists_the_methods(root_config, neural_config) -> None:
     assert status["extraction_method"] == "neural_tse"  # the configured choice
 
 
-def test_neural_session_and_switching_between_sessions(neural_config, no_leaked_threads
-                                                       ) -> None:
+def test_neural_session_and_switching_between_sessions(neural_config, no_leaked_threads,
+                                                       start_running) -> None:
     with TestClient(create_app(neural_config)) as client:
         assert client.get("/api/session").json()["extraction_method"] == "neural_tse"
         # no attenuation given: the live default (15 dB), echoed back
         body = client.put("/api/session/target", json={"labels": ["speech"]}).json()
         assert body["attenuation_db"] == 15.0
 
-        started = client.post("/api/session/start", json=FILE_SOURCE).json()
+        started = start_running(client, FILE_SOURCE)
         info = started["extraction"]
         assert started["extraction_method"] == "neural_tse" and info["method"] == "neural_tse"
         assert info["device"] == "cpu" and info["model"] == "tse_tiny"
@@ -202,7 +202,7 @@ def test_neural_session_and_switching_between_sessions(neural_config, no_leaked_
 
         body = client.put("/api/session/method", json={"method": "mask_baseline"}).json()
         assert body["extraction_method"] == "mask_baseline" and body["state"] == "idle"
-        started = client.post("/api/session/start", json=FILE_SOURCE).json()
+        started = start_running(client, FILE_SOURCE)
         assert started["extraction"]["method"] == "mask_baseline"
         assert started["extraction"]["latency_ms"] == pytest.approx(21.33)
         client.post("/api/session/stop")
@@ -225,8 +225,7 @@ def test_neural_session_and_switching_between_sessions(neural_config, no_leaked_
                     break
             else:
                 raise AssertionError("no error for an unknown method")
-        started = client.post("/api/session/start",
-                              json={**FILE_SOURCE, "method": "mask_baseline"}).json()
+        started = start_running(client, {**FILE_SOURCE, "method": "mask_baseline"})
         assert started["extraction"]["method"] == "mask_baseline"  # this session only
         client.post("/api/session/stop")
         assert client.get("/api/session").json()["extraction_method"] == "neural_tse"
@@ -236,12 +235,12 @@ def test_neural_session_and_switching_between_sessions(neural_config, no_leaked_
                            json={**FILE_SOURCE, "method": "magic"}).status_code == 422
 
 
-def test_session_falls_back_to_the_baseline_with_a_warning(root_config, no_leaked_threads
-                                                           ) -> None:
+def test_session_falls_back_to_the_baseline_with_a_warning(root_config, no_leaked_threads,
+                                                           start_running) -> None:
     with TestClient(create_app(no_checkpoint(root_config))) as client:
         with client.websocket_connect("/ws/session") as ws:
             ws.receive_json()
-            started = client.post("/api/session/start", json=FILE_SOURCE).json()
+            started = start_running(client, FILE_SOURCE)
             assert started["extraction"]["method"] == "mask_baseline"  # what really runs
             assert started["extraction_method"] == "neural_tse"  # what was chosen
             warnings: dict[str, str] = {}

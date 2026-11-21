@@ -44,12 +44,16 @@ def test_idle_status(client: TestClient) -> None:
     assert body["state"] == "idle" and body["monitoring"] is False
 
 
-def test_start_conflict_and_idempotent_stop(client: TestClient, no_leaked_threads) -> None:
+def test_start_conflict_and_idempotent_stop(client: TestClient, no_leaked_threads,
+                                           start_running) -> None:
     started = client.post("/api/session/start", json=FILE_SOURCE)
     assert started.status_code == 200, started.text
-    assert started.json()["state"] == "running" and started.json()["source"] == "file"
+    # step 08: the answer comes while the session warms up; a second start is refused already
+    assert started.json()["state"] in ("warming", "running")
+    assert started.json()["source"] == "file"
     assert client.post("/api/session/start", json=FILE_SOURCE).status_code == 409
-    assert client.get("/api/session").json()["state"] == "running"
+    client.post("/api/session/stop")
+    assert start_running(client, FILE_SOURCE)["state"] == "running"
     stopped = client.post("/api/session/stop")
     assert stopped.status_code == 200 and stopped.json()["state"] == "idle"
     assert client.post("/api/session/stop").status_code == 200  # idempotent
@@ -177,11 +181,12 @@ def test_websocket_streams_live_data(client: TestClient) -> None:
     assert "waveform:input" in seen and "waveform:output" not in seen
 
 
-def test_bypass_over_rest_and_websocket(client: TestClient, no_leaked_threads) -> None:
+def test_bypass_over_rest_and_websocket(client: TestClient, no_leaked_threads,
+                                       start_running) -> None:
     assert client.get("/api/session").json()["bypass"] is False
     body = client.put("/api/session/bypass", json={"enabled": True}).json()
     assert body["bypass"] is True and body["state"] == "idle"  # remembered while idle
-    started = client.post("/api/session/start", json=FILE_SOURCE).json()
+    started = start_running(client, FILE_SOURCE)
     assert started["bypass"] is True  # the new session starts bypassed
     assert started["extraction"]["method"] == "mask_baseline"
     assert started["extraction"]["latency_ms"] == pytest.approx(21.33)

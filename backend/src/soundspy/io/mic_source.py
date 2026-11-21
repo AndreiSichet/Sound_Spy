@@ -60,6 +60,8 @@ class MicSource(AudioSource):
         self.stall_timeout_s = capture.stall_timeout_s
         self.blocksize = blocksize
         self.warmup_max_s = capture.startup_silence_max_s
+        self.latency = capture.latency
+        self.exclusive = capture.exclusive
         self._warmup_left = 0
 
         self._keep = np.asarray(resolved.channel_indices, dtype=np.intp)
@@ -82,8 +84,14 @@ class MicSource(AudioSource):
             return
         sd = _sd()
         extra = None
-        if self.resolved.wasapi_auto_convert and hasattr(sd, "WasapiSettings"):
-            extra = sd.WasapiSettings(auto_convert=True)
+        if self.resolved.device.hostapi == "Windows WASAPI" and hasattr(sd, "WasapiSettings"):
+            if self.exclusive:  # step 08: the device's own format, no conversion
+                extra = sd.WasapiSettings(exclusive=True)
+            elif self.resolved.wasapi_auto_convert:
+                extra = sd.WasapiSettings(auto_convert=True)
+        kwargs: dict[str, Any] = {}
+        if self.latency is not None:
+            kwargs["latency"] = self.latency
         stream = sd.InputStream(
             device=self.resolved.device.index,
             channels=self.resolved.open_channels,
@@ -92,6 +100,7 @@ class MicSource(AudioSource):
             blocksize=self.blocksize,
             callback=self._callback,
             extra_settings=extra,
+            **kwargs,
         )
         with self._cond:
             self._closed = False
@@ -190,8 +199,9 @@ class MicSource(AudioSource):
         if silent_for > self.stall_timeout_s:
             raise MicStallError(
                 f"no audio from {self.resolved.device.name!r} ({self.resolved.device.hostapi}) "
-                f"for {silent_for:.1f} s - is another app using the microphone, or is microphone "
-                "access disabled in Windows privacy settings?"
+                f"for {silent_for:.1f} s - was it unplugged, is another app using it exclusively, "
+                "or is microphone access disabled in Windows privacy settings? Press Restart once "
+                "it is back"
             )
 
     def read(self, seconds: float) -> AudioBuffer:

@@ -2,9 +2,12 @@
 import type {
   ConfigResponse,
   DetectionTimeline,
+  DevicesResponse,
   EngineStatus,
   ExtractionMethod,
   HealthResponse,
+  MeasuredLatency,
+  ModelsResponse,
   MonitorRequest,
   ProcessRequest,
   RecordStartRequest,
@@ -12,6 +15,7 @@ import type {
   Run,
   SessionStartRequest,
   TargetSpec,
+  UserSettings,
 } from './types.ts'
 
 export class ApiError extends Error {
@@ -80,4 +84,12 @@ export const api = {
     send<Run>('POST', `/recordings/${id}/process`, body),
   recordingRuns: (id: number) => apiFetch<Run[]>(`/recordings/${id}/runs`),
   run: (runId: string) => apiFetch<Run>(`/runs/${encodeURIComponent(runId)}`),
+  // step 08
+  devices: () => apiFetch<DevicesResponse>('/devices'),
+  rescanDevices: () => send<DevicesResponse>('POST', '/devices/rescan'),
+  settings: () => apiFetch<UserSettings>('/settings'),
+  setOutputDevice: (device: number | string | null) =>
+    send<UserSettings>('PUT', '/settings/output-device', { device }),
+  models: () => apiFetch<ModelsResponse>('/models'),
+  latency: () => apiFetch<MeasuredLatency>('/latency'),
 }

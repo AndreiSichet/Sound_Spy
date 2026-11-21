@@ -240,6 +240,70 @@ class FakeOutputStream:
         self.closed = True
 
 
+class FakeDuplexStream:
+    """A full-duplex stream wired as an acoustic loopback (step 08): the input hears the
+    output ``fake.loopback_delay_frames`` later at ``fake.loopback_gain``, plus quiet noise, and
+    optionally a second arrival ``fake.loopback_echo = (extra_frames, gain)`` (an app playing
+    the microphone back). Runs block by block on a thread, as fast as the test allows."""
+
+    def __init__(self, fake: FakeSoundDevice, *, device=None, channels=None, samplerate=None,
+                 dtype: str = "float32", callback=None, blocksize: int = 0, **_: object) -> None:
+        self.fake = fake
+        self.device = device
+        self.channels = channels
+        self.samplerate = int(samplerate)
+        self.callback = callback
+        self.blocksize = blocksize or 480
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+        fake.streams.append(self)
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, name="fake-duplex", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        fake, block = self.fake, self.blocksize
+        cin, cout = self.channels
+        history = np.zeros(0, dtype=np.float32)
+        rng = np.random.default_rng(3)
+        produced = 0
+        while not self._stop.is_set():
+            outdata = np.zeros((block, cout), dtype=np.float32)
+            n = np.arange(produced, produced + block)
+            heard = np.zeros(block, dtype=np.float32)
+            for delay, gain in ((fake.loopback_delay_frames, fake.loopback_gain),
+                                *([fake.loopback_echo] if fake.loopback_echo else [])):
+                idx = n - delay
+                ok = (idx >= 0) & (idx < history.size)
+                heard[ok] += gain * history[idx[ok]]
+            # the room's noise; it grows by ``loopback_growth_db_per_s`` (feedback building up)
+            level = 1e-4 * 10 ** (fake.loopback_growth_db_per_s * produced / self.samplerate / 20)
+            indata = np.repeat((heard + level * rng.standard_normal(block)).astype(np.float32)
+                               [:, None], cin, axis=1)
+            try:
+                self.callback(indata, outdata, block, None, None)
+            except (CallbackStop, CallbackAbort):
+                break
+            history = np.concatenate((history, outdata[:, 0]))
+            produced += block
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None and self._thread is not threading.current_thread():
+            self._thread.join(timeout=5.0)
+
+    def close(self) -> None:
+        self.stop()
+
+
 class FakeSoundDevice(types.ModuleType):
     """Stand-in for the ``sounddevice`` module (see module docstring)."""
 
@@ -292,6 +356,10 @@ class FakeSoundDevice(types.ModuleType):
         self.fail_input_opens = 0  # the next N InputStream(...) calls raise PortAudioError
         self.fail_output_opens = 0
         self.refreshes = 0  # how often PortAudio was re-initialised (_terminate + _initialize)
+        self.loopback_delay_frames = 1234  # FakeDuplexStream: output -> input (step 08)
+        self.loopback_gain = 0.5
+        self.loopback_echo: tuple[int, float] | None = None
+        self.loopback_growth_db_per_s = 0.0  # the noise growing (feedback; step 08 follow-up)
         self.streams: list[FakeInputStream | FakeOutputStream] = []
 
     SIGNALS: dict[str, SignalFn] = {
@@ -335,7 +403,9 @@ class FakeSoundDevice(types.ModuleType):
         raise RuntimeError("fake sounddevice: blocking capture/playback is not available in tests")
 
     rec = playrec = play = wait = _no_hardware
-    Stream = _no_hardware
+
+    def Stream(self, **kwargs):  # noqa: N802 - full duplex: the acoustic loopback (step 08)
+        return FakeDuplexStream(self, **kwargs)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -548,7 +618,29 @@ def app_config(config, tmp_path: Path):
     db_url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
     paths = {**config.paths, "raw": tmp_path / "raw", "outputs": tmp_path / "outputs"}
     detection = dataclasses.replace(config.detection, checkpoint=None)
-    return dataclasses.replace(config, database_url=db_url, paths=paths, detection=detection)
+    api = dataclasses.replace(config.api, preload_models=False)  # tests opt in (step 08)
+    return dataclasses.replace(config, database_url=db_url, paths=paths, detection=detection,
+                               api=api)
+
+
+@pytest.fixture
+def start_running():
+    """Step 08: ``POST /api/session/start`` answers while the session is still ``warming``;
+    this starts one and waits until it runs, returning the running status."""
+
+    def start(client, body, timeout: float = 15.0) -> dict:
+        response = client.post("/api/session/start", json=body)
+        assert response.status_code == 200, response.text
+        status = response.json()
+        assert status["state"] in ("warming", "running"), status
+        deadline = time.monotonic() + timeout
+        while status["state"] == "warming" and time.monotonic() < deadline:
+            time.sleep(0.02)
+            status = client.get("/api/session").json()
+        assert status["state"] == "running", status
+        return status
+
+    return start
 
 
 @pytest.fixture

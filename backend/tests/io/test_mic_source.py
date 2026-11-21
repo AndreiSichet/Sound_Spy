@@ -115,7 +115,7 @@ def test_stall_is_detected(fake_sounddevice) -> None:
     fake_sounddevice.stall_after_frames = 0
     with MicSource(resolve_input(LAPTOP), capture(stall_timeout_s=0.3)) as mic:
         started = time.monotonic()
-        with pytest.raises(MicStallError, match="another app using the microphone"):
+        with pytest.raises(MicStallError, match="unplugged, is another app using it"):
             mic.read(1.0)
         assert time.monotonic() - started < 2.0
 

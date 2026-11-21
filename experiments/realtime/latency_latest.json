@@ -1,0 +1,109 @@
+{
+  "time": "2026-11-21T15:27:44",
+  "input": "Microphone Array (Realtek(R) Audio)",
+  "output": "Speakers (Realtek(R) Audio)",
+  "sample_rate": 48000,
+  "clicks": 10,
+  "period_s": 1.0,
+  "level_dbfs": -6.0,
+  "settings": {
+    "chunk_ms": 20.0,
+    "prebuffer_chunks": 2,
+    "capture_latency": null,
+    "output_latency": null,
+    "exclusive": [
+      false,
+      false
+    ],
+    "fixed_latency": false
+  },
+  "modes": {
+    "hardware": {
+      "title": "hardware round trip",
+      "found": 10,
+      "median_ms": 149.8,
+      "min_ms": 149.8,
+      "max_ms": 149.8,
+      "snr_db": 39.2,
+      "best_snr_db": 39.8,
+      "coupling_db": -20.2
+    },
+    "passthrough": {
+      "title": "app, no processing",
+      "bypass": true,
+      "hardware": {
+        "found": 10,
+        "median_ms": 144.8,
+        "min_ms": 144.8,
+        "max_ms": 144.8
+      },
+      "found": 10,
+      "median_ms": 193.2,
+      "min_ms": 192.1,
+      "max_ms": 193.2,
+      "snr_db": 42.6,
+      "app_snr_db": 25.0,
+      "app_gain_db": -4.800000000000001,
+      "feedback_db": 0.6,
+      "feedback_retries": 0,
+      "estimate_ms": 94.0,
+      "underruns": 0,
+      "extractor_ms": 0.0,
+      "route": null
+    },
+    "speech": {
+      "title": "Hybrid, speech route",
+      "bypass": true,
+      "hardware": {
+        "found": 10,
+        "median_ms": 151.8,
+        "min_ms": 141.8,
+        "max_ms": 151.8
+      },
+      "found": 10,
+      "median_ms": 221.6,
+      "min_ms": 221.0,
+      "max_ms": 221.8,
+      "snr_db": 43.0,
+      "app_snr_db": 24.5,
+      "app_gain_db": -4.800000000000001,
+      "feedback_db": 0.3,
+      "feedback_retries": 0,
+      "estimate_ms": 124.0,
+      "underruns": 0,
+      "extractor_ms": 39.98,
+      "route": "speech_enhancer"
+    },
+    "waveformer": {
+      "title": "Hybrid, Waveformer route",
+      "bypass": true,
+      "hardware": {
+        "found": 10,
+        "median_ms": 150.8,
+        "min_ms": 150.8,
+        "max_ms": 150.8
+      },
+      "found": 10,
+      "median_ms": 203.4,
+      "min_ms": 203.1,
+      "max_ms": 203.8,
+      "snr_db": 43.2,
+      "app_snr_db": 26.1,
+      "app_gain_db": -4.800000000000001,
+      "feedback_db": 1.2,
+      "feedback_retries": 0,
+      "estimate_ms": 94.6,
+      "underruns": 0,
+      "extractor_ms": 10.6,
+      "route": "waveformer"
+    }
+  },
+  "coupling_db": -20.2,
+  "app_gain_db": -4.800000000000001,
+  "recordings": {
+    "hardware": "C:\\Users\\User\\Desktop\\Sound_Spy\\outputs\\latency\\20261121-152743\\hardware.wav",
+    "passthrough": "C:\\Users\\User\\Desktop\\Sound_Spy\\outputs\\latency\\20261121-152743\\passthrough.wav",
+    "speech": "C:\\Users\\User\\Desktop\\Sound_Spy\\outputs\\latency\\20261121-152743\\speech.wav",
+    "waveformer": "C:\\Users\\User\\Desktop\\Sound_Spy\\outputs\\latency\\20261121-152743\\waveformer.wav"
+  }
+}

@@ -21,12 +21,17 @@ capture:
   stall_timeout_s: 2.0          # no audio for this long -> MicStallError
   queue_chunks: 32              # input queue size (drop-oldest policy)
   startup_silence_max_s: 1.0    # leading exact-zero frames discarded at most
+  latency: null                 # step 08: PortAudio's suggested latency: null (sounddevice's
+                                # default, 'high'), 'low', or seconds
+  exclusive: false              # step 08: WASAPI exclusive mode (other apps lose the microphone)
 
 engine:
   chunk_ms: 20                  # processing chunk; frames = round(chunk_ms * sr / 1000)
   rtf_warning: 0.8              # warn when the p95 real-time factor exceeds this ...
   rtf_window_s: 2.0             # ... over this window (also the warning cool-down)
   status_interval_s: 1.0        # status message rate while a session runs
+  thread_priority: pro_audio    # step 08: the audio worker thread's priority: pro_audio (Windows'
+                                # audio scheduler, MMCSS), high, or normal
 
 output:
   device: null                  # null = default output (WASAPI twin preferred) | index | name substring
@@ -39,6 +44,10 @@ output:
                                 # chunks arrive in a burst and nothing empties the queue again):
                                 # drop the oldest chunks down to the prebuffer level
   drain_fade_ms: 5              # crossfade over the dropped stretch (no click)
+  latency: null                 # step 08: as capture.latency
+  exclusive: false              # step 08: WASAPI exclusive mode (other apps go silent)
+  stall_timeout_s: 2.0          # step 08: no callback from the device for this long while the
+                                # session runs = the device was lost (unplugged): error state
 
 analysis:
   levels_hz: 20                 # LevelFrame rate
@@ -56,6 +65,8 @@ api:
   cors_origins: ["http://localhost:5173"]   # Vite dev server
   ws_heartbeat_s: 2.0        # status heartbeat on /ws/session while idle
   ws_client_queue: 64        # per-connection send queue; visual messages dropped oldest-first
+  preload_models: true       # load and warm the live models in the background when the server
+                             # starts (step 08), so the first session starts in about a second
 
 database:
   url: sqlite:///data/soundspy.db   # relative sqlite path -> project root

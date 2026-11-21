@@ -1,0 +1,95 @@
+{
+  "time": "2026-11-21T14:38:24",
+  "input": "Microphone Array (Realtek(R) Audio)",
+  "output": "Speakers (Realtek(R) Audio)",
+  "sample_rate": 48000,
+  "clicks": 10,
+  "period_s": 0.5,
+  "level_dbfs": -12.0,
+  "settings": {
+    "chunk_ms": 20.0,
+    "prebuffer_chunks": 2,
+    "capture_latency": null,
+    "output_latency": null,
+    "exclusive": [
+      false,
+      false
+    ],
+    "fixed_latency": false
+  },
+  "modes": {
+    "hardware": {
+      "title": "hardware round trip",
+      "found": 1,
+      "median_ms": 147.2,
+      "min_ms": 147.2,
+      "max_ms": 147.2,
+      "snr": [
+        8.0,
+        7.3,
+        7.4,
+        7.8,
+        7.6,
+        7.6,
+        8.0,
+        7.4,
+        7.8,
+        7.7
+      ]
+    },
+    "passthrough": {
+      "title": "app, no processing",
+      "bypass": true,
+      "hardware": {
+        "found": 5,
+        "median_ms": 148.2,
+        "min_ms": 148.2,
+        "max_ms": 148.2
+      },
+      "found": 0,
+      "median_ms": null,
+      "min_ms": null,
+      "max_ms": null,
+      "estimate_ms": 104.0,
+      "underruns": 0,
+      "extractor_ms": 0.0,
+      "route": null
+    },
+    "speech": {
+      "title": "Hybrid, speech route",
+      "bypass": true,
+      "hardware": {
+        "found": 7,
+        "median_ms": 155.2,
+        "min_ms": 145.2,
+        "max_ms": 155.3
+      },
+      "found": 0,
+      "median_ms": null,
+      "min_ms": null,
+      "max_ms": null,
+      "estimate_ms": 144.0,
+      "underruns": 0,
+      "extractor_ms": 39.98,
+      "route": "speech_enhancer"
+    },
+    "waveformer": {
+      "title": "Hybrid, Waveformer route",
+      "bypass": true,
+      "hardware": {
+        "found": 0,
+        "median_ms": null,
+        "min_ms": null,
+        "max_ms": null
+      },
+      "found": 0,
+      "median_ms": null,
+      "min_ms": null,
+      "max_ms": null,
+      "estimate_ms": 104.6,
+      "underruns": 0,
+      "extractor_ms": 10.6,
+      "route": "waveformer"
+    }
+  }
+}

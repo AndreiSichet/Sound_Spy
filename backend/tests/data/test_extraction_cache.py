@@ -386,6 +386,7 @@ def test_loss_terms_and_the_floor(config) -> None:
 # --- training ---------------------------------------------------------------------------------
 
 
+@pytest.mark.slow  # step 08: > 5 s
 def test_training_runs_resumes_and_writes_the_experiment(cache_env, monkeypatch, capsys
                                                          ) -> None:
     from soundspy.extraction.neural_model import load_checkpoint

@@ -3,6 +3,8 @@ import { api } from './api/client.ts'
 import type { Mode } from './api/types.ts'
 import { ConnectionIndicator } from './components/ConnectionIndicator.tsx'
 import { Toasts } from './components/Toasts.tsx'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts'
+import { usePersistedSettings } from './hooks/usePersistedSettings.ts'
 import { useSessionSocket } from './hooks/useSessionSocket.ts'
 import { useAppStore } from './store/appStore.ts'
 import { SemanticTab } from './tabs/SemanticTab.tsx'
@@ -21,8 +23,20 @@ export default function App() {
   const backend = useAppStore((s) => s.backend)
   const hasConfig = useAppStore((s) => s.config !== null)
   const setConfig = useAppStore((s) => s.setConfig)
+  const setMeasuredLatency = useAppStore((s) => s.setMeasuredLatency)
 
   useSessionSocket()
+  usePersistedSettings()
+  useKeyboardShortcuts(activeTab === 'semantic')
+
+  // The latest acoustic latency measurement (step 08), shown next to the session's estimate.
+  useEffect(() => {
+    if (backend !== 'up') return
+    api
+      .latency()
+      .then(setMeasuredLatency)
+      .catch(() => undefined)
+  }, [backend, setMeasuredLatency])
 
   // Load the app configuration once the backend is reachable.
   useEffect(() => {
@@ -71,6 +85,21 @@ export default function App() {
           )
         })}
       </nav>
+
+      {backend === 'down' && (
+        <div
+          role="alert"
+          className="mt-3 rounded-md border border-rose-700 bg-rose-950/60 p-3 text-sm text-rose-100"
+        >
+          The backend is not reachable. Start the app with <code>start.ps1</code> (or{' '}
+          <code>soundspy serve</code> in development); this page reconnects by itself.
+        </div>
+      )}
+      {backend === 'up' && !hasConfig && (
+        <p className="mt-3 text-sm text-slate-400" role="status">
+          Loading the configuration…
+        </p>
+      )}
 
       <main
         role="tabpanel"

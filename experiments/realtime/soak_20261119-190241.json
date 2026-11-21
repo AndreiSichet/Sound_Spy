@@ -1,0 +1,111 @@
+{
+  "time": "2026-11-19T19:02:41",
+  "minutes": 0.5,
+  "method": "hybrid",
+  "route": "speech_enhancer",
+  "labels": [
+    "speech"
+  ],
+  "attenuation_db": 40.0,
+  "source": "mic",
+  "warmup_s": 5.438,
+  "start_to_running_s": 5.49,
+  "settings": {
+    "chunk_ms": 20.0,
+    "prebuffer_chunks": 2,
+    "capture_latency": null,
+    "output_latency": null,
+    "exclusive": [
+      false,
+      false
+    ],
+    "fixed_latency": false
+  },
+  "summary": {
+    "state_end": "running",
+    "message_end": "Listening is unavailable for this session: Error starting stream: Unanticipated host error [PaErrorCode -9999]: 'WdmSyncIoctl: DeviceIoControl GLE = 0x00000492 (prop_set = {1464EDA5-6A8F-11D1-9AA7-00A0C9223196}, prop_id = 0)' [Windows WDM-KS error 0]",
+    "underruns": 0,
+    "input_dropped": 0,
+    "output_dropped": 0,
+    "drained": 0,
+    "overflows": 0,
+    "rtf_p95_max": 0.2952,
+    "rtf_p95_median": 0.285,
+    "latency_ms_median": 82.0,
+    "latency_ms_max": 82.0,
+    "ram_mb_first": 1265.3,
+    "ram_mb_last": 1254.3,
+    "vram_mb_first": 58.0,
+    "vram_mb_last": 58.0,
+    "extractor_ms": 39.98,
+    "model_ms_p95": 3.13
+  },
+  "samples": [
+    {
+      "t_s": 0.0,
+      "state": "running",
+      "underruns": 0,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.0624,
+      "proc_ms_p95": 1.249,
+      "latency_ms": 82.0,
+      "chunks": 1,
+      "ram_mb": 1265.3,
+      "vram_allocated_mb": 24.0,
+      "vram_reserved_mb": 58.0
+    },
+    {
+      "t_s": 10.0,
+      "state": "running",
+      "underruns": 0,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.2952,
+      "proc_ms_p95": 5.903,
+      "latency_ms": 82.0,
+      "chunks": 501,
+      "ram_mb": 1253.9,
+      "vram_allocated_mb": 24.0,
+      "vram_reserved_mb": 58.0
+    },
+    {
+      "t_s": 20.0,
+      "state": "running",
+      "underruns": 0,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.2756,
+      "proc_ms_p95": 5.512,
+      "latency_ms": 82.0,
+      "chunks": 1001,
+      "ram_mb": 1251.1,
+      "vram_allocated_mb": 24.0,
+      "vram_reserved_mb": 58.0
+    },
+    {
+      "t_s": 30.0,
+      "state": "running",
+      "underruns": 0,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.2855,
+      "proc_ms_p95": 5.71,
+      "latency_ms": 82.0,
+      "chunks": 1500,
+      "ram_mb": 1254.3,
+      "vram_allocated_mb": 24.0,
+      "vram_reserved_mb": 58.0
+    }
+  ],
+  "name": "smoke2",
+  "overrides": []
+}

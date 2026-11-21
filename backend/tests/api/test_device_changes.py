@@ -36,7 +36,7 @@ def test_a_failed_open_is_retried_after_a_rescan(client: TestClient, fake_soundd
     before = fake_sounddevice.refreshes
     response = client.post("/api/session/start", json={"mode": "semantic"})
     client.post("/api/session/stop")
-    assert response.status_code == 200 and response.json()["state"] == "running"
+    assert response.status_code == 200 and response.json()["state"] in ("warming", "running")
     assert fake_sounddevice.refreshes == before + 2  # before the start, and before the retry
 
 
@@ -55,13 +55,14 @@ def test_session_without_output_says_why(client: TestClient, fake_sounddevice) -
     fake_sounddevice.fail_output_opens = 1
     with client.websocket_connect("/ws/session") as ws:
         ws.receive_json()
-        started = client.post("/api/session/start", json={"mode": "semantic"}).json()
+        client.post("/api/session/start", json={"mode": "semantic"})
         warning = None
         for _ in range(50):
             message = ws.receive_json()
             if message["type"] == "warning":
                 warning = message["payload"]
                 break
+    started = client.get("/api/session").json()  # the output opens once warm (step 08)
     assert started["state"] == "running" and started["output_device"] is None
     assert "Listening is unavailable" in started["message"]
     assert warning is not None and warning["code"] == "output_unavailable"

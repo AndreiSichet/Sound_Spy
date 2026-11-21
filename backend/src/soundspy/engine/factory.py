@@ -84,9 +84,9 @@ def detector_device(config: AppConfig, extractor) -> str | None:
     return None
 
 
-def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
-                with_detector: bool = True, method: str | None = None,
-                gate: bool | None = None) -> ProcessorChain:
+def check_mode(mode: Mode | str) -> Mode:
+    """The mode, if a chain can be built for it (else ``ModeUnavailableError``): cheap, so a
+    session start can refuse a bad mode before building anything (step 08)."""
     try:
         mode = Mode(str(mode).lower())
     except ValueError:
@@ -96,6 +96,13 @@ def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
         raise ModeUnavailableError("mode 'spatial' is not available until module 3")
     if mode is Mode.SOURCES:
         raise ModeUnavailableError("mode 'sources' is not available until module 5")
+    return mode
+
+
+def build_chain(mode: Mode | str, config: AppConfig, label_set: LabelSet, *,
+                with_detector: bool = True, method: str | None = None,
+                gate: bool | None = None) -> ProcessorChain:
+    mode = check_mode(mode)
 
     reducer = ChannelReducer("mean")
     analyzer = Analyzer(config.analysis, source="input")

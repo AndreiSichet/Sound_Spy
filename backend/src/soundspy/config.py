@@ -135,6 +135,7 @@ class ApiConfig:
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
     ws_heartbeat_s: float = 2.0
     ws_client_queue: int = 64
+    preload_models: bool = True  # step 08: load + warm the live models when the server starts
 
 
 # The sections below have no defaults in code: every value comes from default.yaml.
@@ -145,6 +146,10 @@ class CaptureConfig:
     stall_timeout_s: float
     queue_chunks: int
     startup_silence_max_s: float
+    # step 08: PortAudio's suggested stream latency (None = sounddevice's default, "high"),
+    # "low" or seconds; and WASAPI exclusive mode (other apps lose the device meanwhile)
+    latency: str | float | None = None
+    exclusive: bool = False
 
 
 @dataclass(frozen=True)
@@ -156,6 +161,7 @@ class EngineConfig:
 
     def chunk_frames(self, sample_rate: int) -> int:
         return max(1, round(self.chunk_ms * sample_rate / 1000))
+    thread_priority: str = "pro_audio"  # step 08: pro_audio (MMCSS) | high | normal
 
 
 @dataclass(frozen=True)
@@ -168,6 +174,9 @@ class OutputConfig:
     default_gain_db: float
     drain_after_s: float = 1.0  # queue above prebuffer + 1 for this long -> drop the oldest
     drain_fade_ms: float = 5.0  # crossfade that hides the jump
+    latency: str | float | None = None  # step 08, as CaptureConfig.latency
+    exclusive: bool = False
+    stall_timeout_s: float = 2.0  # step 08: no speaker callback for this long = device lost
 
 
 @dataclass(frozen=True)
@@ -455,6 +464,7 @@ class HybridConfig:
     tuning: dict[str, tuple[float, ...]]  # gate parameter -> values tried on val
     tuning_max_cost_db: float  # strongest suppression whose SI-SDRi cost stays within this
     speech_gate: SpeechGateConfig = SpeechGateConfig()
+    fixed_latency: bool = False  # step 08: True = every route delayed to the slowest (07c)
     speech_tuning: dict[str, tuple[float, ...]] = dataclasses.field(default_factory=dict)
     speech_tuning_max_cut: float = 0.02  # speech-cut rate allowed on the tuning session
     speech_tuning_max_cost_db: float = 0.3  # speech-over-music SI-SDRi below the 07c gate
@@ -673,28 +683,43 @@ class _Section:
         return int(value)
 
 
+def _stream_latency(s: _Section) -> str | float | None:
+    value = s.data.get("latency")
+    if value is None or value in ("low", "high"):
+        return value
+    if isinstance(value, bool) or not isinstance(value, int | float) or not 0 < value <= 1:
+        raise s._fail("latency", "null, 'low', 'high' or seconds in (0, 1]")
+    return float(value)
+
+
 def _capture(data: dict[str, Any]) -> CaptureConfig:
-    s = _Section(data, "capture", ("stall_timeout_s", "queue_chunks", "startup_silence_max_s"))
+    s = _Section(data, "capture", ("stall_timeout_s", "queue_chunks", "startup_silence_max_s",
+                                   "latency", "exclusive"))
     return CaptureConfig(
         stall_timeout_s=s.number("stall_timeout_s", gt=0),
         queue_chunks=s.integer("queue_chunks", ge=1),
         startup_silence_max_s=s.number("startup_silence_max_s", ge=0),
+        latency=_stream_latency(s),
+        exclusive=s.boolean("exclusive"),
     )
 
 
 def _engine(data: dict[str, Any]) -> EngineConfig:
-    s = _Section(data, "engine", ("chunk_ms", "rtf_warning", "rtf_window_s", "status_interval_s"))
+    s = _Section(data, "engine", ("chunk_ms", "rtf_warning", "rtf_window_s", "status_interval_s",
+                                  "thread_priority"))
     return EngineConfig(
         chunk_ms=s.number("chunk_ms", gt=0, le=1000),
         rtf_warning=s.number("rtf_warning", gt=0),
         rtf_window_s=s.number("rtf_window_s", gt=0),
         status_interval_s=s.number("status_interval_s", gt=0),
+        thread_priority=_choice(s, "thread_priority", ("pro_audio", "high", "normal")),
     )
 
 
 def _output(data: dict[str, Any]) -> OutputConfig:
     keys = ("device", "prebuffer_chunks", "max_queue_chunks", "limiter_ceiling_dbfs",
-            "limiter_release_ms", "default_gain_db", "drain_after_s", "drain_fade_ms")
+            "limiter_release_ms", "default_gain_db", "drain_after_s", "drain_fade_ms",
+            "latency", "exclusive", "stall_timeout_s")
     s = _Section(data, "output", keys)
     device = s.data["device"]
     if isinstance(device, bool) or not (device is None or isinstance(device, int | str)):
@@ -712,6 +737,9 @@ def _output(data: dict[str, Any]) -> OutputConfig:
         default_gain_db=s.number("default_gain_db", ge=-40, le=12),
         drain_after_s=s.number("drain_after_s", gt=0, le=60),
         drain_fade_ms=s.number("drain_fade_ms", ge=0, le=20),
+        latency=_stream_latency(s),
+        exclusive=s.boolean("exclusive"),
+        stall_timeout_s=s.number("stall_timeout_s", gt=0),
     )
 
 
@@ -1260,7 +1288,7 @@ def load_hybrid_config(path: Path, labels: LabelSet) -> HybridConfig:
         warmup_ms=g.number("warmup_ms", ge=0, le=10000),
         start_closed=g.boolean("start_closed"),
     )
-    live = _Section(top.data, "live", ("ramp_ms", "performance_cores"), source)
+    live = _Section(top.data, "live", ("ramp_ms", "performance_cores", "fixed_latency"), source)
     tu = _Section(top.data, "tuning", (*HYBRID_TUNABLE, "max_cost_db"), source)
     grid = _grid(tu, HYBRID_TUNABLE)
     st = _Section(top.data, "speech_tuning", (*SPEECH_GATE_TUNABLE, "max_speech_cut",
@@ -1282,6 +1310,7 @@ def load_hybrid_config(path: Path, labels: LabelSet) -> HybridConfig:
         gate=gate,
         ramp_ms=live.number("ramp_ms", ge=0, le=1000),
         performance_cores=live.boolean("performance_cores"),
+        fixed_latency=live.boolean("fixed_latency"),
         tuning=grid,
         tuning_max_cost_db=tu.number("max_cost_db", ge=0, le=10),
         speech_gate=_speech_gate(top, source),
@@ -1429,6 +1458,7 @@ def load_config(
             cors_origins=tuple(api.get("cors_origins", ["http://localhost:5173"])),
             ws_heartbeat_s=float(api.get("ws_heartbeat_s", 2.0)),
             ws_client_queue=int(api.get("ws_client_queue", 64)),
+            preload_models=bool(api.get("preload_models", True)),
         ),
         database_url=str(default["database"]["url"]),
         data=load_data_config(configs_dir / "data" / "default.yaml"),
@@ -1436,3 +1466,20 @@ def load_config(
                                         project_root),
         extraction=load_extraction_config(configs_dir / "extraction", project_root, labels),
     )
+
+
+def override(config: AppConfig, dotted: str, value: Any) -> AppConfig:
+    """``config`` with one setting replaced (step 08, for experiments: ``soundspy soak --set
+    output.prebuffer_chunks=1``). A string ``value`` is read as YAML (``1``, ``low``, ``null``,
+    ``true``). Nested dataclasses are replaced along the path; nothing is validated beyond the
+    field existing."""
+    if isinstance(value, str):
+        value = yaml.safe_load(value)
+    head, _, rest = dotted.partition(".")
+    if not dataclasses.is_dataclass(config) or head not in {f.name for f in
+                                                            dataclasses.fields(config)}:
+        raise ConfigError(f"no setting {dotted!r}")
+    current = getattr(config, head)
+    if rest:
+        return dataclasses.replace(config, **{head: override(current, rest, value)})
+    return dataclasses.replace(config, **{head: value})

@@ -65,8 +65,11 @@ export interface TargetSpec {
 
 // --- WebSocket payloads (event fields without `t`, which lives in the envelope) ---
 
+export type EngineState = 'idle' | 'warming' | 'running' | 'error'
+
 export interface EngineStatus {
-  state: 'idle' | 'running' | 'error'
+  /** Step 08: 'warming' = the session is preparing its models; audio flows once 'running'. */
+  state: EngineState
   mode: string | null
   device: string | null
   sample_rate: number | null
@@ -101,6 +104,8 @@ export interface EngineStatus {
   extraction_method?: string | null
   /** The gate chosen for sessions: the hybrid gate or the neural output gate (07b / 07c). */
   extraction_gate?: boolean | null
+  /** Step 08: seconds from Start to the first processed chunk. */
+  warmup_s?: number | null
 }
 
 export interface ExtractionStatus {
@@ -125,6 +130,8 @@ export interface ExtractionStatus {
   routes?: string[] | null
   gate_state?: 'open' | 'closed' | 'off' | null
   gate_reopened?: number | null
+  /** Step 08 (07d): which gate is in use: the speech route's own, or the detector's. */
+  gate_kind?: 'speech_route' | 'detector' | null
   speech_enhancer?: PartStatus | null
   waveformer?: PartStatus | null
   performance_cores?: boolean | null
@@ -271,6 +278,59 @@ export interface DetectionTimeline {
   times: number[]
   probabilities: Record<string, number[]>
   segments: Detection[]
+}
+
+// --- Step 08: devices, user settings, preloaded models, measured latency ---
+
+export interface AudioDevice {
+  index: number
+  name: string
+  hostapi: string
+  max_channels: number
+  default_samplerate: number
+  is_default: boolean
+}
+
+export interface DevicesResponse {
+  active_profile: string
+  resolved_input: { index: number; name: string; hostapi: string } | null
+  error: string | null
+  inputs: AudioDevice[]
+  outputs: AudioDevice[]
+  selected_output?: AudioDevice | null
+  output_error?: string | null
+  /** The stored choice: null = the system default, an index or a name. */
+  output_setting?: number | string | null
+}
+
+export interface UserSettings {
+  output_device: number | string | null
+}
+
+export interface ModelsResponse {
+  state: 'off' | 'idle' | 'loading' | 'ready' | 'error'
+  current: string | null
+  done: number
+  total: number
+  seconds: number | null
+  resources: { ram_mb: number | null; vram_reserved_mb?: number | null }
+}
+
+/** One mode of the latest `soundspy measure-latency` run (milliseconds). */
+export interface MeasuredMode {
+  title: string
+  median_ms: number | null
+  min_ms: number | null
+  max_ms: number | null
+  found: number
+  route?: string | null
+}
+
+export interface MeasuredLatency {
+  time: string | null
+  input?: string | null // the devices the measurement used
+  output?: string | null
+  modes: Record<string, MeasuredMode>
 }
 
 export interface SoundSource {

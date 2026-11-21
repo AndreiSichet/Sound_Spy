@@ -32,13 +32,19 @@ After the route, a gate, then residual mixing with the slider::
   the route, exactly as in 07c; its gains are used whenever the speech route is not the one in
   use (Waveformer, pass-through).
 
-**One delay for every route.** The session needs a fixed latency (bypass, recordings, the
-evaluation), so every route's estimate is delayed to the slowest route's: DeepFilterNet3 needs
-40.0 ms (1919 samples at 48 kHz), the Waveformer 10.6 ms (+29.4 ms of padding).
+**Each route its own delay** (step 08; ``live.fixed_latency: true`` = the 07c behaviour, every
+route delayed to the slowest): DeepFilterNet3 needs 40.0 ms (1919 samples at 48 kHz), the
+Waveformer 10.6 ms, nothing selected 0. Every route's estimate is mixed with the input delayed by
+that route's own delay (``_DelayLine``), so each route's output is aligned with its input;
+``latency_samples`` is the delay of the route in use, and ``aligned_dry`` is the input delayed
+exactly like the output (the session plays it for Bypass). Before step 08 the Waveformer route
+carried 29.4 ms of padding only to match the speech route.
 
 **Changing route** (the selection changed): the new route starts at once from a clean state;
-its estimate is valid one latency later (before that it only saw zeros), then the estimates are
-crossfaded over ``live.ramp_ms``; the old route rests afterwards. A resting route is not
+its estimate is valid one of *its* latencies later (before that it only saw zeros), then the two
+routes' outputs, each at its own delay, are crossfaded over ``live.ramp_ms`` (20 ms): the
+output's timing slides from one delay to the other inside the crossfade instead of jumping (no
+click, no repeated or skipped syllable); the old route rests afterwards. A resting route is not
 processed at all: keeping its input side running cost about 1 ms per 20 ms chunk (resampling,
 the speech enhancer's STFT and features), which the Waveformer route could not spare live.
 
@@ -69,6 +75,25 @@ SPEECH_ROUTES = (SPEECH, CASCADE)
 
 class HybridUnavailable(RuntimeError):
     """Neither route of the hybrid extractor can run. Message for the user."""
+
+
+class _DelayLine:
+    """The input, readable at any delay up to ``max_delay`` samples (step 08)."""
+
+    def __init__(self, max_delay: int) -> None:
+        self.max_delay = int(max_delay)
+        self._buf = np.zeros(self.max_delay, dtype=np.float32)
+        self._n = 0
+
+    def push(self, x: np.ndarray) -> None:
+        self._buf = np.concatenate((self._buf[-self.max_delay:] if self.max_delay else
+                                    self._buf[:0], x.astype(np.float32, copy=False)))
+        self._n = x.shape[0]
+
+    def read(self, delay: int) -> np.ndarray:
+        """The last pushed block's samples, ``delay`` samples earlier."""
+        end = self._buf.shape[0] - int(delay)
+        return self._buf[end - self._n:end]
 
 
 class _Fifo:
@@ -213,6 +238,9 @@ class HybridExtractor(Extractor):
             else:
                 self._routes[SPEECH] = _SpeechRoute(speech)
         self._latency = 0
+        self._route_latency: dict[str, int] = {}
+        self._effective: dict[str, int] = {}  # each route's delay in the output (step 08)
+        self.aligned_dry: AudioBuffer | None = None
         self.gate: HybridGate | None = None
         self.speech_gate: SpeechRouteGate | None = None
         self._pos = 0  # output samples since reset() (the speech gate's clock)
@@ -268,6 +296,11 @@ class HybridExtractor(Extractor):
 
     @property
     def latency_samples(self) -> int:
+        """The delay of the route in use (step 08; fixed_latency: the slowest route's)."""
+        return self._effective.get(self._incoming, self._latency) if self._effective else 0
+
+    @property
+    def max_latency_samples(self) -> int:
         return self._latency
 
     def configure(self, sample_rate: int, num_channels: int) -> int:
@@ -286,12 +319,16 @@ class HybridExtractor(Extractor):
         latencies = {name: route.configure(sample_rate) for name, route in self._routes.items()}
         self._latency = max(latencies.values())
         self._route_latency = latencies
+        self._effective = ({name: self._latency for name in latencies}
+                           if self.config.fixed_latency else dict(latencies))
         self._ramp = (1.0 if self.config.ramp_ms <= 0
                       else 1000.0 / (self.config.ramp_ms * sample_rate))
-        self.gate = HybridGate(self.gate_config, sample_rate, self._latency, self.activity)
-        self.speech_gate = (SpeechRouteGate(self.speech_gate_config, sample_rate, self._latency,
-                                            self.activity)
-                            if any(r in self._routes for r in SPEECH_ROUTES) else None)
+        wf_latency = self._effective.get(WAVEFORMER, self._latency)
+        self.gate = HybridGate(self.gate_config, sample_rate, wf_latency, self.activity)
+        speech = next((r for r in SPEECH_ROUTES if r in self._routes), None)
+        self.speech_gate = (SpeechRouteGate(self.speech_gate_config, sample_rate,
+                                            self._effective[speech], self.activity)
+                            if speech is not None else None)
         self.reset()
         return 1
 
@@ -300,9 +337,10 @@ class HybridExtractor(Extractor):
             return
         for route in self._routes.values():
             route.reset()
-        self._pads = {name: _Fifo(self._latency - lat) for name, lat in
+        self._pads = {name: _Fifo(self._effective[name] - lat) for name, lat in
                       self._route_latency.items() if name != OFF}
-        self._dry = _Fifo(self._latency)
+        self._dry = _DelayLine(self._latency)
+        self.aligned_dry = None
         self._resting: set[str] = set()
         current = self.route_for(self.target.labels if self.target is not None else ())
         self._weights = {current: 1.0}
@@ -335,8 +373,8 @@ class HybridExtractor(Extractor):
         if want != self._incoming:
             self._incoming = want
             self._weights.setdefault(want, 0.0)
-            # a network that starts now gives a valid estimate one latency later
-            self._wait = 0 if want == OFF else self._latency
+            # a network that starts now gives a valid estimate one of its latencies later
+            self._wait = 0 if want == OFF else self._effective.get(want, self._latency)
             if want != OFF and self.gate is not None:
                 self.gate.restart(want in (SPEECH, CASCADE))  # DeepFilterNet3 starts leaky
         w0 = self._weights[self._incoming]
@@ -372,9 +410,10 @@ class HybridExtractor(Extractor):
         labels = self.target.labels if self.target is not None else frozenset()
         weights = self._schedule(n)
         self._dry.push(x)
-        dry = self._dry.read(n)
+        # every route's estimate with the input delayed like it (each route its own delay)
         est = np.zeros(n, dtype=np.float32)
-        speech_est = None
+        dry = np.zeros(n, dtype=np.float32)
+        speech_est = speech_dry = None
         for name, route in self._routes.items():
             if name == OFF:
                 continue
@@ -395,27 +434,32 @@ class HybridExtractor(Extractor):
             if name in self._resting:  # starts again from a clean state, freshly delayed
                 self._resting.discard(name)
                 route.reset()
-                self._pads[name] = _Fifo(self._latency - self._route_latency[name])
+                self._pads[name] = _Fifo(self._effective[name] - self._route_latency[name])
                 if name in SPEECH_ROUTES and self.speech_gate is not None:
                     self.speech_gate.restart(self._pos)  # closed until speech appears
             self._pads[name].push(route.process(x, route_labels))
             part = self._pads[name].read(n)
+            part_dry = self._dry.read(self._effective[name])
             if name in SPEECH_ROUTES:
-                speech_est = part
+                speech_est, speech_dry = part, part_dry
             est += weights[name] * part
+            dry += weights[name] * part_dry
         if OFF in weights:
-            est += weights[OFF] * dry
+            off = self._dry.read(self._effective[OFF])
+            est += weights[OFF] * off
+            dry += weights[OFF] * off
         attenuation_db = self.target.attenuation_db if self.target is not None else 0.0
         gains = self.gate.gains(est, dry, labels, attenuation_db)  # runs on as in step 07c
         if speech_est is not None and self.speech_gate is not None:
             # fed whenever the speech route runs (its clock stays the stream's); its gains count
             # while the speech route is the one in use
-            speech_gains = self.speech_gate.gains(speech_est, dry, labels, attenuation_db)
+            speech_gains = self.speech_gate.gains(speech_est, speech_dry, labels, attenuation_db)
             if self._incoming in SPEECH_ROUTES:
                 gains = speech_gains
         self._pos += n
         g = 10.0 ** (-attenuation_db / 20.0)
         y = gains * (est + g * (dry - est))
+        self.aligned_dry = AudioBuffer(dry.reshape(-1, 1), chunk.sample_rate, chunk.metadata)
         return AudioBuffer(np.ascontiguousarray(y, dtype=np.float32).reshape(-1, 1),
                            chunk.sample_rate, {**chunk.metadata, "extraction": self.method})
 

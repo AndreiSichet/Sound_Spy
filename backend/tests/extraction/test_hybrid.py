@@ -87,14 +87,62 @@ def test_neither_route_falls_back_to_the_baseline(config) -> None:
     assert method == "mask_baseline" and "Hybrid extraction is not available" in warning
 
 
-def test_one_latency_and_pass_through(hybrid_config) -> None:
+def _latency_for(ext, labels) -> int:
+    ext.set_target(TargetSpec(labels=frozenset(labels), attenuation_db=40))
+    ext.reset()
+    return ext.latency_samples
+
+
+def test_each_route_has_its_own_delay_and_pass_through(hybrid_config) -> None:
+    """Step 08: no padding to the slowest route; nothing selected adds no delay at all."""
     ext = build_hybrid_extractor(hybrid_config)
     ext.configure(SR, 1)
-    assert ext.latency_samples == 1919  # DeepFilterNet3's 40.0 ms; the Waveformer is padded
+    wf = ext._route_latency[WAVEFORMER]
+    assert _latency_for(ext, {"speech"}) == 1919  # DeepFilterNet3's 40.0 ms
+    assert _latency_for(ext, {"music"}) == wf < 1919  # the Waveformer's own delay
+    assert _latency_for(ext, ()) == 0
+    assert ext.max_latency_samples == 1919
     x = _signal(1.0)
     out = run_offline(ext, AudioBuffer(x.reshape(-1, 1), SR),
                       TargetSpec(labels=frozenset(), attenuation_db=40))
     assert np.abs(out.samples.ravel() - x).max() < 1e-6  # nothing selected: the input
+    fixed = dataclasses.replace(hybrid_config, extraction=dataclasses.replace(
+        hybrid_config.extraction, hybrid=dataclasses.replace(
+            hybrid_config.extraction.hybrid, fixed_latency=True)))
+    ext = build_hybrid_extractor(fixed)  # the 07c behaviour: one delay for every route
+    ext.configure(SR, 1)
+    assert {_latency_for(ext, s) for s in ({"speech"}, {"music"}, ())} == {1919}
+
+
+def test_route_switch_slides_between_delays_without_jumps(hybrid_config) -> None:
+    """Changing route crossfades the two routes' outputs, each at its own delay: no time jump,
+    and the delay-matched input (Bypass) follows the route in use."""
+    ext = build_hybrid_extractor(hybrid_config)
+    ext.configure(SR, 1)
+    ext.set_target(TargetSpec(labels=frozenset(), attenuation_db=0))  # 0 dB: output = input
+    ext.reset()
+    t = np.arange(int(2.0 * SR)) / SR
+    x = (0.3 * np.sin(2 * np.pi * 110 * t)).astype(np.float32)
+    out, dry = [], []
+    for i in range(0, x.size, 960):
+        if i == SR // 2:
+            ext.set_target(TargetSpec(labels=frozenset({"speech"}), attenuation_db=0))
+        if i == int(1.2 * SR):
+            ext.set_target(TargetSpec(labels=frozenset({"music"}), attenuation_db=0))
+        out.append(ext.process(AudioBuffer(x[i:i + 960].reshape(-1, 1), SR)).samples.ravel())
+        dry.append(ext.aligned_dry.samples.ravel())
+    y, d = np.concatenate(out), np.concatenate(dry)
+    # at 0 dB the residual mixing gives back the delayed input on every route: a smooth sine
+    # whose sample-to-sample step never exceeds the sine's own (a time jump would)
+    step = 0.3 * 2 * np.pi * 110 / SR
+    assert np.abs(np.diff(y)).max() < 1.05 * step
+    assert np.abs(np.diff(d)).max() < 1.05 * step
+    speech = int(0.9 * SR)  # well inside the speech route: delayed by its 1919 samples
+    assert np.allclose(d[speech:speech + 960], x[speech - 1919:speech - 1919 + 960], atol=1e-6)
+    music = int(1.7 * SR)
+    wf = ext._route_latency[WAVEFORMER]
+    assert np.allclose(d[music:music + 960], x[music - wf:music - wf + 960], atol=1e-6)
+    assert ext.latency_samples == wf
 
 
 @pytest.mark.parametrize("labels", [("speech",), ("music",), ("speech", "music")])
@@ -104,6 +152,7 @@ def test_streaming_equals_the_whole_file_functions(hybrid_config, labels) -> Non
         chosen_route,
         configured_output,
         route_estimates,
+        route_latency,
     )
 
     source = _timeline()
@@ -118,7 +167,7 @@ def test_streaming_equals_the_whole_file_functions(hybrid_config, labels) -> Non
     est = route_estimates(cores, x, SR, labels, hybrid_config.extraction.hybrid.speech.labels)
     route = chosen_route(hybrid_config, labels)
     whole = configured_output(hybrid_config, route, est[route], x, labels, 30, source, SR,
-                              cores.latencies(SR)["enhancer_route"])
+                              route_latency(hybrid_config, cores, SR, route))
     assert np.abs(stream - whole).max() < 1e-4
     info = ext.status_info()
     assert info["route"] == (SPEECH if labels == ("speech",) else WAVEFORMER)
@@ -161,7 +210,7 @@ FILE_SOURCE = {"mode": "SEMANTIC", "source": {"type": "file", "path": "audio/ton
 
 
 def test_api_session_with_the_hybrid(app_config, neural_kit, speech_kit, tmp_path: Path,
-                                     no_leaked_threads) -> None:
+                                     no_leaked_threads, start_running) -> None:
     from soundspy.api.app import create_app
 
     tone = _signal(1.0)
@@ -177,7 +226,7 @@ def test_api_session_with_the_hybrid(app_config, neural_kit, speech_kit, tmp_pat
         status = client.get("/api/session").json()
         assert status["extraction_method"] == "hybrid" and status["extraction_gate"] is True
         client.put("/api/session/target", json={"labels": ["speech"]})
-        started = client.post("/api/session/start", json=FILE_SOURCE).json()
+        started = start_running(client, FILE_SOURCE)
         assert started["extraction"]["method"] == "hybrid"
         assert started["extraction"]["route"] == SPEECH
         assert started["extraction"]["latency_ms"] == 39.98

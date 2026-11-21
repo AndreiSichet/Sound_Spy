@@ -180,7 +180,7 @@ class WarningModel(_FromCore):
 
 
 class EngineStatusModel(_FromCore):
-    state: Literal["idle", "running", "error"]
+    state: Literal["idle", "warming", "running", "error"]
     mode: str | None = None
     device: str | None = None
     sample_rate: int | None = None
@@ -209,6 +209,7 @@ class EngineStatusModel(_FromCore):
     extraction: ExtractionStatusModel | None = None
     extraction_method: str | None = None  # the method chosen for sessions
     extraction_gate: bool | None = None  # the neural output gate chosen for sessions
+    warmup_s: float | None = None  # step 08: Start -> first processed chunk
 
 
 class ErrorPayload(BaseModel):
@@ -317,6 +318,44 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class MeasuredMode(BaseModel):
+    title: str
+    median_ms: float | None = None
+    min_ms: float | None = None
+    max_ms: float | None = None
+    found: int = 0
+    route: str | None = None
+
+
+class MeasuredLatencyResponse(BaseModel):
+    """Step 08: the latest ``soundspy measure-latency`` run (``modes`` empty when none)."""
+
+    time: str | None = None
+    input: str | None = None  # the devices the measurement used
+    output: str | None = None
+    modes: dict[str, MeasuredMode] = {}
+    settings: dict[str, Any] | None = None
+
+
+class PreloadStep(BaseModel):
+    name: str
+    seconds: float | None = None
+    error: str | None = None
+
+
+class ModelsResponse(BaseModel):
+    """Step 08: the models preloaded at server start, and what the process uses now."""
+
+    state: Literal["off", "idle", "loading", "ready", "error"]
+    current: str | None = None  # the model being loaded
+    done: int = 0
+    total: int = 0
+    seconds: float | None = None  # preloading took this long
+    steps: list[PreloadStep] = []
+    memory: dict[str, float | None] | None = None  # RAM / graphics card after preloading
+    resources: dict[str, float | None]  # RAM / graphics card now
+
+
 class ClassInfo(BaseModel):
     """A selectable class as the UI sees it. AudioSet names are dataset-only and not exposed."""
 
@@ -353,10 +392,6 @@ class ConfigResponse(BaseModel):
     default_attenuation_db: float = 15.0
 
 
-class NotImplementedResponse(BaseModel):
-    detail: str
-
-
 class AudioDeviceModel(BaseModel):
     index: int
     name: str
@@ -380,6 +415,20 @@ class DevicesResponse(BaseModel):
     error: str | None = None
     inputs: list[AudioDeviceModel]
     outputs: list[AudioDeviceModel]
+    # step 08: the output sessions play on, and the user's setting behind it
+    selected_output: AudioDeviceModel | None = None
+    output_error: str | None = None
+    output_setting: int | str | None = None
+
+
+class UserSettingsModel(BaseModel):
+    """Step 08: ``data/user_settings.json``."""
+
+    output_device: int | str | None = None
+
+
+class OutputDeviceRequest(BaseModel):
+    device: int | str | None = None  # null = the system default
 
 
 class RecordingModel(_FromCore):

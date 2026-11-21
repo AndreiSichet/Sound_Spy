@@ -10,10 +10,19 @@
 // - Attenuation: how much everything that is NOT selected is turned down (0-40 dB). It is part
 //   of the target, so it is sent together with the selected classes (set_target).
 // - Bypass (A/B): hear the unprocessed sound instead, with the same delay, to compare at once.
+// Step 08: the methods are named "Hybrid (recommended)", "Neural", "Baseline" with a one-line
+// explanation under the selector; the chosen method and gate are remembered (localStorage).
 import { ApiError, api } from '../../api/client.ts'
-import { MAX_ATTENUATION_DB, hasGate, isExtractionMethod, targetFor } from '../../api/target.ts'
+import {
+  MAX_ATTENUATION_DB,
+  METHOD_INFO,
+  hasGate,
+  isExtractionMethod,
+  targetFor,
+} from '../../api/target.ts'
 import type { MethodInfo } from '../../api/types.ts'
 import { sendTarget } from '../../hooks/useSessionSocket.ts'
+import { saveSettings } from '../../store/persist.ts'
 import { useAppStore } from '../../store/appStore.ts'
 
 const FALLBACK_METHODS: MethodInfo[] = [
@@ -31,7 +40,7 @@ export function ExtractionControls() {
   const pushToast = useAppStore((s) => s.pushToast)
   const config = useAppStore((s) => s.config)
   const bypass = status?.bypass ?? false
-  const running = status?.state === 'running'
+  const running = status?.state === 'running' || status?.state === 'warming'
   const methods = config?.extraction_methods?.length ? config.extraction_methods : FALLBACK_METHODS
   // what sessions are started with; an unavailable choice shows what would really run
   const chosen = status?.extraction_method ?? config?.default_method ?? 'hybrid'
@@ -44,7 +53,13 @@ export function ExtractionControls() {
   const changeMethod = async (value: string) => {
     if (!isExtractionMethod(value)) return
     try {
-      setStatus(await api.setMethod(value))
+      const next = await api.setMethod(value)
+      setStatus(next)
+      saveSettings(
+        next.extraction_gate == null
+          ? { method: value }
+          : { method: value, gate: next.extraction_gate },
+      )
     } catch (error) {
       pushToast('error', error instanceof ApiError ? error.message : String(error))
     }
@@ -53,6 +68,7 @@ export function ExtractionControls() {
   const toggleGate = async () => {
     try {
       setStatus(await api.setGate(!gate))
+      saveSettings({ gate: !gate })
     } catch (error) {
       pushToast('error', error instanceof ApiError ? error.message : String(error))
     }
@@ -72,8 +88,10 @@ export function ExtractionControls() {
     }
   }
 
+  const help = METHOD_INFO[method]?.help
   return (
     <section aria-label="Extraction" className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-col gap-1">
       <label
         className="flex items-center gap-2 text-sm text-slate-300"
         title={
@@ -92,12 +110,18 @@ export function ExtractionControls() {
         >
           {methods.map((m) => (
             <option key={m.name} value={m.name} disabled={!m.available} title={m.reason ?? ''}>
-              {m.display_name}
+              {METHOD_INFO[m.name]?.label ?? m.display_name}
               {m.available ? '' : ' (not available)'}
             </option>
           ))}
         </select>
       </label>
+      {help && (
+        <p className="max-w-sm text-xs text-slate-500" data-testid="method-help">
+          {help}
+        </p>
+      )}
+      </div>
       <button
         type="button"
         onClick={() => void toggleGate()}

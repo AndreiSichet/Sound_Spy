@@ -296,6 +296,7 @@ def test_evaluate_neural_extraction_end_to_end(eval_config, neural_kit, tmp_path
         evaluate_extraction(no_model, "neural_tse", progress=lambda m: None)
 
 
+@pytest.mark.slow  # step 08: > 5 s
 def test_reverberant_copy_of_the_evaluation(eval_config, neural_kit, tmp_path) -> None:
     pytest.importorskip("pyroomacoustics")
     config = neural_kit.make(eval_config, tmp_path)
@@ -322,6 +323,7 @@ def test_reverberant_copy_of_the_evaluation(eval_config, neural_kit, tmp_path) -
     assert again["reverberant"]["overall"] == reverb["overall"]
 
 
+@pytest.mark.slow  # step 08: > 5 s
 def test_evaluation_with_the_gate_an_earlier_model_and_benchmarks(eval_config, neural_kit,
                                                                   tmp_path) -> None:
     """Step 07b rows (previous model, model without its gate, 40 dB) and the benchmark sets."""

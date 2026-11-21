@@ -1,0 +1,391 @@
+{
+  "A 07c baseline | speech": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-190822.json",
+    "settings": {
+      "chunk_ms": 20,
+      "prebuffer_chunks": 2,
+      "capture_latency": null,
+      "output_latency": null,
+      "exclusive": [
+        false,
+        false
+      ],
+      "fixed_latency": true
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 0,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95_max": 0.3449,
+      "rtf_p95_median": 0.325,
+      "latency_ms_median": 134.0,
+      "latency_ms_max": 144.0,
+      "ram_mb_first": 1263.6,
+      "ram_mb_last": 1253.4,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 39.98,
+      "model_ms_p95": 3.35
+    },
+    "warmup_s": 4.704
+  },
+  "A 07c baseline | music": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-191130.json",
+    "settings": {
+      "chunk_ms": 20,
+      "prebuffer_chunks": 2,
+      "capture_latency": null,
+      "output_latency": null,
+      "exclusive": [
+        false,
+        false
+      ],
+      "fixed_latency": true
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 1,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95_max": 0.6754,
+      "rtf_p95_median": 0.629,
+      "latency_ms_median": 134.0,
+      "latency_ms_max": 144.0,
+      "ram_mb_first": 1264.3,
+      "ram_mb_last": 1217.0,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 39.98,
+      "model_ms_p95": 10.87
+    },
+    "warmup_s": 5.109
+  },
+  "B per-route delay | music": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-191437.json",
+    "settings": {
+      "chunk_ms": 20,
+      "prebuffer_chunks": 2,
+      "capture_latency": null,
+      "output_latency": null,
+      "exclusive": [
+        false,
+        false
+      ],
+      "fixed_latency": false
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 1,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95_max": 0.72,
+      "rtf_p95_median": 0.616,
+      "latency_ms_median": 114.6,
+      "latency_ms_max": 124.6,
+      "ram_mb_first": 1264.7,
+      "ram_mb_last": 1251.9,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 10.6,
+      "model_ms_p95": 10.6
+    },
+    "warmup_s": 4.828
+  },
+  "C + prebuffer 1 | speech": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-191745.json",
+    "settings": {
+      "chunk_ms": 20,
+      "prebuffer_chunks": 1,
+      "capture_latency": null,
+      "output_latency": null,
+      "exclusive": [
+        false,
+        false
+      ],
+      "fixed_latency": false
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 2,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95_max": 0.4043,
+      "rtf_p95_median": 0.324,
+      "latency_ms_median": 124.0,
+      "latency_ms_max": 144.0,
+      "ram_mb_first": 1264.9,
+      "ram_mb_last": 1252.9,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 39.98,
+      "latency_parts_mean": {
+        "input_ms": 22.0,
+        "chunk_ms": 20.0,
+        "chain_ms": 39.98,
+        "queue_ms": 23.33,
+        "output_ms": 22.0
+      },
+      "model_ms_p95": 3.49
+    },
+    "warmup_s": 4.797
+  },
+  "C + prebuffer 1 | music": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-192051.json",
+    "settings": {
+      "chunk_ms": 20,
+      "prebuffer_chunks": 1,
+      "capture_latency": null,
+      "output_latency": null,
+      "exclusive": [
+        false,
+        false
+      ],
+      "fixed_latency": false
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 2,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95_max": 0.6589,
+      "rtf_p95_median": 0.624,
+      "latency_ms_median": 84.6,
+      "latency_ms_max": 114.6,
+      "ram_mb_first": 1265.1,
+      "ram_mb_last": 1254.0,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 10.6,
+      "latency_parts_mean": {
+        "input_ms": 22.0,
+        "chunk_ms": 20.0,
+        "chain_ms": 10.6,
+        "queue_ms": 16.67,
+        "output_ms": 22.0
+      },
+      "model_ms_p95": 10.3
+    },
+    "warmup_s": 4.594
+  },
+  "D + chunk 10 ms | speech": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-192358.json",
+    "settings": {
+      "chunk_ms": 10,
+      "prebuffer_chunks": 1,
+      "capture_latency": null,
+      "output_latency": null,
+      "exclusive": [
+        false,
+        false
+      ],
+      "fixed_latency": false
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 5,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 3,
+      "overflows": 0,
+      "rtf_p95_max": 0.4001,
+      "rtf_p95_median": 0.335,
+      "latency_ms_median": 114.0,
+      "latency_ms_max": 114.0,
+      "ram_mb_first": 1253.2,
+      "ram_mb_last": 1240.0,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 39.98,
+      "latency_parts_mean": {
+        "input_ms": 22.0,
+        "chunk_ms": 10.0,
+        "chain_ms": 39.98,
+        "queue_ms": 15.0,
+        "output_ms": 22.0
+      },
+      "model_ms_p95": 1.87
+    },
+    "warmup_s": 4.531
+  },
+  "D + chunk 10 ms | music": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-192705.json",
+    "settings": {
+      "chunk_ms": 10,
+      "prebuffer_chunks": 1,
+      "capture_latency": null,
+      "output_latency": null,
+      "exclusive": [
+        false,
+        false
+      ],
+      "fixed_latency": false
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 1,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95_max": 0.9169,
+      "rtf_p95_median": 0.902,
+      "latency_ms_median": 74.6,
+      "latency_ms_max": 84.6,
+      "ram_mb_first": 1264.7,
+      "ram_mb_last": 1253.1,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 10.6,
+      "latency_parts_mean": {
+        "input_ms": 22.0,
+        "chunk_ms": 10.0,
+        "chain_ms": 10.6,
+        "queue_ms": 13.33,
+        "output_ms": 22.0
+      },
+      "model_ms_p95": 7.89
+    },
+    "warmup_s": 4.562
+  },
+  "E + latency low | speech": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-193012.json",
+    "settings": {
+      "chunk_ms": 10,
+      "prebuffer_chunks": 1,
+      "capture_latency": "low",
+      "output_latency": "low",
+      "exclusive": [
+        false,
+        false
+      ],
+      "fixed_latency": false
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 3,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 1,
+      "overflows": 0,
+      "rtf_p95_max": 0.5514,
+      "rtf_p95_median": 0.424,
+      "latency_ms_median": 114.0,
+      "latency_ms_max": 114.0,
+      "ram_mb_first": 1264.6,
+      "ram_mb_last": 1234.6,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 39.98,
+      "latency_parts_mean": {
+        "input_ms": 22.0,
+        "chunk_ms": 10.0,
+        "chain_ms": 39.98,
+        "queue_ms": 15.0,
+        "output_ms": 22.0
+      },
+      "model_ms_p95": 2.37
+    },
+    "warmup_s": 4.547
+  },
+  "F + exclusive 3 ms | speech": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-193319.json",
+    "settings": {
+      "chunk_ms": 10,
+      "prebuffer_chunks": 1,
+      "capture_latency": 0.003,
+      "output_latency": 0.003,
+      "exclusive": [
+        true,
+        true
+      ],
+      "fixed_latency": false
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 34,
+      "input_dropped": 0,
+      "output_dropped": 6670,
+      "drained": 172,
+      "overflows": 0,
+      "rtf_p95_max": 0.4051,
+      "rtf_p95_median": 0.343,
+      "latency_ms_median": 155.6,
+      "latency_ms_max": 155.6,
+      "ram_mb_first": 1253.9,
+      "ram_mb_last": 1255.4,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 39.98,
+      "latency_parts_mean": {
+        "input_ms": 12.67,
+        "chunk_ms": 10.0,
+        "chain_ms": 39.98,
+        "queue_ms": 63.33,
+        "output_ms": 13.0
+      },
+      "model_ms_p95": 1.78
+    },
+    "warmup_s": 4.422
+  },
+  "F + exclusive 3 ms | music": {
+    "file": "C:\\Users\\User\\Desktop\\Sound_Spy\\experiments\\realtime\\soak_20261119-193626.json",
+    "settings": {
+      "chunk_ms": 10,
+      "prebuffer_chunks": 1,
+      "capture_latency": 0.003,
+      "output_latency": 0.003,
+      "exclusive": [
+        true,
+        true
+      ],
+      "fixed_latency": false
+    },
+    "summary": {
+      "state_end": "running",
+      "message_end": "",
+      "underruns": 43,
+      "input_dropped": 44,
+      "output_dropped": 8116,
+      "drained": 172,
+      "overflows": 0,
+      "rtf_p95_max": 1.0011,
+      "rtf_p95_median": 0.97,
+      "latency_ms_median": 126.3,
+      "latency_ms_max": 126.3,
+      "ram_mb_first": 1265.9,
+      "ram_mb_last": 1262.9,
+      "vram_mb_first": 58.0,
+      "vram_mb_last": 58.0,
+      "extractor_ms": 10.6,
+      "latency_parts_mean": {
+        "input_ms": 12.67,
+        "chunk_ms": 10.0,
+        "chain_ms": 10.6,
+        "queue_ms": 66.67,
+        "output_ms": 13.0
+      },
+      "model_ms_p95": 8.2
+    },
+    "warmup_s": 4.719
+  }
+}

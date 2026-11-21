@@ -1,10 +1,12 @@
 // The spectrogram with an Input / Output / Both switch (step 06). "Input" is what the microphone
 // hears, "Output" what is left after extraction; "Both" stacks them so the removed sound can be
 // SEEN: it is in the upper picture and missing from the lower one.
+// Step 08: the chosen view is remembered (localStorage).
 import { useState } from 'react'
+import { loadSettings, saveSettings, type SpectrogramView } from '../../store/persist.ts'
 import { Spectrogram } from './Spectrogram.tsx'
 
-export type SpectrogramView = 'input' | 'output' | 'both'
+export type { SpectrogramView }
 
 const VIEWS: { view: SpectrogramView; label: string }[] = [
   { view: 'input', label: 'Input' },
@@ -12,8 +14,14 @@ const VIEWS: { view: SpectrogramView; label: string }[] = [
   { view: 'both', label: 'Both' },
 ]
 
-export function SpectrogramPanel({ initial = 'both' }: { initial?: SpectrogramView }) {
-  const [view, setView] = useState<SpectrogramView>(initial)
+export function SpectrogramPanel({ initial }: { initial?: SpectrogramView }) {
+  const [view, setViewState] = useState<SpectrogramView>(
+    () => initial ?? loadSettings().spectrogram ?? 'both',
+  )
+  const setView = (next: SpectrogramView) => {
+    setViewState(next)
+    saveSettings({ spectrogram: next })
+  }
   const half = view === 'both'
   return (
     <figure className="space-y-1">

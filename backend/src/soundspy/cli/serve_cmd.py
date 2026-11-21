@@ -7,6 +7,7 @@ overridden on the command line. Needs the ``api`` extra (``pip install -e ".[api
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 NAME = "serve"
 HELP = "run the API server (FastAPI + uvicorn)"
@@ -26,28 +27,51 @@ def run(args: argparse.Namespace) -> int:
 
     from soundspy.config import load_config
 
-    api = load_config().api
+    config = load_config()
+    api = config.api
     uvicorn.run(
         "soundspy.api.app:create_app",
         factory=True,
         host=args.host or api.host,
         port=args.port or api.port,
         reload=args.reload,
-        log_config=log_config(),
+        log_config=log_config(config),
     )
     return 0
 
 
-def log_config() -> dict:
-    """uvicorn's logging setup plus Sound Spy's own loggers (``soundspy.*``) on the console.
+LOG_FILE_BYTES = 1_000_000
+LOG_FILE_BACKUPS = 5
 
-    Without this, warnings such as "output unavailable: ..." or a failing session worker would
-    never appear in the ``soundspy serve`` window.
+
+def log_path(config) -> Path:
+    """``data/logs/soundspy.log`` (git-ignored with the rest of ``data/``)."""
+    return Path(config.paths["raw"]).parent / "logs" / "soundspy.log"
+
+
+def log_config(config=None) -> dict:
+    """uvicorn's logging setup plus Sound Spy's own loggers (``soundspy.*``) on the console,
+    and (step 08, with ``config``) everything also in a rotating file ``data/logs/soundspy.log``
+    (1 MB x 5) with times and logger names: start-up lines (the index, the preloaded models),
+    warnings and a failing session worker survive the console window.
     """
     import copy
 
     from uvicorn.config import LOGGING_CONFIG
 
-    config = copy.deepcopy(LOGGING_CONFIG)
-    config["loggers"]["soundspy"] = {"handlers": ["default"], "level": "INFO", "propagate": False}
-    return config
+    cfg = copy.deepcopy(LOGGING_CONFIG)
+    handlers = ["default"]
+    if config is not None:
+        path = log_path(config)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cfg["formatters"]["file"] = {"format": "%(asctime)s %(levelname)-7s %(name)s: %(message)s"}
+        cfg["handlers"]["file"] = {
+            "class": "logging.handlers.RotatingFileHandler", "formatter": "file",
+            "filename": str(path), "maxBytes": LOG_FILE_BYTES, "backupCount": LOG_FILE_BACKUPS,
+            "encoding": "utf-8"}
+        handlers.append("file")
+        for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+            logger = cfg["loggers"].setdefault(name, {})
+            logger["handlers"] = [*logger.get("handlers", []), "file"]
+    cfg["loggers"]["soundspy"] = {"handlers": handlers, "level": "INFO", "propagate": False}
+    return cfg

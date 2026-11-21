@@ -21,6 +21,17 @@ thread**::
   time ÷ chunk duration: 1.0 means the computer only just keeps up. ``status`` reports mean and
   p95 over the last ``engine.rtf_window_s``; a ``WarningEvent`` is emitted when p95 RTF exceeds
   ``engine.rtf_warning`` (at most once per window).
+- **Warming (step 08).** ``start()`` opens the source and the output and starts the worker in
+  state ``"warming"``; the worker first runs ``prepare`` (e.g. waits for the models the server
+  preloads), builds the chain if it was given a ``chain_factory``, configures it, runs every
+  stage's ``start`` hook (model warm-up **on this thread**) and only then switches to
+  ``"running"`` and lets audio flow (the output plays silence until then). Both streams open on
+  the caller's thread: WASAPI refuses a stream opened on a thread other than the one that
+  initialised PortAudio ("Unanticipated host error"), so the output is opened for
+  ``output_channels`` (1: the Semantic chain's mono) and checked once the chain is configured.
+  No chunk ever meets a cold model, and a slow first start
+  does not block the caller. ``message`` says what is being prepared; ``warmup_s`` is the time from
+  ``start()`` to the first chunk.
 - **Errors** in the worker (device lost, microphone stall, a failing stage) set
   ``state="error"`` with a message, emit a status event, release everything and end the thread.
   They never propagate to the caller's process.
@@ -69,15 +80,26 @@ class Session:
     def __init__(
         self,
         source: AudioSource,
-        chain: ProcessorChain,
+        chain: ProcessorChain | None,
         *,
         output: AudioSink | None,
         on_event: Callable[[Event], None],
         config: AppConfig,
         mode: str = "semantic",
+        chain_factory: Callable[[], ProcessorChain] | None = None,
+        prepare: Callable[[Callable[[str], None], Callable[[], bool]], None] | None = None,
+        output_channels: int = 1,
     ) -> None:
+        """``chain`` or ``chain_factory`` (called on the worker while warming); ``prepare(progress,
+        stopping)`` runs first on the worker (``progress(message)`` updates the status message,
+        ``stopping()`` is True once ``stop()`` was called)."""
+        if chain is None and chain_factory is None:
+            raise ValueError("a session needs a chain or a chain_factory")
         self._source = source
         self._chain = chain
+        self._chain_factory = chain_factory
+        self._prepare = prepare
+        self._output_channels = int(output_channels)
         self._output = output
         self._on_event = on_event
         self._engine = config.engine
@@ -90,8 +112,12 @@ class Session:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._started_at = 0.0
+        self._requested_at = 0.0
+        self.warmup_s: float | None = None
+        self.priority: str | None = None  # the worker's raised priority (step 08)
         self._released = False
         self._frozen = False
+        self._output_problem: str | None = None
 
         self._pending_target: TargetSpec | None = None
         self._pending_monitor: tuple[bool, float, bool] | None = None
@@ -121,45 +147,86 @@ class Session:
         return self._state == "running"
 
     @property
+    def active(self) -> bool:
+        """Warming up or running (a second session cannot start, settings that need a restart
+        cannot change)."""
+        return self._state in ("warming", "running")
+
+    @property
     def state(self) -> EngineState:
         return self._state
 
     def start(self) -> None:
+        """Open the source and start the worker (state ``"warming"``, see the module docstring).
+        Opening the source fails here, synchronously (the caller may re-scan devices and retry)."""
         if self._thread is not None:
             raise SessionError("a session can only be started once")
         source = self._source
         source.open()
-        try:
-            sr, ch = source.sample_rate, source.num_channels
-            self._out_channels = self._chain.configure(sr, ch)
-            self._chunk_frames = self._engine.chunk_frames(sr)
-            self._chunk_s = self._chunk_frames / sr
-            window = max(1, round(self._engine.rtf_window_s / self._chunk_s))
-            self._times = deque(maxlen=window)
-            output_problem = None
-            if self._output is not None:
-                try:
-                    self._output.open(sr, self._out_channels)
-                except Exception as exc:  # noqa: BLE001 - monitoring is optional
-                    logger.warning("output unavailable: %s", exc)
-                    output_problem = f"Listening is unavailable for this session: {exc}"
-                    self._message = output_problem
-                    self._output = None
-        except Exception:
-            source.close()
-            raise
-        gc.collect()  # now, before audio flows ...
-        gc.freeze()  # ... and nothing allocated so far is scanned again during the session
-        self._frozen = True
-        self._started_at = time.monotonic()
-        self._state = "running"
+        sr = source.sample_rate
+        if self._output is not None:
+            try:
+                self._output.open(sr, self._output_channels)
+            except Exception as exc:  # noqa: BLE001 - monitoring is optional
+                logger.warning("output unavailable: %s", exc)
+                self._output_problem = f"Listening is unavailable for this session: {exc}"
+                self._output = None
+        self._chunk_frames = self._engine.chunk_frames(sr)
+        self._chunk_s = self._chunk_frames / sr
+        self._times = deque(maxlen=max(1, round(self._engine.rtf_window_s / self._chunk_s)))
+        self._requested_at = self._started_at = time.monotonic()
+        self._state, self._message = "warming", "preparing"
         self._thread = threading.Thread(target=self._run, name="soundspy-session", daemon=True)
         self._thread.start()
         self._emit(self.status)
-        if output_problem is not None:  # tell the user why Listen will not work
-            self._emit(WarningEvent(t=0.0, code="output_unavailable", message=output_problem))
-        for code, message in self._chain.warnings:  # e.g. no detection model
-            self._emit(WarningEvent(t=0.0, code=code, message=message))
+
+    def wait_until_running(self, timeout: float = 30.0) -> bool:
+        """Block until the session runs (True), or ended / timed out (False)."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self._state == "running":
+                return True
+            if self._state in ("error", "idle") and not self.thread_alive:
+                return False
+            time.sleep(0.01)
+        return self._state == "running"
+
+    def _progress(self, message: str) -> None:
+        """Called on the worker while warming: the status message, and a status event."""
+        with self._lock:
+            if self._state != "warming":
+                return
+            self._message = message
+        self._emit(self.status)
+
+    def _warm_up(self) -> None:
+        """The worker's preparation (state ``"warming"``)."""
+        source = self._source
+        if self._prepare is not None:
+            self._prepare(self._progress, self._stop.is_set)
+        if self._stop.is_set():
+            return
+        if self._chain is None:
+            self._progress("building the processing chain")
+            self._chain = self._chain_factory()
+        sr, ch = source.sample_rate, source.num_channels
+        self._out_channels = self._chain.configure(sr, ch)
+        if self._output is not None and self._out_channels != self._output_channels:
+            raise SessionError(f"the chain puts out {self._out_channels} channel(s), the output "
+                               f"was opened for {self._output_channels}")
+        if self._stop.is_set():
+            return
+        self._apply_pending()  # target, bypass and monitor asked for while warming
+        from soundspy.engine.cpu import raise_thread_priority
+
+        self.priority = raise_thread_priority(self._engine.thread_priority)
+        self._progress("warming up the models")
+        # stage hooks that need this thread (a GPU model's warm-up); the source only starts
+        # queueing audio when the loop asks for the first chunk
+        self._chain.start()
+        gc.collect()  # now, before audio flows ...
+        gc.freeze()  # ... and nothing allocated so far is scanned again during the session
+        self._frozen = True
 
     def stop(self) -> None:
         thread = self._thread
@@ -173,7 +240,7 @@ class Session:
                 logger.error("session worker did not stop within %.0f s", JOIN_TIMEOUT_S)
         self._release()
         with self._lock:
-            if self._state == "running":
+            if self._state in ("running", "warming"):
                 self._state = "idle"
                 self._message = "stopped"
         self._emit(self.status)
@@ -197,7 +264,8 @@ class Session:
             if self._recorder is not None:
                 self.last_recording = self._finish_recording()
         try:
-            self._chain.close()  # stops the detector's inference thread
+            if self._chain is not None:
+                self._chain.close()  # stops the detector's inference thread
         except Exception:  # noqa: BLE001
             logger.exception("closing the processing chain failed")
         if self._frozen:
@@ -209,7 +277,7 @@ class Session:
     def set_target(self, target: TargetSpec) -> None:
         with self._lock:
             self._pending_target = target
-        if not self.running:
+        if not self.active:
             self._apply_pending()
 
     def set_monitor(self, enabled: bool, gain_db: float, muted: bool = False) -> None:
@@ -217,20 +285,20 @@ class Session:
             raise SessionError("no output device is available for monitoring")
         with self._lock:
             self._pending_monitor = (enabled, float(gain_db), muted)
-        if not self.running:
+        if not self.active:
             self._apply_pending()
 
     def set_bypass(self, enabled: bool) -> None:
         """Play the unprocessed (delay-matched) signal instead of the chain output."""
         with self._lock:
             self._pending_bypass = bool(enabled)
-        if not self.running:
+        if not self.active:
             self._apply_pending()
 
     def start_recording(
         self, directory: str | Path, label: str | None = None, notes: str = ""
     ) -> None:
-        if not self.running:
+        if not self.active:
             raise SessionError("no running session to record")
         source = self._source
         with self._rec_lock:
@@ -267,6 +335,8 @@ class Session:
     def _apply_pending(self) -> None:
         with self._lock:
             target, self._pending_target = self._pending_target, None
+            if target is not None and self._chain is None:  # built while warming: keep it
+                self._pending_target, target = target, None
             monitor, self._pending_monitor = self._pending_monitor, None
             bypass, self._pending_bypass = self._pending_bypass, None
         if bypass is not None:
@@ -290,30 +360,9 @@ class Session:
 
     def _run(self) -> None:
         try:
-            # stage hooks that need this thread (a GPU model's warm-up); the source only starts
-            # queueing audio when the loop below asks for the first chunk
-            self._chain.start()
-            for chunk in self._source.chunks(self._chunk_frames):
-                if self._stop.is_set():
-                    break
-                self._apply_pending()
-                started = time.perf_counter()
-                out, events = self._chain.process(chunk)
-                self._times.append(time.perf_counter() - started)
-                self.chunks_processed += 1
-                if self.monitoring and self._output is not None:
-                    dry = self._chain.dry if self.bypass else None
-                    self._output.write(dry if dry is not None else out)
-                with self._rec_lock:
-                    if self._recorder is not None:
-                        self._recorder.write(chunk)  # the raw input, all channels
-                for event in events:
-                    self._emit(event)
-                self._periodic()
-            else:
-                if not self._stop.is_set():
-                    with self._lock:
-                        self._state, self._message = "idle", "source finished"
+            self._warm_up()
+            if not self._stop.is_set():
+                self._loop()
         except Exception as exc:  # noqa: BLE001 - reported as state="error", never re-raised
             if not self._stop.is_set():
                 logger.exception("session worker failed")
@@ -323,6 +372,59 @@ class Session:
             self._source.close()
             self._release()
             self._emit(self.status)
+        else:
+            self._close_after_stop()
+
+    def _loop(self) -> None:
+        """Running: chunks in, processed chunks out, until the source ends or ``stop()``."""
+        with self._lock:
+            self._state, self._message = "running", self._output_problem or ""
+            self._started_at = time.monotonic()
+            self.warmup_s = round(self._started_at - self._requested_at, 3)
+        self._emit(self.status)
+        if self._output_problem is not None:  # tell the user why Listen will not work
+            self._emit(WarningEvent(t=0.0, code="output_unavailable",
+                                    message=self._output_problem))
+        for code, message in self._chain.warnings:  # e.g. no detection model
+            self._emit(WarningEvent(t=0.0, code=code, message=message))
+        for chunk in self._source.chunks(self._chunk_frames):
+            if self._stop.is_set():
+                break
+            self._apply_pending()
+            started = time.perf_counter()
+            out, events = self._chain.process(chunk)
+            self._times.append(time.perf_counter() - started)
+            self.chunks_processed += 1
+            if self.monitoring and self._output is not None:
+                dry = self._chain.dry if self.bypass else None
+                self._output.write(dry if dry is not None else out)
+            with self._rec_lock:
+                if self._recorder is not None:
+                    self._recorder.write(chunk)  # the raw input, all channels
+            for event in events:
+                self._emit(event)
+            self._periodic()
+        else:
+            if not self._stop.is_set():
+                with self._lock:
+                    self._state, self._message = "idle", "source finished"
+
+    def _close_after_stop(self) -> None:
+        """``stop()`` came while warming: it released what existed then; close what the worker
+        opened or built after that (the output stream, the chain's detector thread)."""
+        with self._lock:
+            if not self._released:
+                return  # stop() is still on its way to _release(), which closes everything
+        if self._output is not None:
+            try:
+                self._output.close()
+            except Exception:  # noqa: BLE001
+                logger.exception("closing the output failed")
+        if self._chain is not None:
+            try:
+                self._chain.close()
+            except Exception:  # noqa: BLE001
+                logger.exception("closing the processing chain failed")
 
     def _periodic(self) -> None:
         now = time.monotonic()
@@ -365,11 +467,35 @@ class Session:
         return float(np.percentile(np.asarray(self._times), 95)) / self._chunk_s
 
     @property
+    def latency_parts(self) -> dict[str, float] | None:
+        """The estimate in parts (ms): the input stream, one chunk, the chain (extractor), the
+        output queue and the output stream (step 08; the report's breakdown)."""
+        if not self._chunk_s:
+            return None
+        sr = self._source.sample_rate
+        parts = {"input_ms": self._source.input_latency_s * 1000.0,
+                 "chunk_ms": self._chunk_s * 1000.0,
+                 "chain_ms": (self._chain.latency_samples / sr * 1000.0
+                              if self._chain is not None else 0.0),
+                 "queue_ms": 0.0, "output_ms": 0.0}
+        output = self._output
+        if self.monitoring and output is not None:
+            stream = getattr(output, "_stream", None)
+            try:
+                parts["output_ms"] = float(getattr(stream, "latency", 0.0)) * 1000.0
+            except (TypeError, ValueError):
+                parts["output_ms"] = 0.0
+            queued = getattr(output, "queued_frames", 0)
+            parts["queue_ms"] = float(queued) / sr * 1000.0
+        return {k: round(v, 2) for k, v in parts.items()}
+
+    @property
     def latency_ms(self) -> float | None:
         if not self._chunk_s:
             return None
         latency = self._source.input_latency_s + self._chunk_s
-        latency += self._chain.latency_samples / self._source.sample_rate  # e.g. the STFT
+        if self._chain is not None:  # e.g. the STFT
+            latency += self._chain.latency_samples / self._source.sample_rate
         if self.monitoring and self._output is not None:
             latency += float(getattr(self._output, "latency_s", 0.0))
         return round(latency * 1000, 1)
@@ -424,11 +550,12 @@ class Session:
             detector=self._detector_info(),
             bypass=self.bypass if pending_bypass is None else pending_bypass,
             extraction=self._extraction_info(),
+            warmup_s=self.warmup_s,
         )
 
     def _extraction_info(self) -> dict[str, Any] | None:
         """``{method, latency_ms, gating, target_active}`` of the chain's extractor."""
-        if not self._chain.has("extractor"):
+        if self._chain is None or not self._chain.has("extractor"):
             return None
         stage = self._chain.stage("extractor")
         info = getattr(stage, "status_info", None)
@@ -438,7 +565,7 @@ class Session:
                 "target_active": False}
 
     def _detector_info(self) -> dict[str, Any] | None:
-        if not self._chain.has("detector"):
+        if self._chain is None or not self._chain.has("detector"):
             return None
         stage = self._chain.stage("detector")
         info = getattr(stage, "status_info", None)

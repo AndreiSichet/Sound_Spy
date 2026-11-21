@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 from soundspy import __version__
 from soundspy.cli import (
+    app_cmd,
     check_mic_cmd,
     data_cmd,
     db_cmd,
@@ -17,14 +18,18 @@ from soundspy.cli import (
     devices_cmd,
     evaluate_cmd,
     extract_cmd,
+    measure_latency_cmd,
     record_benchmark_cmd,
     record_cmd,
     record_dataset_cmd,
+    report_cmd,
     serve_cmd,
+    soak_cmd,
     train_cmd,
 )
 
 COMMAND_MODULES = (
+    app_cmd,
     serve_cmd,
     devices_cmd,
     check_mic_cmd,
@@ -37,6 +42,9 @@ COMMAND_MODULES = (
     detect_cmd,
     extract_cmd,
     db_cmd,
+    measure_latency_cmd,
+    soak_cmd,
+    report_cmd,
 )
 
 

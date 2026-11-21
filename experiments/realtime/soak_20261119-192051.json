@@ -1,0 +1,221 @@
+{
+  "time": "2026-11-19T19:20:51",
+  "minutes": 3.0,
+  "method": "hybrid",
+  "route": "waveformer",
+  "labels": [
+    "music"
+  ],
+  "attenuation_db": 15.0,
+  "source": "mic",
+  "warmup_s": 4.594,
+  "start_to_running_s": 4.8,
+  "settings": {
+    "chunk_ms": 20,
+    "prebuffer_chunks": 1,
+    "capture_latency": null,
+    "output_latency": null,
+    "exclusive": [
+      false,
+      false
+    ],
+    "fixed_latency": false
+  },
+  "summary": {
+    "state_end": "running",
+    "message_end": "",
+    "underruns": 2,
+    "input_dropped": 0,
+    "output_dropped": 0,
+    "drained": 0,
+    "overflows": 0,
+    "rtf_p95_max": 0.6589,
+    "rtf_p95_median": 0.624,
+    "latency_ms_median": 84.6,
+    "latency_ms_max": 114.6,
+    "ram_mb_first": 1265.1,
+    "ram_mb_last": 1254.0,
+    "vram_mb_first": 58.0,
+    "vram_mb_last": 58.0,
+    "extractor_ms": 10.6,
+    "latency_parts_mean": {
+      "input_ms": 22.0,
+      "chunk_ms": 20.0,
+      "chain_ms": 10.6,
+      "queue_ms": 16.67,
+      "output_ms": 22.0
+    },
+    "model_ms_p95": 10.3
+  },
+  "samples": [
+    {
+      "t_s": 0.0,
+      "state": "running",
+      "underruns": 0,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": null,
+      "proc_ms_p95": null,
+      "latency_ms": 64.0,
+      "chunks": 0,
+      "latency_parts": {
+        "input_ms": 22.0,
+        "chunk_ms": 20.0,
+        "chain_ms": 0.0,
+        "queue_ms": 0.0,
+        "output_ms": 22.0
+      },
+      "ram_mb": 1265.1,
+      "vram_allocated_mb": 24.0,
+      "vram_reserved_mb": 58.0
+    },
+    {
+      "t_s": 30.0,
+      "state": "running",
+      "underruns": 1,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.6238,
+      "proc_ms_p95": 12.477,
+      "latency_ms": 84.6,
+      "chunks": 1499,
+      "latency_parts": {
+        "input_ms": 22.0,
+        "chunk_ms": 20.0,
+        "chain_ms": 10.6,
+        "queue_ms": 10.0,
+        "output_ms": 22.0
+      },
+      "ram_mb": 1266.0,
+      "vram_allocated_mb": 28.2,
+      "vram_reserved_mb": 58.0
+    },
+    {
+      "t_s": 60.0,
+      "state": "running",
+      "underruns": 1,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.6233,
+      "proc_ms_p95": 12.467,
+      "latency_ms": 84.6,
+      "chunks": 2999,
+      "latency_parts": {
+        "input_ms": 22.0,
+        "chunk_ms": 20.0,
+        "chain_ms": 10.6,
+        "queue_ms": 10.0,
+        "output_ms": 22.0
+      },
+      "ram_mb": 1266.9,
+      "vram_allocated_mb": 28.2,
+      "vram_reserved_mb": 58.0
+    },
+    {
+      "t_s": 90.0,
+      "state": "running",
+      "underruns": 1,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.6115,
+      "proc_ms_p95": 12.23,
+      "latency_ms": 84.6,
+      "chunks": 4499,
+      "latency_parts": {
+        "input_ms": 22.0,
+        "chunk_ms": 20.0,
+        "chain_ms": 10.6,
+        "queue_ms": 10.0,
+        "output_ms": 22.0
+      },
+      "ram_mb": 1267.3,
+      "vram_allocated_mb": 28.2,
+      "vram_reserved_mb": 58.0
+    },
+    {
+      "t_s": 120.0,
+      "state": "running",
+      "underruns": 1,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.6355,
+      "proc_ms_p95": 12.71,
+      "latency_ms": 74.6,
+      "chunks": 5999,
+      "latency_parts": {
+        "input_ms": 22.0,
+        "chunk_ms": 20.0,
+        "chain_ms": 10.6,
+        "queue_ms": 0.0,
+        "output_ms": 22.0
+      },
+      "ram_mb": 1267.6,
+      "vram_allocated_mb": 28.2,
+      "vram_reserved_mb": 58.0
+    },
+    {
+      "t_s": 150.0,
+      "state": "running",
+      "underruns": 1,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.6589,
+      "proc_ms_p95": 13.178,
+      "latency_ms": 104.6,
+      "chunks": 7500,
+      "latency_parts": {
+        "input_ms": 22.0,
+        "chunk_ms": 20.0,
+        "chain_ms": 10.6,
+        "queue_ms": 30.0,
+        "output_ms": 22.0
+      },
+      "ram_mb": 1250.8,
+      "vram_allocated_mb": 28.1,
+      "vram_reserved_mb": 58.0
+    },
+    {
+      "t_s": 180.0,
+      "state": "running",
+      "underruns": 2,
+      "input_dropped": 0,
+      "output_dropped": 0,
+      "drained": 0,
+      "overflows": 0,
+      "rtf_p95": 0.5889,
+      "proc_ms_p95": 11.778,
+      "latency_ms": 114.6,
+      "chunks": 9000,
+      "latency_parts": {
+        "input_ms": 22.0,
+        "chunk_ms": 20.0,
+        "chain_ms": 10.6,
+        "queue_ms": 40.0,
+        "output_ms": 22.0
+      },
+      "ram_mb": 1254.0,
+      "vram_allocated_mb": 28.1,
+      "vram_reserved_mb": 58.0
+    }
+  ],
+  "name": "C + prebuffer 1 | music",
+  "overrides": [
+    "extraction.hybrid.fixed_latency=true",
+    "output.prebuffer_chunks=2",
+    "engine.chunk_ms=20",
+    "extraction.hybrid.fixed_latency=false",
+    "output.prebuffer_chunks=1"
+  ]
+}

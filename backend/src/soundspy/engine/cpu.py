@@ -1,4 +1,5 @@
-"""Keeping a thread on the CPU's fast cores (step 07c).
+"""Keeping the audio thread on the CPU's fast cores (step 07c) and ahead in the queue
+(step 08).
 
 Intel's 12th-generation and later laptop CPUs have two kinds of cores: performance cores and
 slower efficiency cores. Windows moves a thread that works in short bursts (the audio thread:
@@ -9,6 +10,13 @@ cores, Balanced plan), one DeepFilterNet3 step paced like a live session: mean 7
 :func:`prefer_performance_cores` asks Windows which logical processors have the highest
 efficiency class (``GetSystemCpuSetInformation``) and restricts the **calling thread** to them.
 On a CPU with one kind of core, or outside Windows, it does nothing.
+
+:func:`raise_thread_priority` (step 08) registers the **calling thread** with Windows' audio
+scheduler (MMCSS, task "Pro Audio", as audio programs do): Windows then runs it ahead of
+ordinary threads whenever it is ready, so a busy moment elsewhere (another program, a file
+scan) does not hold the audio worker back for longer than the speaker queue's cushion. Without
+MMCSS it falls back to ``THREAD_PRIORITY_HIGHEST``. The worker spends most of its time waiting
+for the next microphone chunk, so it never starves the rest of the system.
 """
 
 from __future__ import annotations
@@ -83,3 +91,35 @@ def prefer_performance_cores() -> int | None:
     except (OSError, AttributeError):
         return None
     return mask if previous else None
+
+
+def raise_thread_priority(mode: str = "pro_audio") -> str | None:
+    """Raise the calling thread's priority: ``pro_audio`` (MMCSS, falling back to ``high``),
+    ``high`` or ``normal`` (nothing). Returns what was applied (``"mmcss"`` / ``"high"``) or
+    ``None``."""
+    if mode == "normal" or sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        if mode == "pro_audio":
+            try:
+                avrt = ctypes.WinDLL("avrt", use_last_error=True)
+                avrt.AvSetMmThreadCharacteristicsW.argtypes = (wintypes.LPCWSTR,
+                                                               ctypes.POINTER(wintypes.DWORD))
+                avrt.AvSetMmThreadCharacteristicsW.restype = wintypes.HANDLE
+                index = wintypes.DWORD(0)
+                if avrt.AvSetMmThreadCharacteristicsW("Pro Audio", ctypes.byref(index)):
+                    return "mmcss"
+            except OSError:
+                pass  # no MMCSS: the plain thread priority below
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.GetCurrentThread.restype = wintypes.HANDLE
+        k32.SetThreadPriority.argtypes = (wintypes.HANDLE, ctypes.c_int)
+        k32.SetThreadPriority.restype = wintypes.BOOL
+        if k32.SetThreadPriority(k32.GetCurrentThread(), 2):  # THREAD_PRIORITY_HIGHEST
+            return "high"
+    except (OSError, AttributeError):
+        return None
+    return None

@@ -84,7 +84,11 @@ def test_start_stop_emits_every_event_type(config, wav, no_leaked_threads) -> No
     session.stop()
     session.stop()  # idempotent
     statuses = events.of(EngineStatus)
-    assert statuses[0].state == "running" and statuses[-1].state == "idle"
+    # step 08: warming (models warmed on the worker) -> running -> idle
+    states = [s.state for s in statuses]
+    assert states[0] == "warming" and "running" in states and states[-1] == "idle"
+    assert states.index("running") > states.index("warming")
+    assert session.status.warmup_s is not None and session.status.warmup_s >= 0
     assert not session.thread_alive
     status = session.status
     assert status.chunks_processed > 0 and status.rtf_p95 is not None
@@ -266,6 +270,7 @@ def test_monitoring_plays_the_chain_output(
     sink = SpeakerSink(resolve_output(), config.output)
     session, _ = _session(config, wav, output=sink)
     session.start()
+    assert session.wait_until_running()  # step 08: the output opens once the models are warm
     assert session.status.output_device == "Speakers (Realtek(R) Audio)"
     with pytest.raises(SessionError):
         Session(
@@ -344,6 +349,7 @@ def test_long_lived_objects_are_frozen_while_a_session_runs(config, wav) -> None
     session, events = _session(config, wav)
     session.start()
     try:
+        assert session.wait_until_running()  # frozen once warm, before audio flows
         assert gc.get_freeze_count() > 10_000  # the interpreter, numpy, the config, ...
         events.wait_for(lambda: session.chunks_processed > 5)
         started = time.perf_counter()

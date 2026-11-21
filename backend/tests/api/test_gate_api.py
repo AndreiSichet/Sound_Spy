@@ -45,14 +45,15 @@ def test_chain_follows_the_gate_switch(app_config, neural_kit, tmp_path) -> None
     assert "gate" not in baseline.stage("extractor").status_info()  # the baseline ignores it
 
 
-def test_session_gate_switch(app_config, neural_kit, tmp_path, no_leaked_threads) -> None:
+def test_session_gate_switch(app_config, neural_kit, tmp_path, no_leaked_threads,
+                             start_running) -> None:
     config = _config(app_config, neural_kit, tmp_path)
     with TestClient(create_app(config)) as client:
         assert client.get("/api/config").json()["default_gate"] is True
         assert client.get("/api/session").json()["extraction_gate"] is True
         body = client.put("/api/session/gate", json={"enabled": False}).json()
         assert body["extraction_gate"] is False and body["state"] == "idle"
-        started = client.post("/api/session/start", json=FILE_SOURCE).json()
+        started = start_running(client, FILE_SOURCE)
         assert started["extraction"]["gate"] is False and started["extraction_gate"] is False
         res = client.put("/api/session/gate", json={"enabled": True})  # not while running
         assert res.status_code == 409 and "stop the session" in res.json()["detail"]
@@ -79,7 +80,7 @@ def test_session_gate_switch(app_config, neural_kit, tmp_path, no_leaked_threads
                     break
             else:
                 raise AssertionError(f"set_gate was not answered with the new status: {seen}")
-        started = client.post("/api/session/start", json={**FILE_SOURCE, "gate": False}).json()
+        started = start_running(client, {**FILE_SOURCE, "gate": False})
         assert started["extraction"]["gate"] is False  # the start request overrides the choice
         client.post("/api/session/stop")
 

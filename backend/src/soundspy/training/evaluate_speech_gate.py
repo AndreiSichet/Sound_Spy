@@ -82,8 +82,14 @@ def _timelines(config: AppConfig, detector, audio) -> dict[str, Any]:
                                     lag_s=ext.mask_baseline.noise_guard_s, **settings)}
 
 
-def _speech_latency(cores, sample_rate: int) -> int:
-    return cores.latencies(sample_rate)["enhancer_route"]
+def _speech_latency(cores, sample_rate: int, config: AppConfig | None = None) -> int:
+    """The speech route's delay (its own; the slowest route's with ``live.fixed_latency``:
+    the same 1919 samples at 48 kHz either way, DeepFilterNet3 being the slowest)."""
+    if config is not None:
+        from soundspy.training.evaluate_hybrid import route_latency
+
+        return route_latency(config, cores, sample_rate, "dfn")
+    return cores.latencies(sample_rate)["speech_enhancer"]
 
 
 def synthetic_examples(config: AppConfig, cores, detector, split: str, *, n: int,

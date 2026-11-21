@@ -107,6 +107,20 @@ worker error                    state "error" + message → status event → rel
 app shutdown (lifespan exit)    SessionManager.shutdown() stops the session: no thread outlives the app
 ```
 
+**Since step 08** (`engine/session.py`): `Session(source, chain | None, …, chain_factory=,
+prepare=, output_channels=)`. `start()` (caller's thread) opens the source and the output with
+`output_channels` (WASAPI streams must open on the thread that initialised PortAudio; an output
+failure becomes a warning and Listen unavailable, as before), sets state **`warming`** and starts
+the worker. The worker's `_warm_up()`: `prepare(progress, stopping)` (the `SessionManager` passes
+`ModelPreloader.wait`), `chain = chain_factory()` if none was given, `chain.configure`, the output
+channel check (`SessionError`), pending changes, `raise_thread_priority(engine.thread_priority)`
+(`engine/cpu.py`: MMCSS "Pro Audio" → `"mmcss"`, else `THREAD_PRIORITY_HIGHEST` → `"high"`),
+`chain.start()` (models run once on this thread), `gc.collect(); gc.freeze()`; then `_loop()`
+sets `running` and `warmup_s`. The output plays silence (prebuffer) until then. `stop()` during
+warming is honoured between the steps; `_close_after_stop()` in `finally` closes everything
+whatever happened. `active` = running or warming (targets, monitor, bypass and recording accept
+both). `wait_until_running(timeout)`; `latency_parts` = input / chunk / chain / queue / output ms.
+
 **Thread → asyncio bridge.** `Session` calls `on_event(event)` on the worker thread.
 `SessionManager._on_event` only calls `loop.call_soon_threadsafe(self._publish, event)` (the loop
 captured in the lifespan) and returns. `_publish` runs on the event loop, converts the event to a
@@ -196,6 +210,12 @@ are produced (`set_target` answers "not implemented (step-03)").
 | `POST /api/recordings/{id}/process` | 06 (implemented): `{labels (>= 1), attenuation_db?, method?}` → 202 + `RunModel` (`pending`), processed by the one-job worker; 404 file gone, 413 above `extraction.offline.max_seconds`, 422 unknown label, 503 the method's model is missing (neural checkpoint, or the detection model for the baseline). Step 07: `method` = `neural_tse` \| `mask_baseline`, default = the configured method if it can run, else the baseline. Step 07b: `gate?` (neural; default `extraction.neural_tse.gate.enabled`) |
 | `GET /api/recordings/{id}/runs` | 06 (implemented): runs of a recording, newest first |
 | `GET /api/runs/{run_id}`, `GET /api/runs/{run_id}/audio` | 06 (implemented): 404 unknown; audio 409 unless `done` |
+| `POST /api/devices/rescan` | 08: `refresh_devices()`, answers like `GET /api/devices`; 409 while a session is active |
+| `GET /api/devices` (08) | adds `selected_output` (the device the next session plays to) and `output_setting` (the stored choice) |
+| `GET /api/settings`, `PUT /api/settings/output-device` | 08: `{output_device}` from `data/user_settings.json`; PUT `{device: int \| str \| null}`, checked against the output list (400), 409 while active; applied to `config.output.device` at once and at every start (`apply_user_settings`) |
+| `GET /api/models` | 08: `ModelPreloader.status()`: `state` idle \| loading \| ready \| error, `current`, `done`/`total`, `steps[{name, seconds, error}]`, `memory` (after loading), `resources` (now: `ram_mb`, `vram_allocated_mb`, `vram_reserved_mb`) |
+| `GET /api/latency` | 08: `experiments/realtime/latency_latest.json` (`MeasuredLatencyResponse`), 404 if never measured |
+| `GET /{path}` | 08, `soundspy app` only (`create_app(frontend=…)`, `api/static.py`): `frontend/dist`, `SPAStaticFiles` falls back to `index.html` except below `api/` and `ws/`; mounted after every API route |
 
 Unimplemented routes return HTTP 501 `{"detail": "not implemented (step-XX)"}` (none since step 06).
 Interactive docs: http://127.0.0.1:8765/docs.
@@ -578,6 +598,61 @@ tuning session's cases; DeepFilterNet3 once, both timelines; rows `none`, `07c`,
 
 Result (`experiments/ext_hybrid_07d/`): tuned −12 dB / 100 ms / −9 dB, warm-up 0, detector hold 1000 ms. Held-out real room (`20261119-164017-bb5e+20261119-164508-2d33`, 56 s, live, 40 dB), classical: short pauses −33.0 dB (07c −30.5), long −42.5 dB (07c −38.5); song with vocals ~−15 dB for every system; speech cut 0.3 %; 0 dB speech over music −0.15 / +0.27 dB vs 07c; stream start 0.0 s. Synthetic test live +0.14 to +1.23 dB, music only −42.8 dB (07c −46.1), offline 0.5–2.1 dB below 07c. Live: speech route RTF p95 0.34 (worst 0.45), Waveformer route 0.66 (worst 0.74), 0 underruns.
 
+## Step 08: Tab 1 finished
+
+**Per-route delay** (`extraction/hybrid.py`): `_effective[route]` = the route's own latency
+(`fixed_latency`: every route the slowest's); `_DelayLine` holds the dry mono input once and
+`read(delay)` serves each route's dry at its delay (residual mix, `aligned_dry` for Bypass via
+`ProcessorChain`, which uses the stage's `aligned_dry` when it is the single stage after the dry
+tap); `latency_samples` = the incoming route's delay (status, estimate); `max_latency_samples`.
+During a route change the 20 ms crossfade mixes each route's output at its own delay. The
+`HybridGate` gets the Waveformer's latency, the `SpeechRouteGate` the speech route's.
+
+**Stream options** (`config.py`, `default.yaml`): `capture.latency` / `output.latency` (None =
+PortAudio's default \| `low` \| `high` \| seconds), `capture.exclusive` / `output.exclusive`
+(`sd.WasapiSettings(exclusive=True)`), `output.stall_timeout_s` (2.0): `SpeakerSink.write()`
+raises `OutputLostError` when the stream had called back and then stayed silent that long.
+`MicSource`'s stall message names unplugging and Restart.
+
+**Preloading** (`engine/preload.py`): `ModelPreloader(config, method)` plans the steps of the
+configured method (Waveformer via `neural_tse` caches, DeepFilterNet3 `SpeechCore`, detector on
+`detector_device`), runs them on a daemon thread (`start()`), each warmed; `wait(progress,
+stopping, timeout)`; `status()`. Started in the lifespan when `api.preload_models`;
+`SessionManager.preloader`. `engine/resources.py`: `process_memory_mb` (Win32
+`GetProcessMemoryInfo`), `gpu_memory_mb`.
+
+**Tools.** `engine/live.py`: `live_session(config, …)` = the session the API would build, without
+the API (refreshes devices first). `io/loopback.py`: `click_train` (−6 dBFS, 1 s apart),
+`find_arrivals` (matched filter scaled by the click's energy, floor = its median, `min_snr` 8 =
+18 dB, onset = earliest ≥ ½ peak within 3 ms before it, window capped at the next click; the app's
+copy matched against the recorded direct arrival (`segment_ms` 10 from 1 ms before), searched
+from max(`min_gap_s`, d/2); `Arrivals.coupling_db` = worst third-octave band of the averaged
+direct arrivals (30 ms) over the click, lead-in noise subtracted), `app_gain_db` (loop
+`LOOP_DB` −10, clamp −20…+20), `app_delays`, `play_and_record` (one `sd.Stream`);
+`cli/measure_latency_cmd.py` (hardware alone, `--through-app [--method --labels]`, `--all`;
+Bypass on, playback gain from the hardware run's coupling; `diagnosis()`;
+`experiments/realtime/latency_<time>.json` + `latency_latest.json`, recordings
+`outputs/latency/<time>/<mode>.wav`).
+`cli/soak_cmd.py`: per-minute samples (underruns, dropped, drained, RTF p95, delay, RAM, VRAM),
+`--set` via `config.override(config, "a.b", value)`; `experiments/realtime/soak_<time>.json`.
+`cli/report_cmd.py` + `report.py`: `Results` (every stored result file), sections, `figures()`,
+`build()`, `rerun()`. `cli/app_cmd.py`, `start.ps1`. `cli/serve_cmd.log_config(config)`: rotating
+file handler `data/logs/soundspy.log` (1 MB × 5) for uvicorn's and `soundspy.*` loggers.
+`user_settings.py`: `load/save/apply_user_settings`, `KEYS = ("output_device",)`.
+
+**Frontend.** `SemanticTab`: session bar + areas Listen / Sounds / Visuals + `<details>`
+recordings. `SessionBar`: warming text, Restart on error, summary (method · route,
+`GateIndicator`, `latencyLabel` = measured if `/api/latency` has the route's mode, else estimated),
+Details. `ExtractionControls`: `METHOD_INFO` labels + help. `OutputDeviceControls`. Hooks
+`useKeyboardShortcuts` (Space = Bypass, M = Mute; ignored when an input, select, textarea, button
+or summary has the focus), `usePersistedSettings` + `store/persist.ts` (`soundspy.semantic.v1`:
+selected, attenuation, method, gate, spectrogram; validated; every access in try/catch).
+
+**Measured** (laptop): Waveformer route 94.6 ms estimated (was 134), speech route 134 ms; soak
+with MMCSS: speech 30 min / Waveformer 10 min, 0 underruns / dropped / drained, RTF p95 worst
+0.37 / 0.61, RAM 1.25 → 1.19 GB, VRAM 58 MB; start-up: server 4.1 s, models 11.3 s, first
+session 0.9 s.
+
 ## Training data (step 04, `soundspy.data`)
 
 Storage (`paths` in `default.yaml`; large data never inside the repository):
@@ -699,6 +774,6 @@ report is given in chat; `project_insights.md` is updated every step.
 | 07b | Neural extraction v2: silent-frame loss, output gate, LibriSpeech, dynamic mixing, speaker-queue draining — **done** | 1 |
 | 07c | Hybrid extraction: DeepFilterNet3 for Speech, Waveformer v1 for the rest, detector-closed / output-reopened gate, real-room benchmark — **done** | 1 |
 | 07d | Speech-route gate driven by DeepFilterNet3's output; pause metrics; tuning / held-out real-room sessions — **done** | 1 |
-| 08 | End-to-end evaluation, robustness, polish, documentation for the university report | 1 |
+| 08 | Tab 1 finished: measured latency, per-route delay, preloading + warming, device robustness, soak, `soundspy app` / `start.ps1`, tab polish, `soundspy report` → `docs/evaluation.md` — **done** | 1 |
 | module-3/4 | Simulated array (pyroomacoustics), DOA, beamforming, Spatial tab | 2 |
 | module-5 | Source tracking + detection fusion, Sources tab | 3 |

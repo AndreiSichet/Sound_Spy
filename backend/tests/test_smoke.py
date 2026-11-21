@@ -19,15 +19,16 @@ from soundspy.cli.main import main
 IMPLEMENTED_COMMANDS = [
     "serve", "devices", "check-mic", "record", "record-dataset", "record-benchmark", "data",
     "train",
-    "evaluate", "detect", "extract", "db",
+    "evaluate", "detect", "extract", "db", "app", "measure-latency", "soak", "report",
 ]
 PLACEHOLDER_COMMANDS: dict[str, str] = {}
 ALL_COMMANDS = [*IMPLEMENTED_COMMANDS, *PLACEHOLDER_COMMANDS]
 PACKAGE_DIR = Path(soundspy.__file__).parent
 FORBIDDEN_IN_LIBRARY = ("fastapi", "starlette", "sqlalchemy", "soundspy.api")
 # The CLI's entry points into the API layer (imports inside their ``run`` only, so importing the
-# CLI still loads no API framework): ``serve`` starts the server, ``db`` rebuilds its index.
-API_ENTRY_POINTS = {"cli/db_cmd.py"}
+# CLI still loads no API framework): ``serve`` starts the server, ``db`` rebuilds its index,
+# ``app`` serves the built page with it (step 08).
+API_ENTRY_POINTS = {"cli/db_cmd.py", "cli/app_cmd.py"}
 
 
 def test_version() -> None:

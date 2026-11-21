@@ -1,181 +1,157 @@
 # Sound Spy
 
 University project (Telecommunications, UTCN). Sound Spy is a desktop-local web app that
-listens to the environment through a microphone and lets you **choose what to hear**: the chosen
-sound is enhanced, everything else is treated as noise and attenuated. The enhanced audio plays
-through the laptop's headphones/speakers.
-
-Target scenario: a crowded cafeteria — "let me hear speech, suppress dishes and music", or
-"let me hear the person on my left".
+listens through the laptop microphone and lets you **choose what to hear**: the chosen sound
+types are kept, everything else is turned down. The result plays on your headphones, live.
 
 | Tab | You select... | The app... | Hardware | Status |
 |---|---|---|---|---|
-| **Semantic** | one or more sound types | detects the sound types present, extracts the selected ones | any mic | live session (listen, record, visuals); detection/extraction from step 05 |
-| **Spatial** | sound types + a direction | steers toward the direction, then extracts | USB mic array | planned (module 3-4) |
-| **Sources** | one detected source on a map | tracks sources, extracts the selected one | USB mic array | planned (module 5) |
+| **Semantic** | one or more sound types | detects what is there and keeps only the selected types | the laptop microphone | **done** (steps 01-08) |
+| **Spatial** | sound types + a direction | steers toward the direction, then extracts | USB microphone array | planned (modules 3-4) |
+| **Sources** | one detected source on a map | tracks sources, extracts the selected one | USB microphone array | planned (module 5) |
 
-## Architecture in short
+New to the project? [project_insights.md](project_insights.md) explains everything in plain
+language. Results for the report: [docs/evaluation.md](docs/evaluation.md) · demo script:
+[docs/demo.md](docs/demo.md) · architecture: [docs/architecture.md](docs/architecture.md) ·
+decisions: [docs/decisions.md](docs/decisions.md).
 
-- **Backend** (`backend/`, Python 3.11, package `soundspy`): owns all audio I/O. A streaming
-  engine runs chunk-based `Processor`s (spatial filter, extractor) and `SideProcessor`s
-  (detector, analyzer, localizer) on a worker thread. FastAPI exposes REST (`/api/*`) and a
-  WebSocket (`/ws/session`) for live events; SQLite stores recordings and processing runs.
-- **Frontend** (`frontend/`, React + TypeScript + Vite + Tailwind + Zustand): tabs, controls and
-  visualizations. It never captures the microphone or plays live audio.
-- Extraction: detector-guided spectral-masking baseline, then a label-conditioned neural target
-  sound extraction model (ideas from SemanticHearing, Veluri et al., UIST 2023).
+## Quick start
 
-New to the project? Start with [project_insights.md](project_insights.md): a plain-language guide
-to how everything works, with a glossary.
-Details: [docs/architecture.md](docs/architecture.md) · decisions: [docs/decisions.md](docs/decisions.md)
-
-## Requirements
-
-- Windows 11, Python **3.11** (the default `python` may be newer, e.g. 3.14, which is not
-  supported — use the `py -3.11` launcher), Node.js 22+ LTS.
-- Ports 8765 (backend, bound to 127.0.0.1) and 5173 (frontend dev server) free.
-
-## Run
+Once installed (next section), start the whole app with one command from the project folder:
 
 ```powershell
-# backend
+.\start.ps1
+```
+
+It starts the backend, serves the page at **http://127.0.0.1:8765/** and opens it in your
+browser; the models load in the background (about 10 s after a fresh start). Stop it with
+**Ctrl+C** in that window. If PowerShell refuses to run scripts:
+`powershell -ExecutionPolicy Bypass -File .\start.ps1` (no admin rights needed).
+
+On the **Semantic** tab: press **Start**, put on **headphones**, tick **Listen**, and click the
+sound types you want to keep (Speech, Music, ...). **Space** switches Bypass (the unprocessed
+sound) on and off, **M** mutes.
+
+## First-time setup
+
+Windows 11, Python **3.11** (use the `py -3.11` launcher: a newer default `python` is not
+supported), Node.js 22+ LTS, an NVIDIA graphics card for the Neural / Hybrid methods.
+
+```powershell
+# backend: PyTorch first from the CUDA wheel index, then the project (see backend/requirements-lock.txt)
 cd backend
-py -3.11 -m venv .venv; .venv\Scripts\activate
-pip install -e ".[api,data,dev]"
-soundspy serve            # http://127.0.0.1:8765/docs
+py -3.11 -m venv .venv
+.venv\Scripts\pip install "torch==2.11.0+cu126" "torchaudio==2.11.0+cu126" --index-url https://download.pytorch.org/whl/cu126
+.venv\Scripts\pip install -e ".[api,data,ml,spatial,dev]"
+.venv\Scripts\soundspy data download deepfilternet   # the speech enhancer (8 MB, to D:)
 
-# frontend (second terminal)
-cd frontend
+# frontend: build the page once (and after changing it)
+cd ..\frontend
 npm install
-npm run dev               # http://localhost:5173
+npm run build
 ```
 
-The Vite dev server proxies `/api` and `/ws` to the backend, so open http://localhost:5173.
-On the **Semantic** tab, press **Start** for a live session (level meters, spectrogram,
-waveform), tick **Listen** to hear it — **headphones only**, laptop speakers howl — and
-**Record** to save what it hears.
-
-### Microphone
-
-```powershell
-soundspy devices                              # which mic the active profile uses
-soundspy check-mic                            # 5 s test: levels, channel comparison, warnings
-soundspy check-mic --meter                    # live level meter (Ctrl+C to stop)
-soundspy record --seconds 10 --label speech   # WAV + JSON sidecar in data/raw
-```
-
-Before recording anything you want to keep, switch **off** Windows audio enhancements /
-Voice Clarity for the microphone (Settings → System → Sound → your microphone → Properties) and
-re-run `check-mic`. [project_insights.md](project_insights.md) ("Audio capture") explains how to
-read the output.
-
-### Training data (step 04)
-
-Large data goes to **drive D:** (`D:/SoundSpyData/`, see `paths` in `backend/configs/default.yaml`).
-FSD50K's audio is a split zip: install 7-Zip first (`winget install 7zip.7zip`).
-
-```powershell
-soundspy data paths                           # resolved folders + free space
-soundspy data download ontology esc50         # ~1 min
-soundspy data download fsd50k                 # 25 GB, resumable: re-run the same command
-soundspy data prepare                         # clip index + activity maps
-soundspy data stats                           # coverage per class / split / dataset
-soundspy data mix --split all                 # mixture recipes (JSONL)
-soundspy data preview --split val --n 5       # listen in outputs/previews/
-soundspy record-dataset --classes speech background --clips 10
-soundspy data cleanup-archives                # delete the downloaded zips when satisfied
-```
-
-ESC-50 is CC BY-NC; FSD50K clips carry per-clip CC licences, some non-commercial. Fine for this
-university project; review before any public or commercial use.
-
-### Machine learning (step 05: detection)
-
-Install PyTorch **first** from the official CUDA wheel index, **then** the project with all extras
-(tested: torch 2.11.0 + torchaudio 2.11.0, CUDA 12.6 wheels, NVIDIA driver 621):
-
-```powershell
-pip install "torch==2.11.0+cu126" "torchaudio==2.11.0+cu126" --index-url https://download.pytorch.org/whl/cu126
-pip install -e ".[api,data,ml,dev]"
-python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-```
-
-```powershell
-soundspy train detection --smoke              # 2-epoch end-to-end check (~2 min)
-soundspy train detection                      # full run (hours); --resume continues
-soundspy evaluate detection --split test      # fine-tuned vs zero-shot
-soundspy detect data\raw\<file>.wav          # per-class timeline of a recording
-```
-
-### Extraction (steps 06-07c)
-
-Three methods: **Hybrid** (`hybrid`, the default since step 07c: Speech alone goes through the
-speech enhancer DeepFilterNet3, every other selection through the Waveformer, and a gate that
-the detector closes and the extractor's output reopens), **Neural** (`neural_tse`: the
-fine-tuned Waveformer alone, with the step-07b output gate, off by default) and **Baseline**
-(`mask_baseline`: the detector-gated filter of step 06). A method whose model is missing falls
-back to the baseline and says so.
-
-```powershell
-soundspy data download deepfilternet                   # step 07c: the speech enhancer (8 MB) + its ONNX export
-soundspy evaluate hybrid-gate                          # choose the hybrid gate's settings on validation
-soundspy evaluate extraction --method hybrid --name ext_hybrid    # all hybrid systems + benchmarks
-soundspy record-benchmark --pop                        # record the real-room benchmark (about 3 min)
-soundspy evaluate extraction --method hybrid --benchmark real     # score it
-soundspy extract data\raw\<file>.wav --labels speech --method hybrid --attenuation-db 40
-```
-
-```powershell
-pip install -e ".[api,data,ml,spatial,dev]"            # spatial = pyroomacoustics (simulated rooms for training)
-soundspy data cache --task extraction --split all      # render the val/test mixtures once to D: (~25 GB with train)
-soundspy data download librispeech; soundspy data prepare   # step 07b: extra speech (7 GB, CC BY 4.0)
-soundspy data cache --task clips                       # LibriSpeech train at 44.1 kHz (~32 GB, ~11 min)
-soundspy data cache --task rirs                        # 2,000 simulated rooms (0.6 GB, ~3 min)
-soundspy train extraction --smoke                      # 1 short epoch, end-to-end check (~1 min)
-soundspy train extraction                              # full run (hours); --resume continues
-soundspy evaluate gate                                 # choose the output gate's thresholds on validation
-soundspy evaluate extraction --method neural_tse --name ext_neural_tse_v2   # all systems + benchmarks
-soundspy evaluate extraction --method mask_baseline    # the step-06 comparison alone (~4 min)
-soundspy extract data\raw\<file>.wav --labels speech   # keep speech, rest -15 dB -> outputs\processed
-soundspy extract data\raw\<file>.wav --labels speech --no-gate   # the default method without its gate
-soundspy extract data\raw\<file>.wav --labels speech --method mask_baseline --attenuation-db 30
-soundspy db rebuild                                    # the database is only an index: rebuild it from the sidecars
-```
-
-The Semantic tab then shows live detections (chips + timeline) once
-`experiments/det_mn10_v1/checkpoints/best.pt` exists. Run the frontend checks from PowerShell
-(Git Bash confuses Vitest).
-
-Installing `.[ml]` without this first step pulls the CPU-only torch wheel from PyPI.
-Spatial extras (module 3): `pip install -e ".[spatial]"` (pyroomacoustics).
+The trained models (`experiments/det_mn10_v1`, `experiments/tse_waveformer_v1`) are produced by
+the training commands below; without them the app still runs with the Baseline method and says
+which parts are missing. `backend/requirements-lock.txt` lists the exact versions of a working
+environment (`pip install -r requirements-lock.txt` after the torch line).
 
 ## Development
 
 ```powershell
-# backend (in backend/, venv active)
-pytest                 # no microphone, GPU or datasets needed
-pytest --run-gpu       # include @pytest.mark.gpu tests
-pytest --run-data      # include @pytest.mark.data tests
+# backend (backend/, .venv\Scripts\activate)
+soundspy serve            # API only, http://127.0.0.1:8765/docs (reload: --reload)
+pytest                    # no microphone, GPU or datasets needed; slow tests: pytest -m slow
 ruff check .
-soundspy --help        # dev/data/training CLI
 
-# frontend (in frontend/)
-npm run test
-npm run lint
-npm run typecheck
-npm run build
+# frontend (frontend/, a second terminal)
+npm run dev               # http://localhost:5173, proxies /api and /ws to the backend
+npm run test; npm run lint; npm run typecheck; npm run build
 ```
+
+Run the frontend checks from PowerShell (Git Bash confuses Vitest). The page in development
+(`npm run dev`) and the built page (`soundspy app` / `start.ps1`) talk to the same backend.
+
+## Commands reference
+
+| Command | What it does |
+|---|---|
+| `soundspy app` | the whole app: API + the built page + model preloading, opens the browser (`start.ps1`) |
+| `soundspy serve` | the API alone (development, with `npm run dev`) |
+| `soundspy devices` · `check-mic [--meter]` | which microphone the profile uses; a 5 s level check |
+| `soundspy record --seconds 10 --label x` | record into `data/raw` (WAV + JSON sidecar) |
+| `soundspy measure-latency [--all]` | the real delay, measured acoustically (laptop speakers, headphones off, low volume) |
+| `soundspy soak --minutes 30` | a long muted live session: underruns, RTF, delay, RAM, VRAM every minute |
+| `soundspy extract <wav> --labels speech [--method hybrid]` | process a recording offline into `outputs/processed` |
+| `soundspy detect <wav>` | which sound types are in a recording, and when |
+| `soundspy record-benchmark --pop` | record the real-room benchmark (speech, music, a song, room tone) |
+| `soundspy evaluate detection \| extraction --method hybrid \| speech-gate \| hybrid-gate` | the evaluations (`--benchmark real --session A[+B]` for the real room) |
+| `soundspy report [--rerun]` | regenerate `docs/evaluation.md` and `docs/figures/` from the stored results |
+| `soundspy data paths \| download \| prepare \| stats \| mix \| preview \| cache` | training data on `D:/SoundSpyData` |
+| `soundspy train detection \| extraction [--smoke \| --resume]` | training |
+| `soundspy db rebuild` | rebuild the app database from the sidecar files |
+
+Training data and models (large files go to **drive D:**, `paths` in `backend/configs/default.yaml`;
+FSD50K needs 7-Zip: `winget install 7zip.7zip`):
+
+```powershell
+soundspy data download ontology esc50 fsd50k librispeech; soundspy data prepare
+soundspy data mix --split all; soundspy data cache --task extraction --split all
+soundspy train detection; soundspy train extraction       # hours each; --resume continues
+soundspy evaluate extraction --method hybrid              # about an hour, the graphics card busy
+```
+
+ESC-50 is CC BY-NC; FSD50K clips carry per-clip CC licences, some non-commercial; LibriSpeech is
+CC BY 4.0. Fine for this university project; review before any public or commercial use.
+
+## Troubleshooting
+
+- **Quiet, choppy or "pumping" microphone, or digital silence**: switch **off** Windows audio
+  enhancements / Voice Clarity for the microphone (Settings > System > Sound > the microphone >
+  Properties), then `soundspy check-mic`.
+- **Howling**: Listen on with laptop speakers feeds the sound back into the microphone. Use
+  headphones (the page asks once).
+- **"Unanticipated host error" / headphones plugged in later do not work**: press **Rescan
+  devices** on the page (or restart the session); PortAudio keeps old device handles otherwise.
+- **The session stops with "the output device stopped playing" or "no audio from ..."**: the
+  headphones or the microphone were unplugged; plug them back in and press **Restart**.
+- **Port 8765 in use**: another Sound Spy is still running (close its window), or start with
+  `soundspy app --port 8766`. Port 8000 is taken by Docker/WSL on the development laptop, hence
+  8765.
+- **"the page is not built yet"**: `cd frontend; npm install; npm run build`.
+- **Running tests next to an evaluation**: hide the graphics card from the tests with
+  `$env:CUDA_VISIBLE_DEVICES='-1'` (an empty value does **not** hide it on Windows); never run
+  PyTorch tests next to a training run.
+- **`measure-latency` finds no clicks**: unplug the headphones, raise the volume a little, check
+  that the microphone is not muted.
+- **Logs**: `data/logs/soundspy.log` (rotating, 1 MB x 5) keeps the server's lines.
+
+## Architecture in short
+
+- **Backend** (`backend/`, Python 3.11, package `soundspy`): owns all audio I/O. A streaming
+  engine runs chunk-based `Processor`s (channel reducer, extractor) and `SideProcessor`s
+  (detector, analyzers) on a worker thread; FastAPI exposes REST (`/api/*`) and a WebSocket
+  (`/ws/session`) for live events, and serves the built page (`soundspy app`); SQLite indexes
+  the recordings and processing runs (the JSON sidecars are the truth).
+- **Frontend** (`frontend/`, React + TypeScript + Vite + Tailwind + Zustand): tabs, controls and
+  visualizations. It never captures the microphone or plays live audio.
+- **Extraction**: *Hybrid* (default): Speech alone through the speech enhancer DeepFilterNet3
+  with its own gate, every other selection through the fine-tuned Waveformer with a gate the
+  detector closes; *Neural*: the Waveformer alone; *Baseline*: a detector-gated Wiener filter.
+  Detection: EfficientAT mn10 fine-tuned on the project's mixtures. Ideas from SemanticHearing
+  (Veluri et al., UIST 2023).
 
 ## Layout
 
-- `backend/` — `pyproject.toml`, `configs/` (global, classes, device profiles, detection,
-  extraction), `src/soundspy/`, `tests/`
-- `frontend/` — Vite app (`src/`, `tests/`)
-- `docs/` — architecture, decision log, literature
-- `experiments/` — one folder per training run (config tracked, checkpoints ignored)
-- `data/`, `models/`, `outputs/` — git-ignored working data (`data/soundspy.db` is the app database;
-  own recordings in `data/raw`, own labelled clips in `data/custom`)
+- `start.ps1` — one-command start (`soundspy app`)
+- `backend/` — `pyproject.toml`, `requirements-lock.txt`, `configs/` (global, classes, device
+  profiles, detection, extraction), `src/soundspy/`, `tests/`
+- `frontend/` — Vite app (`src/`, `tests/`; `dist/` = the built page, git-ignored)
+- `docs/` — evaluation (generated), demo script, architecture, decision log, figures
+- `experiments/` — one folder per training or evaluation run (results tracked, checkpoints and
+  logs ignored); `experiments/realtime/` = latency, soak, start-up measurements
+- `data/`, `models/`, `outputs/` — git-ignored working data (`data/soundspy.db` the database,
+  `data/raw` own recordings, `data/benchmark` the real-room sessions, `data/user_settings.json`
+  the page's stored choices, `data/logs/` the server log)
 - `D:/SoundSpyData/` — datasets, clip index, mixture recipes, model caches (outside the repository)
-- `notebooks/` — exploration only
-- `project_insights.md` — how the app works, in plain language (including any adapted
-  third-party code, in its "Third-party code" section)
+- `project_insights.md` — how the app works, in plain language (with the third-party code)

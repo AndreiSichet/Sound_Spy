@@ -15,6 +15,9 @@ extractor's STFT), so the session can report the true listening delay.
 keeps the signal as it leaves that stage (in ``SEMANTIC``: after the channel reducer, before the
 extractor), delayed by the latency of the stages after it. ``chain.dry`` is therefore
 sample-aligned with the output: a listener can switch between the two without a jump in time.
+A stage whose delay changes while it runs (the hybrid extractor since step 08: each route has its
+own delay) provides that signal itself as ``aligned_dry`` after each ``process``; when it is the
+only stage after the tap, the chain uses it instead of its fixed delay line.
 
 Target changes are applied by the session at chunk boundaries via ``set_target``; the chain
 itself is not thread-safe and is driven by one worker thread.
@@ -162,6 +165,11 @@ class ProcessorChain:
             out = stage.process(out)
             if stage is dry_stage:
                 self.dry = self._delayed(out)
+        if dry_stage is not None and self.main[-1] is not dry_stage:
+            after = self.main[self.main.index(dry_stage) + 1:]
+            aligned = getattr(after[0], "aligned_dry", None) if len(after) == 1 else None
+            if aligned is not None:  # the stage's own delay-matched input (variable delay)
+                self.dry = aligned
         for observer in self.post_side:
             events.extend(observer.observe(out))
         return out, events

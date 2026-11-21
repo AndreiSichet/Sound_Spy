@@ -98,6 +98,17 @@ class HybridCores:
                 "enhancer_route": max(wf, dfn), "cascade_route": max(wf, wf + dfn)}
 
 
+def route_latency(config: AppConfig, cores: HybridCores, sample_rate: int, route: str) -> int:
+    """The delay of a route's output in the streaming extractor (``wf`` / ``dfn`` /
+    ``cascade``): its own (step 08), or the slowest route's with ``live.fixed_latency``."""
+    lat = cores.latencies(sample_rate)
+    hy = config.extraction.hybrid
+    if hy.fixed_latency:
+        return lat["cascade_route"] if hy.speech.route == "cascade" else lat["enhancer_route"]
+    return {"wf": lat["waveformer"], "dfn": lat["speech_enhancer"],
+            "cascade": lat["cascade"]}[route]
+
+
 def load_cores(config: AppConfig, device: str = "auto") -> HybridCores:
     from soundspy.config import speech_model_dir
     from soundspy.extraction.neural_tse import load_neural_core
@@ -220,9 +231,8 @@ def process_recipe_hybrid(config: AppConfig, rendered, sources: dict[str, Activi
     x = rendered.mixture.samples.ravel()
     labels = frozenset(rendered.recipe.target)
     gate = dataclasses.replace(hy.gate, enabled=True)
-    lat = cores.latencies(sr)
     est = route_estimates(cores, x, sr, labels, hy.speech.labels)
-    route_latency = lat["cascade_route"] if hy.speech.route == "cascade" else lat["enhancer_route"]
+    lat_of = {r: route_latency(config, cores, sr, r) for r in ("wf", "dfn", "cascade")}
     timeline, live = sources["timeline"], sources["live"]
 
     def gated(e, latency, att=attenuation_db, source=timeline, warmup=False):
@@ -231,21 +241,20 @@ def process_recipe_hybrid(config: AppConfig, rendered, sources: dict[str, Activi
     from soundspy.extraction.neural_tse import residual_mix
 
     out: dict[str, np.ndarray] = {"wf": residual_mix(est["wf"], x, attenuation_db),
-                                  "wf_hgate": gated(est["wf"], route_latency)}
+                                  "wf_hgate": gated(est["wf"], lat_of["wf"])}
     if "dfn" in est:
         out["dfn"] = residual_mix(est["dfn"], x, attenuation_db)
-        out["dfn_hgate"] = gated(est["dfn"], lat["enhancer_route"], warmup=True)
+        out["dfn_hgate"] = gated(est["dfn"], lat_of["dfn"], warmup=True)
         out["dfn_sgate"] = configured_output(config, "dfn", est["dfn"], x, labels,
-                                             attenuation_db, timeline, sr,
-                                             lat["enhancer_route"])
+                                             attenuation_db, timeline, sr, lat_of["dfn"])
         out["cascade"] = residual_mix(est["cascade"], x, attenuation_db)
-        out["cascade_hgate"] = gated(est["cascade"], lat["cascade_route"], warmup=True)
+        out["cascade_hgate"] = gated(est["cascade"], lat_of["cascade"], warmup=True)
     route = chosen_route(config, labels)
     chosen = est[route]
 
     def hybrid(att=attenuation_db, source=timeline):
         return configured_output(config, route, chosen, x, labels, att, source, sr,
-                                 route_latency)
+                                 lat_of[route])
 
     out["hybrid_offline"] = hybrid()
     out["hybrid_live"] = hybrid(source=live)
@@ -320,7 +329,6 @@ def prepare_examples(config: AppConfig, cores: HybridCores, detector, *, n: int 
     sr = ev.sample_rate
     library = ClipLibrary.from_config(config)
     chosen = _val_recipes(config, n, bench_n, library, progress)
-    lat = cores.latencies(sr)
     started = time.perf_counter()
     examples = []
     settings = dict(hop_s=det.live.hop_s, ema_alpha=det.live.ema_alpha,
@@ -339,7 +347,7 @@ def prepare_examples(config: AppConfig, cores: HybridCores, detector, *, n: int 
                                     **settings)}
         route = chosen_route(config, labels)
         est = route_estimates(cores, x, sr, labels, hy.speech.labels)[route]
-        latency = lat["cascade_route"] if hy.speech.route == "cascade" else lat["enhancer_route"]
+        latency = route_latency(config, cores, sr, route)
         examples.append({"group": group, "x": x, "ref": rendered.target.samples.ravel(),
                          "est": est, "labels": labels, "sources": sources,
                          "latency": latency, "warmup": route != "wf", "route": route,

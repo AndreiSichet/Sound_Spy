@@ -63,10 +63,13 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # importlib mode: tests/io, tests/data, ... cannot shadow stdlib modules of the same name.
-addopts = "--import-mode=importlib"
+# step 08: tests slower than ~5 s are marked `slow` and left out of the default run (keeps it
+# under ~2 minutes); `pytest -m slow` runs only them, `pytest -m "slow or not slow"` runs everything.
+addopts = "--import-mode=importlib -m \"not slow\""
 markers = [
     "gpu: needs an NVIDIA GPU (skipped by default; run with --run-gpu)",
     "data: needs downloaded datasets (skipped by default; run with --run-data)",
+    "slow: takes more than ~5 s (left out of the default run; pytest -m slow)",
 ]
 
 [tool.ruff]

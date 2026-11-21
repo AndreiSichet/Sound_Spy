@@ -366,6 +366,7 @@ def model_systems(config: AppConfig, device: str = "auto") -> SystemsFn:
         gate_output,
         load_cores,
         route_estimates,
+        route_latency,
     )
 
     det, ext = config.detection, config.extraction
@@ -399,11 +400,12 @@ def model_systems(config: AppConfig, device: str = "auto") -> SystemsFn:
         for name in ("timeline", "live"):
             out[name] = run_offline(MaskBaselineExtractor(ext.mask_baseline, sources[name]),
                                     audio, target).samples.ravel()
-        latency = lat["cascade_route"] if hy.speech.route == "cascade" else lat["enhancer_route"]
         out["wf"] = residual_mix(est["wf"], mixture, att)
         out["wf_hgate"] = gate_output(est["wf"], mixture, labels, att, gate,
-                                      sources["timeline"], sr, latency)
+                                      sources["timeline"], sr,
+                                      route_latency(config, cores, sr, "wf"))
         route = chosen_route(config, labels)
+        latency = route_latency(config, cores, sr, route)
         if "dfn" in est:
             out["dfn"] = residual_mix(est["dfn"], mixture, att)
         for clock, source in (("offline", "timeline"), ("live", "live")):

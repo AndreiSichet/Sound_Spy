@@ -206,6 +206,14 @@ long pauses are 42 dB quieter (07c 39, 49 dB with voice and music equally loud),
 is no longer heard. A song with vocals stays audible in the pauses (its singer is a voice), and
 short pauses still wait for the live detector's lag (Chapter 15.10–15.11).
 
+*Since step 08:* Tab 1 is finished as a product. One command (`start.ps1`) starts everything and
+opens the page; the models are prepared when the backend starts, so a session plays sound under a
+second after Start; each route has its own delay (the Waveformer route 30 ms shorter); the
+microphone or headphones being unplugged ends a session with a message and a Restart button; a
+30-minute run had no glitch. The delay can be measured with sound (`soundspy measure-latency`),
+and `soundspy report` writes the evaluation document for the university report
+(`docs/evaluation.md`, Chapter 10.10–10.15).
+
 ### The story so far, step by step
 
 Each step was specified by the project owner, built, tested on the laptop and written up here.
@@ -222,6 +230,7 @@ Each step was specified by the project owner, built, tested on the laptop and wr
 | 07b | 17–18 Nov | **Quieter when it should be (partly).** The 225 ms delay after a glitch fixed. A loss that punishes leakage in every 50 ms the selected sound is silent, an output gate with an on/off switch, 100 h of LibriSpeech, new random mixtures every round in 2,000 pre-computed rooms. Two training runs (3.3 h and 6.2 h) and four short probes: the first run's penalty pushed silence to −50 dB and lost 1.4 dB of quality; the second (−30 dB) won half of it back. Result: 3–5 dB less leakage on test mixtures, 0.8 dB less quality, no gain on the owner's recording; most targets missed, reported honestly. | Chapter 14.11 |
 | 07c | 18 Nov | **Silent when absent, separated when overlapping.** No training: a published speech enhancer (DeepFilterNet3, MIT / Apache) adapted and checked against its original (123 dB agreement), run 3–6× faster with ONNX Runtime on the processor's fast cores; Speech goes to it, everything else to v1; a gate that the detector closes and the extractor reopens. Tuned on validation, scored on the same 500 test mixtures and the 07b benchmarks, and on the owner's recordings: music under "Speech" −60 dB at 40 dB, speech over music +7.6 dB offline. A real-room benchmark (record the parts, mix them digitally) is ready for the owner. | Chapter 15 |
 | 07d | 19 Nov | **Silent pauses on the speech route.** No training: a second gate for Speech that follows the speech enhancer's own output (a voice comes out 5 dB below the input, music 30–45 dB below), tuned on one real-room session and validation mixtures, reported on another the owner recorded. Pause measures, stream starts, two sessions scored together, the room tone repeated to the full length. With classical music the long pauses 42 dB quieter, short 33 dB, word starts intact, no music at a stream start; a song with vocals stays (its singer is a voice). | Chapter 15.10–15.11 |
+| 08 | 19–20 Nov | **Tab 1 finished.** One-command start (`start.ps1`: the backend serves the built page and opens the browser), models prepared at server start and warmed on the thread that runs them (first session 0.9 s from Start to sound, 0 glitches), each Hybrid route its own delay (Waveformer route 134 → 95 ms), the audio thread on Windows' audio scheduler, unplugged devices end a session with a message and Restart, the output device chosen on the page, a 30-minute run without a glitch, a rotating log file. The delay measured with sound (click train through speakers and microphone). The tab reorganised (Listen / Sounds / Visuals), keys Space and M, settings remembered. `soundspy report` generates `docs/evaluation.md` with figures; `docs/demo.md`. | Chapters 2, 10.10–10.15 |
 
 Along the way, problems were found and fixed, from a training run that silently ran out of memory
 to Python's memory clean-up causing clicks; each one is written up in Chapter 24, and every
@@ -238,7 +247,8 @@ see Chapter 21). Sound Spy borrows its ideas and, since step 07, the code of the
 
 ## 2. Using Sound Spy today — a guided tour
 
-**Exists today** (rewritten after step 07). This chapter is the user's manual. It needs no
+**Exists today** (rewritten after step 07; the start, the screen and the keys updated for
+step 08). This chapter is the user's manual. It needs no
 technical background: it says what every button does, what you should see and hear, and what to
 do when something looks wrong. The chapters after it explain *how* each part works inside.
 
@@ -262,100 +272,120 @@ do when something looks wrong. The chapters after it explain *how* each part wor
   once. Without it, Speech goes through the Waveformer too (the session warns); without both,
   the app uses the Baseline method and says so.
 - **A web browser** (Chrome, Edge or Firefox).
+- **The built page** (`frontend\dist`, made once with `cd frontend; npm install; npm run build`,
+  and again after changing the page's code). `start.ps1` says so if it is missing.
 
 ### 2.2 Starting and stopping
 
-Open two PowerShell windows:
+*Since step 08* one command starts everything. In PowerShell, in the project folder:
 
 ```powershell
-# window 1: the backend (does all the sound work)
-cd C:\Users\User\Desktop\Sound_Spy\backend
-.venv\Scripts\activate
-soundspy serve
-
-# window 2: the website
-cd C:\Users\User\Desktop\Sound_Spy\frontend
-npm run dev
+cd C:\Users\User\Desktop\Sound_Spy
+.\start.ps1
 ```
 
-Then open **http://localhost:5173**. In the header, the **connection light** should be green
-and read *connected*. Red (*disconnected · reconnecting*) means the website cannot reach the
-backend: check that window 1 is still running. The page reconnects by itself as soon as the
+(or right-click `start.ps1` > *Run with PowerShell*; if Windows refuses to run scripts:
+`powershell -ExecutionPolicy Bypass -File .\start.ps1`). It starts the backend, which also serves
+the page, and opens **http://127.0.0.1:8765/** in the default browser. The window stays open
+while Sound Spy runs and prints what happens; the same lines go to `data\logs\soundspy.log`.
+
+Right after the start the backend **prepares the models** in the background: it loads them and
+runs each one once (about 10 seconds on the laptop). Start can be pressed at once; the session
+then waits for them and says *Preparing models…* until it can play.
+
+In the header, the **connection light** should be green and read *connected*. Red
+(*disconnected · reconnecting*), with a red banner under the tabs, means the page cannot reach
+the backend: is the `start.ps1` window still open? The page reconnects by itself as soon as the
 backend is back; there is no need to reload.
 
-To stop, press **Ctrl+C** in each window. Closing the backend ends a running session cleanly;
+To stop, press **Ctrl+C** in that window. Closing the backend ends a running session cleanly;
 an offline job that was still waiting or running is marked *failed (interrupted)* at the next
 start.
+
+**For changing the page's code** (instant reload) the two-window way still works: `soundspy
+serve` in `backend\` (venv active) and `npm run dev` in `frontend\`, then
+**http://localhost:5173** (Chapter 22).
 
 ### 2.3 The screen at a glance
 
 The **Semantic** tab is the working tab. **Spatial** and **Sources** only say *"Requires a
-microphone array"*: they need hardware that has not arrived yet.
+microphone array"*: they need hardware that has not arrived yet. *Since step 08* it has a
+session bar on top and three areas, **Listen**, **Sounds** and **Visuals**, with the recordings
+in a panel at the bottom that opens when clicked:
 
 ```
-┌─ Choose what to hear ───────────────────────────────────────────────────────────┐
-│ [Start] Source: Microphone ▾   running                                          │  ← session bar
-│ Input · Format · Latency · RTF p95 · Overflow/underrun/dropped ·                │
-│ Detector · Inference · Skipped windows · Extraction · Model time                │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│ ☐ Listen   Volume ───●── 0 dB   [Mute]                                          │  ← listening
-│ Method: Neural ▾   Attenuation ───●──── 15 dB   [Bypass (A/B)]                  │  ← extraction
-│ [● Record]  label (optional)  notes (optional)                                  │  ← recording
-├──────────────────────────────────────────────────────────────────────────────────┤
-│ (Speech 92%) (Music 4%) (Footsteps 1%) (Dishes & cutlery 0%) …                  │  ← sound types
-│ Keeping 1 sound type(s); everything else is turned down by 15 dB.               │
-│ ▒▒▒▒▒▒▓▓▓▓▓▓▒▒ detection timeline (last 30 s, one lane per type) ▒▒▒▒▒▒▒▒▒▒▒▒▒▒ │
-├────────┬─────────────────────────────────────────────────────────────────────────┤
-│ level  │ spectrogram: input  (above)                                             │
-│ meters │ spectrogram: output (below)        [Input | Output | Both]             │
-│ in|out │ waveform (input)                                                        │
-├────────┴─────────────────────────────────────────────────────────────────────────┤
-│ Recordings   Process with: Neural ▾                                             │
-│ [Play] [Detect] [Process] name  label  duration  date                           │
-│   └─ run: done  Speech  rest −15 dB  Neural … [Original|Processed] ──●── Download│
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌─ Choose what to hear ─────────────────────────────────────────────────────────────────┐
+│ [Start] Source: Microphone ▾   running                                                │ ← session bar
+│ Hybrid (recommended) · speech enhancer   ● Gate closed   Delay 134 ms estimated       │
+│ ▸ Details                                                                             │
+├─ LISTEN ──────────────────────────────────┬─ SOUNDS ───────────────────────────────────┤
+│ ☐ Listen  Volume ──●── 0 dB  [Mute]       │ (Speech 92%) (Music 4%) (Footsteps 1%) …   │
+│ Output: System default ▾ [Rescan devices] │ Keeping 1 sound type(s); everything else   │
+│ Method: Hybrid (recommended) ▾            │ is turned down by 15 dB.                   │
+│   one line on what the method does        │                                            │
+│ [Gate on]  Attenuation ──●── 15 dB        │                                            │
+│ [Bypass (A/B)]                            │                                            │
+│ [● Record]  label  notes                  │                                            │
+│ Keys: Space Bypass on / off · M Mute      │                                            │
+├─ VISUALS ─────────────────────────────────┴────────────────────────────────────────────┤
+│ level meters │ spectrogram: input (above), output (below)   [Input | Output | Both]    │
+│ in  |  out   │ detected sounds (last 30 s) · waveform (input)                          │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ ▸ Recordings and processing                                                            │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+On a narrow window Listen and Sounds stack instead of standing side by side.
 
 | Part | What it is for |
 |---|---|
-| **Start / Stop** | Switches Sound Spy on: it starts listening, recognising and processing. Starting takes about 3–5 seconds, mostly loading the two models onto the graphics card. |
+| **Start / Stop** | Switches Sound Spy on. Right after Start the state reads *Preparing models…* (blue, with what is being loaded) while the session readies its models; once the backend has prepared them this takes under a second (0.9 s measured), right after launching the app up to about 10 s. Then *running*: the sound flows. **Stop** works in both states. |
+| **Restart** (only after an error) | The session stopped and the state reads *error* with the reason in red, e.g. *"no audio from … was it unplugged? … Press Restart"* or *"the output device … stopped playing"*. Fix the cause (plug the device back in, or choose another output) and press **Restart**: a new session with the same source and settings. |
 | **Source** | *Microphone*, or *File: …*, any saved recording played in a loop at normal speed. A file gives the same sound every time, which makes it ideal for comparing settings. Can only be changed while stopped. |
-| **Session figures** (only while running) | **Input** and **Format**: which microphone, its sample rate and channel count (*48000 Hz · 2 ch* on the laptop). **Latency**: how long until a sound reaches your ears, about 95–115 ms with Neural (105–125 ms with Baseline). **RTF p95**: how hard the computer works for the sound (about 0.63 with Neural on the graphics card, 0.17 with Baseline; above 0.8 it turns red and a warning appears). **Overflow / underrun / dropped**: three counters of tiny audio glitches, which should stay at 0. **Detector**: the model and where it runs (`det_mn10_v1 · cuda` = the graphics card). **Inference**: how long one recognition takes (about 28 ms). **Skipped windows**: recognitions skipped because the previous one was not finished (should be 0). **Extraction**: the sound-keeping method, where its model runs and the delay it adds (`Neural · cuda · +10.6 ms · gate`, or `Baseline · +21.33 ms`); for Baseline it says *no gating* in amber when there is no detection model; *bypassed* while Bypass is on. **Model time** (Neural only): how long the network needs for one call, about 7.5 ms on the graphics card; it has to stay well under 20 ms. |
+| **Summary line** (while running) | The method and the part that is working: *speech enhancer* (Hybrid with Speech alone), *Waveformer* (Hybrid with any other selection), *nothing selected* (Hybrid, the sound passes unchanged). The **gate** in words with a dot (Hybrid only): *Gate open* (green) while the selected sound comes through, *Gate closed* (grey) in its pauses. The **delay**, marked **measured** (the last `soundspy measure-latency` for this route; hover for the details) or **estimated** (the session's own sum of its parts, Chapter 10.5). *Bypass: unprocessed* in amber while Bypass is on. |
+| **Details** (click to open) | The figures for checking: **Input** and **Format** (which microphone, *48000 Hz · 2 ch*), **Latency** (the estimate in ms), **RTF p95** (how hard the computer works for the sound; above 0.8 it turns amber), **Overflow / underrun / dropped** (three counters of tiny audio glitches, which should stay at 0), **Detector** (model and where it runs), **Inference** (one recognition, about 28 ms), **Skipped windows** (should be 0), **Extraction** (method, route, where its model runs, the delay it adds, the gate), **Model time** (one call of the extraction network: about 4 ms for the speech enhancer, 9 ms for the Waveformer; it has to stay well under 20 ms), **Start** (how long the session took to get ready). |
 | **Listen** | Sends the processed sound to your headphones. The first time, it asks you to confirm you are wearing headphones (the browser remembers your answer). It is greyed out, with a note, if the session could not open an output device. |
-| **Volume, Mute** | Loudness in your headphones, −40 to +12 dB. A safety limiter always stops the sound before it gets dangerously loud. |
-| **Method** | How the selected sounds are kept. **Neural** (the default once it is trained): a network that pulls the selected sounds out of the mix, also while other sounds overlap them (Chapter 14). **Baseline**: the detector-driven gate of step 06 (Chapter 13). Can only be changed while stopped. A method that cannot run is greyed out; hover it to read why. |
-| **Gate on / off** *(step 07b)* | Neural only: a soft gate after the network that turns its output further down while the network itself says the selected sound is not there (Chapter 14.11). **On** by default. Switch it off to hear what the network alone does, or when the sound you want is far quieter than everything else. Can only be changed while stopped; the session figures show `· gate` or `· no gate` after the method. |
+| **Volume, Mute** | Loudness in your headphones, −40 to +12 dB. A safety limiter always stops the sound before it gets dangerously loud. Key **M**: Mute on / off. |
+| **Output, Rescan devices** *(step 08)* | Where Listen plays: *System default* or any output device. The backend keeps the choice in `data\user_settings.json`, so it survives a restart. **Rescan devices** after plugging in headphones or a USB device (Windows' device list is read once otherwise). Both only while stopped. If the profile's microphone is missing, a note next to them says so. |
+| **Method** | How the selected sounds are kept: **Hybrid (recommended)**, **Neural**, **Baseline**, with one line under the list saying what the chosen one does (section 2.5). Can only be changed while stopped. A method that cannot run is greyed out; hover it to read why. |
+| **Gate on / off** | Hybrid and Neural: the gate that turns everything down in the selected sound's pauses (Chapters 14.11, 15.4, 15.10). **On** by default for Hybrid. Can only be changed while stopped. |
 | **Attenuation** | How far everything you did **not** select is turned down: 0 dB = not at all, 15 dB (default) = to about 18 % of its strength, 30 dB = to about 3 %, 40 dB = the most. It only matters while something is selected. |
-| **Bypass (A/B)** | Lets you hear the unprocessed sound instead, to compare (section 2.6). |
+| **Bypass (A/B)** | Lets you hear the unprocessed sound instead, to compare (section 2.6). Key **Space**: Bypass on / off. |
 | **Record** | Saves what the microphone hears, with an optional label and notes. The button shows the running time while recording; press it again to stop. The recording is always the **raw, unprocessed** sound, so it can be processed again later with better methods. |
-| **Sound-type buttons** ("chips") | One per sound type. The bar and percentage show how sure the app is that the sound is present right now (updated four times a second). The button turns **green** while the sound counts as present. **Click** to select it (blue border); click again to deselect. Several can be selected at once. The line below says what is selected and how strongly the rest is turned down. |
-| **Detection timeline** | The last 30 seconds, one lane per sound type, coloured where it was detected (brighter = more certain). "Now" is at the right edge. |
-| **Level meters** | **Input:** one bar per microphone: loudness, a white peak line, a held marker of the loudest moment in the last second, and a red **clip light** when the sound hits the ceiling. Normal speech close by reads about −30 to −20 dBFS; a quiet room about −60. **Output** (the narrow meter next to them, labelled *out*): the same for the sound after extraction. With something selected it sits lower than the input whenever other sounds are being removed. |
-| **Spectrogram** | A picture of the sound by pitch over the last 10 seconds (section 2.7). The switch under it picks **Input**, **Output** or **Both**. |
-| **Waveform** | The last 5 seconds of the input: tall = loud. |
-| **Recordings** | Every saved recording, newest first, with **Play**, **Detect** and **Process**, and a **Process with** choice of method (section 2.10). |
+| **Keys** *(step 08)* | **Space** = Bypass on / off, **M** = Mute on / off. They do nothing while you type in a field or while a button, list or slider has the keyboard focus (there Space keeps its usual meaning); click an empty part of the page first. |
+| **Sound-type buttons** ("chips", area *Sounds*) | One per sound type. The bar and percentage show how sure the app is that the sound is present right now (updated four times a second). The button turns **green** while the sound counts as present. **Click** to select it (blue border); click again to deselect. Several can be selected at once. The line below says what is selected and how strongly the rest is turned down. |
+| **Visuals** | Before Start a line says *Press Start to see the sound live* (*Preparing models…* while warming, *Press Restart* after an error). **Level meters**: input, one bar per microphone (loudness, a white peak line, a held marker of the loudest moment of the last second, a red **clip light**; speech close by about −30 to −20 dBFS, a quiet room about −60) and, narrower, the **output** after extraction. **Spectrogram**: the last 10 seconds by pitch (section 2.7), with an **Input / Output / Both** switch. **Detected sounds**: the last 30 seconds, one lane per sound type, brighter where more certain. **Waveform**: the last 5 seconds of the input. |
+| **Recordings and processing** | A panel at the bottom; click its title to open it. Every saved recording, newest first, with **Play**, **Detect** and **Process**, and a **Process with** choice of method (section 2.10). |
 | **Notices** (bottom right) | Warnings and errors, e.g. *"Sound detection is off for this session"*. Click **×** to dismiss. The same message is never shown twice at once. |
+
+**What the page remembers** *(step 08)*: the selected sound types, the attenuation, the method,
+the gate and the spectrogram view are kept **in the browser** and come back after reloading the
+page or restarting the app (the method and the gate only while no session runs, because they
+belong to a session). The output device is kept by the backend. In a private window, or with
+the browser's storage blocked, the page works the same and simply forgets.
 
 ### 2.4 Your first session, step by step
 
 1. Put on your headphones. Leave *Source* on **Microphone** and press **Start**.
-2. Wait ~3–5 s until the state reads *running*. The meters, spectrogram and waveform start
-   to move. Check the figures: *Detector* says `cuda`, *Skipped windows* is 0, *Extraction* says
-   `Neural · cuda`.
-3. Tick **Listen** and confirm the headphones. You now hear the room, about a tenth of a second
-   late. With nothing selected, nothing is changed.
+2. The state reads *Preparing models…* for a moment, then *running*. The meters, spectrogram and
+   waveform start to move, and the summary line shows the method, the route and the delay. Open
+   **Details** to check: the three glitch counters at 0, *Skipped windows* 0.
+3. Tick **Listen** and confirm the headphones. You now hear the room, a little over a tenth of a
+   second late. With nothing selected, nothing is changed.
 4. Talk. The **Speech** button turns green within about half a second, and a lane fills in the
    detection timeline.
-5. **Click Speech** to select it. Stop talking: the room becomes quieter, and the output level
-   meter drops below the input meters. Talk again: your voice comes through at once.
-6. Press **Bypass (A/B)** and talk: you hear the room as it really is. Press it again to return to
-   the processed sound.
-7. Move **Attenuation** to 30 dB: everything that is not speech nearly disappears, and any
-   mistake of the network becomes easier to hear. At 5–10 dB the effect is gentle.
-8. Press **Stop**, switch **Method** to *Baseline*, press **Start** and repeat steps 4–6 to hear
-   the difference between the two methods (section 2.8).
-9. Press **Stop** when you are done. Your selection, the method, the attenuation, Listen, volume
-   and Bypass are kept for the next session while the backend runs.
+5. **Click Speech** to select it. The summary line now says *speech enhancer*. Stop talking: the
+   room becomes quieter, the output level meter drops below the input meters and the gate
+   indicator reads *Gate closed*. Talk again: your voice comes through at once (*Gate open*).
+6. Press **Space** (Bypass) and talk: you hear the room as it really is. Press it again to return
+   to the processed sound.
+7. Move **Attenuation** to 30 or 40 dB: everything that is not speech nearly disappears, and any
+   mistake becomes easier to hear. At 5–10 dB the effect is gentle.
+8. Press **Stop**, switch **Method** to *Neural* or *Baseline*, press **Start** and repeat steps
+   4–6 to hear the difference between the methods (section 2.8).
+9. Press **Stop** when you are done. The selection, method, gate, attenuation and spectrogram view
+   are remembered by the browser (section 2.3); Listen, volume and Bypass are kept by the backend
+   while it runs.
 
 ### 2.5 Choosing what to hear
 
@@ -392,8 +422,9 @@ makes of it) and the **unprocessed** one (what the microphone hears, mixed to on
 
 Two details make it a fair comparison:
 
-- **Same delay.** The processing makes the sound a little late (40.0 ms with Hybrid, 10.6 ms with
-  Neural, 21 ms with Baseline). The unprocessed version is delayed by exactly the same amount, so pressing Bypass
+- **Same delay.** The processing makes the sound a little late (since step 08 with Hybrid:
+  40.0 ms with Speech alone, 10.6 ms with any other selection, none with nothing selected;
+  10.6 ms with Neural, 21 ms with Baseline). The unprocessed version is delayed by exactly the same amount, so pressing Bypass
   changes only the processing, never the moment you hear. You can switch in the middle of a word
   without a jump.
 - **Processing keeps running.** Bypass only changes which version goes to the headphones, so
@@ -403,8 +434,8 @@ Bypass changes **only what you hear**. The pictures do not change: the output sp
 showing the processed sound, so with Bypass on you can *hear* the original while *seeing* what
 the processing would have done. The session bar shows *bypassed* while it is on.
 
-How to use it: select a sound type, listen for a few seconds, then press Bypass and listen to the
-same situation. If the processed version is not clearly better, try a lower attenuation, or the
+How to use it: select a sound type, listen for a few seconds, then press Bypass (or **Space**) and
+listen to the same situation. If the processed version is not clearly better, try a lower attenuation, or the
 sound is one the method handles poorly (section 2.8).
 
 ### 2.7 Reading the pictures
@@ -487,12 +518,12 @@ on the owner's recordings, not yet from long listening:
 |---|---|
 | Speech selected, nobody talks, music plays | **silence**, as with the baseline: 48 dB down at 30 dB, 60 dB at 40 dB on the test pairs, 66 dB on the owner's classical recording. In the first second after selecting Speech the music fades out as the detector becomes sure |
 | Speech selected, you talk over music | **your voice, the music removed under it** (the case neither earlier method handled): +7.6 dB on the test pairs where the baseline gives −4.6 live |
-| Speech selected, short pauses while you talk | the music in the pauses about 27–29 dB down, not silent: the detector needs more than a short pause to be sure. Longer pauses go silent |
+| Speech selected, short pauses while you talk | the music in the pauses about 27–29 dB down with the 07c gate; *since step 07d* about 33 dB down with classical music at 40 dB (real room), long pauses 42 dB. Not silent in short pauses: the live detector needs about a second to let go |
 | Speech selected, a word starts after a pause | the gate opens within a few milliseconds of the word (the extractor hears it, no waiting for the detector), if the voice is not much quieter than the music; a soft start under loud music waits for the detector (about 0.3 s) |
 | Speech selected, two people talk | both voices: the speech enhancer keeps every voice (telling them apart is for the Spatial and Sources tabs) |
 | Speech selected, a song with singing | the singing counts as voice |
 | Speech together with another type, or any other type | the Neural method's network (v1) with the gate: as described below for Neural, plus silent pauses when the detector is sure |
-| Everything | 40 ms later than the input (Neural: 10.6 ms) |
+| Everything | with Speech alone 40 ms later than the input; *since step 08* with any other selection 10.6 ms (before: 40 ms for every selection), with nothing selected no extra delay |
 
 **With Method = Neural.** These are expectations from the measurements on test mixtures
 (Chapters 14.9 and 14.11, measured with the step-07b network v2b and its Gate on; since step 07c the configured network is v1 again, with the Gate off by default), not yet from long
@@ -585,6 +616,10 @@ Run these in window 1 (stop the server first with Ctrl+C, or use a third window 
 | `soundspy evaluate speech-gate --session <id>` | tunes the speech route's gate on validation mixtures and that real-room session (`--check`: the test set's Speech benchmarks; Chapter 15.11) |
 | `soundspy evaluate extraction --method hybrid` | measures the Hybrid method, its parts, Neural v1 and the baseline on 500 test mixtures and the benchmark sets (about an hour; `--method neural_tse`: Neural and the baseline, also in simulated rooms; `--method mask_baseline` alone: about 4 minutes) |
 | `soundspy db rebuild` | rebuilds the app's database from the files on disk (never loses anything; Chapter 17) |
+| `soundspy app` | *(step 08)* what `start.ps1` runs: the backend with the built page, opens the browser (`--no-browser`, `--port`) |
+| `soundspy measure-latency --all` | *(step 08)* measures the delay with sound: the laptop's speakers, **headphones unplugged, low volume** (Chapter 10.10) |
+| `soundspy soak --minutes 30 --labels speech` | *(step 08)* runs a live session for a while (Listen on, muted) and writes glitches, load and memory every minute (Chapter 10.14) |
+| `soundspy report` | *(step 08)* writes `docs\evaluation.md` and its figures from the stored results (`--rerun` repeats the long evaluations first, about two hours) |
 
 The data, training and detection-evaluation commands are described in Chapters 11 and 12, and training the neural extractor in Chapter 14.
 
@@ -592,9 +627,12 @@ The data, training and detection-evaluation commands are described in Chapters 1
 
 | You notice | Likely cause and what to do |
 |---|---|
-| Red connection light | the backend is not running: start `soundspy serve` in window 1 |
-| *"could not open the audio device"* after Start | a device was just plugged in or out, or another app holds the microphone: wait a moment and press Start again |
-| **Listen** greyed out, *"Listening unavailable"* | the output device changed: Stop and Start again |
+| Red connection light, red banner | the backend is not running: start `.\start.ps1` again (or `soundspy serve` in development) |
+| *"could not open the audio device"* after Start | a device was just plugged in or out, or another app holds the microphone: press **Rescan devices**, then Start again |
+| *"the microphone of profile 'laptop' was not found"* | the profile's microphone is unplugged or disabled in Windows: plug it in, **Rescan devices**, Start |
+| The session stops: *error – no audio from … was it unplugged?* or *the output device … stopped playing* | the microphone or the headphones were unplugged during the session: plug back in (or choose another **Output**), press **Restart** |
+| *Preparing models…* for longer than about 15 s | only right after launching the app (the models load once per launch). Much longer: look at the `start.ps1` window or `data\logs\soundspy.log` for a *could not preload* line |
+| **Listen** greyed out, *"Listening unavailable"* | the output device could not be opened: Stop, check **Output** (Rescan devices), Start |
 | Listen is on but you hear nothing | is **Mute** on, or the volume low? Is a type selected that is not present (silence is then correct)? Press Bypass, or deselect everything, to check |
 | Notice *"Sound detection is off for this session"*, *Extraction … no gating* in amber | the detection model file is missing: the buttons show nothing, and Baseline then only reduces steady noise (Neural still works). Check that `experiments\det_mn10_v1\checkpoints\best.pt` exists |
 | Notice *"Neural extraction is not available … Using the baseline"*, *Neural (not available)* in the Method list | the trained extraction model is missing: check that the file named by `checkpoint` in `backend\configs\extraction\neural_tse.yaml` exists (since step 07c again `experiments\tse_waveformer_v1\checkpoints\best.pt`; it is made by `soundspy train extraction`, Chapters 14.6 and 14.11) |
@@ -2088,6 +2126,12 @@ Several things must happen at once, so the work is split:
 | **Sound card output** (PortAudio's) | takes audio from the speaker queue whenever the headphones need more | wait for anything |
 | **Web server event loop** | sends events to every open browser over the WebSocket | slow down the audio |
 
+*Since step 08* the worker first **warms up** (state `warming`: it builds the chain and runs every
+model once on its own thread, Chapter 10.12) and then asks Windows to treat it as an audio thread
+(MMCSS, task "Pro Audio", `engine.thread_priority`; Chapter 10.14): Windows then runs it ahead of
+ordinary programs whenever a chunk is ready. Both streams are opened by the thread that calls
+Start (Chapter 24.61).
+
 The worker reports events by calling `on_event`. The `SessionManager` only **schedules** them onto
 the web server's event loop (`loop.call_soon_threadsafe`) and returns at once, so a slow network
 connection can never make the audio stutter.
@@ -2161,6 +2205,10 @@ headphones are wireless (often 100–200 ms more). Wired headphones are best.
 The 21 ms is there whether or not anything is selected (the sound always passes through the
 STFT, so that selecting a class does not make it jump). The session status reports the
 extractor's share separately, and the session bar shows it as `mask_baseline · +21.33 ms`.
+
+*Since step 08* the page says whether the delay is **estimated** (this sum) or **measured** with
+sound (Chapter 10.10), and the Hybrid method's routes have their own delays (10.11): with Speech
+alone about 134 ms (22 + 20 + 40 + ~30 + 22), with any other selection about 95 ms.
 
 ### 10.6 Is the computer keeping up? The real-time factor
 
@@ -2250,7 +2298,218 @@ the old list can fail. Since the owner's first test of step 03 found this (Chapt
 **Start** first re-reads the device list. If opening still fails, it re-reads once more and
 retries, and only then reports an error that says what probably happened. If a session starts but
 the output can't be opened, a notice gives the reason and the **Listen** box is disabled with an
-explanation, instead of failing when clicked.
+explanation, instead of failing when clicked. *Since step 08* devices that disappear during a
+session end it with a message and a Restart button (10.13).
+
+### 10.10 The delay, measured (step 08)
+
+*Code: `io/loopback.py`, `cli/measure_latency_cmd.py`; results `experiments/realtime/latency_*.json`.*
+
+Until step 08 the delay on the page was an **estimate**: the session adds up what it knows,
+
+```
+input stream (PortAudio's figure)  +  one chunk  +  the extractor's delay
+                                   +  the audio waiting in the speaker queue  +  output stream
+```
+
+`soundspy measure-latency` **measures** it with sound. It plays ten short clicks (3 ms noise
+bursts at −6 dBFS, 1 s apart) through the laptop's speakers and records them with the microphone in the
+same full-duplex stream, so playing and recording share one clock: a click found *d* samples
+after it was written took *d / 48 000* seconds from the program, out of the speaker, through
+the air and back in (the **hardware round trip**). With `--through-app` (or `--all`) Sound Spy's
+own session runs at the same time and plays the microphone back through the speakers, so every
+click arrives **twice**; the gap between the two arrivals is exactly the app's microphone ->
+speaker delay, what a listener with headphones experiences (plus ~1 ms of air between speaker
+and microphone, not removed). The app measurements run with **Bypass** on: the session then
+plays its input delayed exactly like its processed output (10.2), so the click survives
+whatever the extractor would do to it (the speech enhancer removes clicks).
+
+Run it **with the laptop's own speakers, headphones unplugged, at a low volume**; the command
+says so and waits for Enter.
+
+**Finding a click** (`io/loopback.py`; rewritten after the owner's first run, Chapter 24.65):
+
+- *The direct arrival*: a **matched filter**, the recording correlated with the click's own
+  waveform, scaled so that it reads as the click's amplitude at every moment. Its median over
+  the silent lead-in before the first click is the room's noise floor (not the whole recording:
+  a loop building up later must not hide the early clicks). A click counts when its strongest peak stands
+  **18 dB** above that floor; the arrival is the earliest moment, at most 3 ms before that peak,
+  where the match reaches half of it (a desk reflection just after the direct sound can be the
+  stronger one).
+- *The app's copy*: the app plays back what the microphone heard, so its copy has been through
+  the speaker and the room **twice** and no longer looks like the click. It is searched with the
+  **recorded direct arrival** as the pattern, from half the hardware round trip onwards (the
+  app's own streams have at least that delay), against the same lead-in noise. The best
+  match's position is the app's delay.
+- *How loud the app plays it back*: the hardware run also measures the **coupling**, how much
+  of the click comes back from the speaker to the microphone, in the worst third-octave band
+  (averaged over the ten clicks, the room's own noise taken off). The app modes then play the
+  microphone back at a gain that aims the loop speaker → microphone → app → speaker at **25 dB
+  below unity** (−20 to +20 dB). The first version aimed at 10 dB and **howled** on the laptop:
+  the loop through the app was about 13 dB stronger than one loud click suggests (the
+  speaker's own processing; Chapter 24.65).
+- *Feedback guard*: an app run stops as soon as its last second is 25 dB louder than the silent
+  lead-in, and a finished run whose last seconds are more than 10 dB louder than the lead-in
+  (`feedback_db`) counts as feedback. Either way the run is repeated 10 dB quieter (at most
+  twice), and the following routes keep the lower gain.
+- Every recording is kept in `outputs/latency/<time>/<mode>.wav` (not in git); when clicks are
+  missing, the command prints how far above the noise the best ones were.
+
+**Measured on the laptop** (the owner's run of 21 Nov 15:28, laptop speakers, volume 30 %,
+`experiments/realtime/latency_20261121-152844.json`; coupling −20.2 dB, the app played the
+microphone back at −4.8 dB, no feedback):
+
+| Path | Session's estimate | Measured (median, min–max, 10 of 10 clicks) | Measured − estimate |
+|---|---|---|---|
+| hardware round trip (speaker + microphone, no app) | 44 ms (2 × 22, PortAudio) | **149.8 ms** | +106 ms |
+| app, nothing selected | 94.0 ms | **193.2 ms** (192.1–193.2) | +99 ms |
+| Hybrid, Waveformer route | 94.6 ms | **203.4 ms** (203.1–203.8) | +109 ms |
+| Hybrid, speech route | 124.0 ms | **221.6 ms** (221.0–221.8) | +98 ms |
+
+The clicks of one run agree within a millisecond (the speaker queue holds a steady level during
+a run); between runs the queue can sit 10 ms higher or lower, which is why the estimates here
+(124 / 94.6 ms) differ from the soak's (134 / 94.6 ms) and why the route differences come out
+28 and 10 ms (the extractor alone: 40 and 10.6). The earlier run, analysed from the clicks before
+its feedback, gave 190 / 201 / 232 ms (Chapter 24.65). **The real delay is about 100 ms more than
+the session's estimate on every route, and all of it is in the sound devices**: the round trip
+through the speaker and the microphone is 150 ms where PortAudio reports 44. Laptop speakers are
+often run through the manufacturer's sound processing (equaliser, loudness, speaker
+protection), which adds delay; the level-dependent loop gain that made the loop howl points the
+same way. With headphones the output path, and so the delay, may differ; the measurement needs
+the speakers. Once a clean result is stored in `experiments/realtime/latency_latest.json`, the
+page shows "… ms measured" for the routes it covers (hover for the spread), and `soundspy
+report` puts it in the evaluation document next to the estimate.
+
+### 10.11 Lowering the delay: what was tried (step 08)
+
+Every change was run on the live chain (laptop microphone, Listen on but muted, 3 minutes per
+route; `soundspy soak --set ...`), cumulative, in the order of the spec:
+
+| Change | Speech route: delay (estimate) / underruns / RTF p95 | Waveformer route | Kept? |
+|---|---|---|---|
+| A. 07c (one delay for both routes) | 134 ms / 0 / 0.34 | 134 ms / 1 / 0.68 | – |
+| B. **each route its own delay** (Chapter 15.5) | 134 ms (unchanged) | **115 ms** / 1 / 0.72 | **yes** |
+| C. + speaker cushion of 1 chunk instead of 2 | 124 ms / **2** / 0.40 | 85 ms / **2** / 0.66 | no: underruns |
+| D. + 10 ms chunks instead of 20 | 114 ms / **5** / 0.40 | 75 ms / 1 / **0.92** | no: underruns, the Waveformer too slow |
+| E. + PortAudio "low latency" | 114 ms / 3 (no change: WASAPI shared mode ignores it) | – | no effect |
+| F. + WASAPI exclusive mode, 3 ms buffers | 34 underruns, the queue piling up | 43 underruns | no: unreliable |
+
+What is left, and why the speech route stays above 100 ms: in WASAPI **shared** mode Windows'
+audio engine adds about **22 ms on each side** (PortAudio reports 22.0 ms whatever latency is
+asked for), DeepFilterNet3 needs **40 ms** (two 10 ms frames of look-ahead plus its 20 ms
+window: part of the model), and one 20 ms chunk is collected before it is processed: 104 ms before
+any cushion. *Measured afterwards (10.10), the devices themselves add about 100 ms more than PortAudio's
+22 + 22 ms (round trip 150 ms through the laptop speakers): through them the speech route takes
+222 ms, and even with nothing selected the app takes 193 ms. That part cannot be changed by the
+app.* The cushion of two chunks in the speaker queue is what keeps the underruns at zero
+(10.4): one chunk saved 10 ms and cost underruns. Exclusive mode would save about 18 ms (13 ms
+per side) but other programs lose the device meanwhile and, on this laptop, it did not run
+cleanly: it stays an option (`capture.exclusive`, `output.exclusive`, off). The Waveformer
+route gained most: 29 ms of padding that existed only to match the speech route are gone.
+
+### 10.12 Starting quickly: preloaded, warmed models (step 08)
+
+*Code: `engine/preload.py`, `engine/session.py` (state `warming`).*
+
+Before step 08 the first Start after launching the backend loaded every model itself (5-12 s)
+and the first chunks met freshly started models. Now:
+
+- **The server preloads.** Right after the API is up, a background thread loads the Waveformer
+  (and runs it once: CUDA's set-up, the traced steps, cuDNN's choices), DeepFilterNet3 (ONNX
+  Runtime, checked against PyTorch) and the detector on the device the session will give it,
+  through the same caches the session uses (`api.preload_models`). `GET /api/models` shows the
+  progress and the memory used.
+- **A session warms before audio flows.** Start opens the microphone and the speakers (so a
+  missing device is an error at once) and returns: the session is **warming**. Its own thread
+  waits for the preloader if needed, builds the processing chain, runs every model once *on
+  that thread* (PyTorch and CUDA keep per-thread state), and only then becomes **running**: the
+  speakers play silence until then, no chunk ever meets a cold model. The page shows
+  *Preparing models…* with what is being loaded; Stop already works.
+- One detail found while measuring: on this laptop a **WASAPI stream can only be opened on the
+  thread that initialised PortAudio** (anywhere else: "Unanticipated host error", Chapter 24.61).
+  So both streams open in Start, on the caller's thread, and only the models warm on the
+  session's thread.
+
+Measured on the laptop (`experiments/realtime/startup.json`): the server answers **4.1 s** after
+launch, the models are ready **11.3 s** after launch (preloading 8.4 s: Waveformer 7.6 s, speech
+enhancer 0.5 s, detector 0.3 s), using **1.28 GB of RAM and 58 MB on the graphics card**. The
+**first session** started then is **running 0.9 s after Start** (0.25 s of it warming), with **0
+underruns** in its first minute. Pressed at once after launching, Start waits for the preloader
+and runs after 5.6 s, also without an underrun.
+
+### 10.13 When devices change (step 08)
+
+- **Rescan devices** (button next to the output choice; `POST /api/devices/rescan`): PortAudio
+  reads the device list once, when it starts, and keeps those handles; headphones or a USB
+  microphone plugged in later need a re-scan. Only while no session runs (it would cut the
+  session's streams). Start also re-scans by itself and retries once.
+- **A missing microphone** at Start: a clear message (*"the microphone of profile 'laptop' was
+  not found ... Plug it in, press Rescan devices, then Start again"*).
+- **A device lost during a session.** Microphone: no audio for 2 s (`capture.stall_timeout_s`)
+  ends the session in its error state (*"no audio from ... - was it unplugged ..."*). Speakers /
+  headphones: once the device has called back, a gap of 2 s without callbacks
+  (`output.stall_timeout_s`) means it is gone; the next chunk raises *"the output device ...
+  stopped playing (unplugged ...) - plug it back in or choose another output, then press
+  Restart"*. No crash, no hanging thread; the page offers **Restart**.
+- **The output device** is chosen on the page (Listen > Output: the system default or any
+  WASAPI output) and stored in `data/user_settings.json` (git-ignored), applied on top of the
+  configuration when the server starts. The microphone stays the device profile's (module 3
+  adds profile switching).
+
+### 10.14 Staying up for half an hour (step 08)
+
+*Code: `cli/soak_cmd.py`, `engine/live.py`; results `experiments/realtime/soak_*.json`.*
+
+`soundspy soak --minutes 30 --labels speech` runs a live session without the web page: the
+laptop microphone, the Hybrid method with the given selection at 40 dB, Listen on but **muted**
+(the speakers play silence, but the output runs exactly as when listening). Every minute it
+writes the underruns, the dropped chunks, the real-time factor (RTF p95 of that minute), the
+delay estimate, the process's memory (RAM) and the graphics card's. `--set key=value` changes
+one setting for the run (the screening of 10.11 used it).
+
+| Run | Route | Minutes | Audio thread | Underruns | Dropped | RTF p95, worst (median) | Delay (estimate) | RAM, first → last | Graphics card |
+|---|---|---|---|---|---|---|---|---|---|
+| 19 Nov 23:19 | speech enhancer | 30 | normal | 4 (2 queue drains) | 0 | 0.48 (0.31) | 144 ms | 1265 → 1262 MB | 58 MB |
+| 19 Nov 22:48 | Waveformer | 10 | normal | 1 | 0 | 0.73 (0.64) | 125 ms | 1265 → 1222 MB | 58 MB |
+| **20 Nov 00:05** | **speech enhancer** | **30** | **MMCSS** | **0** | **0** | **0.37 (0.30)** | **134 ms** | **1254 → 1189 MB** | **58 MB** |
+| **20 Nov 00:15** | **Waveformer** | **10** | **MMCSS** | **0** | **0** | **0.61 (0.58)** | **94.6 ms** | **1265 → 1190 MB** | **58 MB** |
+
+What the numbers say:
+
+- **The first runs had a few glitches, not because the processing was too slow** (its worst
+  minute used half of the time it had) but because the audio thread was sometimes ready while
+  Windows ran something else first; other commands ran on the laptop at the same time. Each
+  underrun refills the speaker cushion, which is why those runs show a 10 ms higher delay until
+  the queue was drained again (10.4). The fix: the session's worker now registers with
+  **Windows' audio scheduler** (MMCSS, task "Pro Audio", as audio programs do;
+  `engine.thread_priority: pro_audio`, with `high` as the fallback). The re-runs, on the
+  otherwise idle laptop, had **no underrun, no dropped chunk and no drain** on either route.
+- **Memory does not grow.** RAM went *down* by 65–75 MB over the runs (Windows trims pages that
+  were only used during the start), the graphics card stayed at 58 MB (the Waveformer; the
+  detector runs on the processor when the extractor uses the graphics card). Nothing leaks per
+  chunk.
+- **The load is steady.** The speech route's RTF p95 stayed between 0.20 and 0.37 for the whole
+  half hour, the Waveformer route's between 0.56 and 0.61: no slow drift, no thermal slow-down
+  that mattered.
+
+### 10.15 One command, a log file, the evaluation document (step 08)
+
+- **`start.ps1` / `soundspy app`.** The backend also serves the finished page (`frontend/dist`,
+  made by `npm run build`) at `http://127.0.0.1:8765/`, so the app needs one command and no
+  Node.js to run. Every address that is not a file of the page and not under `/api` or `/ws` gets
+  the page's `index.html` (a reloaded tab still works); unknown `/api` addresses stay real 404s.
+  The browser is opened once the server answers. If the page is not built, the command says how
+  to build it and stops. `npm run dev` stays for working on the page.
+- **The log.** `soundspy serve` and `app` write everything they print also to
+  `data/logs/soundspy.log`, with times and the part of the program that wrote it (1 MB per file,
+  5 old files kept): the start-up lines (the index, the preloaded models with their times), the
+  sessions' warnings and errors survive the window being closed.
+- **`soundspy report`** reads the stored results (the `metrics.json` files of every evaluation,
+  the real-room results, the latency and soak files) and writes `docs/evaluation.md` with four
+  figures in `docs/figures/` (detection per class, extraction per system, pause suppression in
+  the real room, the delay of each route in its parts). Every table names the command that
+  produced it. A missing result leaves a note instead of failing. `--rerun` first repeats the
+  long evaluations (about two hours). `docs/demo.md` is the 5-minute demonstration script.
 
 ---
 
@@ -4237,6 +4496,17 @@ route, the new network starts at once, its estimate becomes valid one delay late
 two are crossfaded over 20 ms; the old one rests. A resting network keeps reading its input
 (cheap), so it starts again with real context.
 
+**Since step 08: each route its own delay.** The 29.4 ms of padding existed only so that the
+Waveformer route matched the speech route. Now every route keeps its own delay (speech enhancer
+40.0 ms, Waveformer 10.6 ms, nothing selected 0), and the unprocessed sound for Bypass and for
+the residual mix is read from one shared delay line at the delay of the route in use
+(`_DelayLine`, `aligned_dry`). A route change therefore also changes the delay: the 20 ms
+crossfade goes from the old route's output (at its delay) to the new one's (at its delay), so
+the sound slides by the difference (up to 30 ms) once, without a click or a gap; Bypass follows
+the same delay. The session's delay estimate and the page show the delay of the route in use.
+`live.fixed_latency: true` in `hybrid.yaml` brings back the 07c behaviour (one shared delay).
+Offline, every route is aligned to the file, as before.
+
 ### 15.6 Tuning the gate on validation recipes
 
 `soundspy evaluate hybrid-gate` runs the configured route once over **320 validation recipes**
@@ -4722,6 +4992,19 @@ work.
 | pytest without GPU / data, ruff, frontend checks | 636 passed, ruff clean; 54 frontend tests, eslint, tsc, build | met |
 | No tuning on the held-out session; no git write commands | the held-out takes were looked at (pauses, the phone) and scored once, with the final settings | met |
 
+**Step 08: the whole test evaluation again, with the code as shipped** (`soundspy evaluate
+extraction --method hybrid --name ext_hybrid_08`: the speech-route gate everywhere, each route
+its own delay; the same 500 test recipes and benchmark sets; `experiments/ext_hybrid_08/`).
+Overall SI-SDRi **+3.02 dB offline / +2.04 dB live** (07c +3.20 / +2.06), target absent −22.9 /
+−21.3 dB (07c −23.1 / −21.4); Speech alone +5.55 / +4.84 (07c +7.13 / +4.70); speech + music
++4.86 / +4.61 (07c +7.00 / +4.03); music only with Speech selected −42.8 / −42.8 dB (07c −45.2 /
+−46.1); LibriSpeech +12.04 / +11.88 (07c +12.49 / +10.65). The non-speech numbers are unchanged within
+0.1 dB (Music over speech +2.17 / +1.58; the Waveformer route only lost its padding, which
+changes the delay, not the sound). This is the
+trade-off already measured in 07d and accepted by the owner: better live, and in the real room,
+worse offline on the synthetic Speech recipes (limitation 39). These are the numbers in
+`docs/evaluation.md`.
+
 ### 15.12 Limitations
 
 Chapter 26, items 31–42: the 40 ms delay for every selection, all voices kept (several
@@ -4744,8 +5027,13 @@ are not "music only" (42).
 |---|---|---|
 | `GET /api/health` | "Are you alive?" Answers `{"status": "ok", "version": "0.1.0"}` | **works** |
 | `GET /api/config` | the class list (ID, display name, description), which tabs are available and why not, the active device profile. *Step 07:* also the extraction methods (name, display name, whether each can run and why not), the method a session would really use and the default attenuation (15 dB) | **works** |
-| `GET /api/devices` | list microphones and speakers, and which one the active profile resolves to | **works** (since step 02) |
-| `GET /api/session` | the current session status (idle if none) | **works** (step 03) |
+| `GET /api/devices` | list microphones and speakers, and which one the active profile resolves to | **works** (since step 02); *step 08:* also `selected_output` (the device Listen will use) and `output_setting` (the stored choice) |
+| `POST /api/devices/rescan` | *(step 08)* read the device list again (headphones or a USB device plugged in after the start); answers like `GET /api/devices` | **works**; **409** while a session runs (it would cut the session's streams) |
+| `GET /api/settings`, `PUT /api/settings/output-device` | *(step 08)* the user's settings in `data/user_settings.json`: `{"device": <index, name or null>}` = the output device for Listen (`null` = the system default), checked against the device list and applied to the next session | **works**; 400 unknown device, 409 while a session runs |
+| `GET /api/models` | *(step 08)* the preloading at server start: state (`idle`, `loading`, `ready`, `error`), the model being loaded, every model's time and error, RAM and graphics-card memory | **works** |
+| `GET /api/latency` | *(step 08)* the latest `soundspy measure-latency` result (`experiments/realtime/latency_latest.json`) for the "measured" label; 404 when nothing was measured | **works** |
+| `GET /` and every other path | *(step 08, `soundspy app` only)* the built page from `frontend/dist`; an unknown path that is not under `/api` or `/ws` gets `index.html` (the page decides) | **works** |
+| `GET /api/session` | the current session status (idle if none) | **works** (step 03); *step 08:* the state can be `warming` (models being prepared, `message` says which; Stop works), and `warmup_s` says how long it took |
 | `POST /api/session/start` / `stop` | start or stop the live session; body: mode, source (`mic`, or a `file` path inside the project, looped), optional `monitor` | **works** (step 03): 409 if already running, 400 for a bad mode or source, 503 if the sound library is unavailable; stop can be repeated safely |
 | `PUT /api/session/target` | change what to listen to (a `TargetSpec`); checked against the class list, stored, passed to the session | **works** (step 03), no audible effect until step 05; unknown class → 422. *(Step 05: the class chips send it over the WebSocket as `set_target`; still no audible effect until step 06.)* *(Step 06: audible. `attenuation_db` comes from the new slider.)* |
 | `PUT /api/session/bypass` | `{"enabled": true}`: play the unprocessed sound (same delay) instead of the output, for A/B listening | **works** (step 06); remembered between sessions |
@@ -4991,6 +5279,20 @@ and a download link. A recording whose file is gone is shown greyed out with "fi
 (Neural only, usable while stopped); the session bar adds *· gate* or *· no gate* to the
 extraction figures; a neural run on a recording uses the session's gate choice and shows it.
 
+*Since step 08* (Chapter 2.3): the tab is organised in three areas (**Listen**, **Sounds**,
+**Visuals**) under the session bar, with the recordings in a collapsible panel. The session bar
+shows a *warming* state (*Preparing models…*), an error with a **Restart** button, and one summary
+line (method and route, the gate in words and a dot, the delay marked *measured* or *estimated*);
+the other figures moved under **Details**. The methods are named *Hybrid (recommended)*,
+*Neural* and *Baseline*, each with a one-line explanation. New: the **Output** device choice with
+**Rescan devices**; keys **Space** (Bypass) and **M** (Mute); the selection, attenuation, method,
+gate and spectrogram view are kept in the browser's `localStorage` (every access inside
+`try`/`catch`, so a blocked storage only means forgetting). Empty, loading, warming and error
+states are written out where content would otherwise be missing. Accessibility: every area is a
+labelled `section`, the state is a polite live region, the gate and the delay are words (not
+only colour), toggles carry `aria-pressed`, the tabs are a proper `tablist`. When the page is
+served by `soundspy app` it is the production build of the same code.
+
 ### 18.2 The connection light
 
 It combines two separate checks:
@@ -5023,7 +5325,9 @@ that is down for longer.
 | `src/hooks/useSessionSocket.ts` | opens the WebSocket when the app starts and puts what arrives into the store |
 | `src/components/ConnectionIndicator.tsx` | the connection light |
 | `src/components/viz/` | empty for now; live waveform, spectrogram and source-map components go here. *Since step 03:* `LevelMeters`, `Waveform`, `Spectrogram` (canvas drawing), `liveFrames.ts` (the buffer the live messages go into, outside React), `useCanvasLoop.ts` (the shared animation loop) and `scales.ts` (dB, mel and colour scales) |
-| `src/components/session/` | *(step 03)* `SessionBar`, `MonitorControls` (+ `headphones.ts`), `RecordControls`, `RecordingsList`; *(step 06)* `ExtractionControls` (attenuation, Bypass; *step 07:* the Method selector), `ABPlayer` |
+| `src/components/session/` | *(step 03)* `SessionBar`, `MonitorControls` (+ `headphones.ts`), `RecordControls`, `RecordingsList`; *(step 06)* `ExtractionControls` (attenuation, Bypass; *step 07:* the Method selector), `ABPlayer`; *(step 08)* `OutputDeviceControls` |
+| `src/hooks/` | *(step 08)* `useKeyboardShortcuts` (Space, M), `usePersistedSettings` (restore and save the remembered settings) |
+| `src/store/persist.ts` | *(step 08)* reading and writing the remembered settings in `localStorage`, checked and in `try`/`catch` |
 | `src/components/Toasts.tsx` | *(step 03)* dismissible warnings and errors |
 | `src/tabs/` | one component per tab |
 | `src/App.tsx` | puts the header, tabs and panels together |
@@ -5063,9 +5367,16 @@ test clips, preparing data and training models.
 | `soundspy detect` | per-class timeline of a recording (Chapter 12.9) | **works** (step 05) |
 | `soundspy extract` | `extract <wav> --labels speech [music …] [--attenuation-db 15] [--method neural_tse|mask_baseline] [--out out.wav]`: keep the named sound types of a recording, as a processing run in `outputs/processed` (Chapter 13.6); *step 07b:* `--gate` / `--no-gate` (the neural output gate) | **works** (step 06) |
 | `soundspy db` | `db rebuild`: drop the database and index the sidecar files again (Chapter 17) | **works** (step 06) |
+| `soundspy app` | the whole app: the API, the built page (`frontend/dist`) and the model preloading on one address, opens the browser once it answers (`--no-browser`, `--host`, `--port`); prints the build command if the page is missing. `start.ps1` runs it | **works** (step 08) |
+| `soundspy measure-latency` | the delay measured with sound (Chapter 10.10): alone = the hardware round trip (speakers → microphone); `--through-app [--method hybrid] [--labels speech]` = also through Sound Spy; `--all` = hardware + pass-through + both Hybrid routes; `--clicks`, `--period`, `--level`, `--output-device`, `--set key=value`, `--yes` (no Enter prompt). Saves `experiments/realtime/latency_<time>.json`, `latency_latest.json` and the recordings in `outputs/latency/<time>/` | **works** (step 08; detection rewritten after the first real run, 24.65) |
+| `soundspy soak` | a live session for `--minutes` (laptop microphone or `--file`, `--labels`, `--method`, `--attenuation-db`, `--set key=value` to try a setting), one line per minute; `experiments/realtime/soak_<time>.json` (Chapter 10.14) | **works** (step 08) |
+| `soundspy report` | `docs/evaluation.md` and `docs/figures/*.png` from the stored results (`--out`, `--no-figures`, `--rerun` = the long evaluations first) | **works** (step 08) |
 
 Placeholder commands print `not implemented yet (step-XX)` and exit normally.
 *(Since step 06 there are no placeholder commands left.)*
+
+*Since step 08* `soundspy serve` (and `app`) also write their log to `data/logs/soundspy.log`
+(rotated at 1 MB, 5 old files kept), and preload the models (`api.preload_models`).
 
 All audio commands accept `--profile <name>` and `--device <index or name>`. A
 problem with the setup (no such device, invalid profile, a stalled microphone)
@@ -5232,7 +5543,7 @@ here so the later chapters will make sense when they arrive.
 | 07 | neural extractor that runs live — **done** (Chapter 14) | 1 |
 | 07c | hybrid extraction: DeepFilterNet3 for Speech, v1 for the rest, a gate the detector closes and the output reopens, real-room benchmark — **done** | 1 |
 | 07d | the speech route's own gate, driven by DeepFilterNet3's output; pause measures; tuning and held-out real-room sessions — **done** | 1 |
-| 08 | full evaluation, robustness, documentation for the university report | 1 |
+| 08 | Tab 1 finished: one-command start, preloaded models, per-route delay, measured delay, device robustness, soak, the tab polished, the generated evaluation document — **done** (Chapters 2, 10.10–10.15) | 1 |
 | modules 3–4 | simulated array, direction finding, beamforming, Spatial tab | 2 |
 | module 5 | source tracking, Sources tab | 3 |
 
@@ -5347,7 +5658,8 @@ npm install
 ```
 
 `[api,dev]` installs two optional groups of libraries: the web server pieces,
-and the testing tools. Two more groups, `ml` (PyTorch and friends) and
+and the testing tools. *(Since step 05 the full set is `".[api,data,ml,spatial,dev]"`;
+`backend/requirements-lock.txt`, step 08, lists the exact versions of a working installation.)* Two more groups, `ml` (PyTorch and friends) and
 `spatial` (pyroomacoustics), are not needed until steps 05 and module 3. When
 the time comes, PyTorch must be installed **first**, from PyTorch's own
 download site with the matching graphics-card (CUDA) version. Otherwise pip
@@ -5355,6 +5667,10 @@ installs a version that ignores the graphics card. The README has the exact
 command.
 
 ### 22.3 Starting it
+
+*Since step 08*, to **use** the app: build the page once (`cd frontend; npm install; npm run
+build`), then `.\start.ps1` in the project folder (Chapter 2.2). The steps below are the
+**development** way (the page reloads as its code changes):
 
 ```powershell
 # terminal 1 — the backend
@@ -5380,6 +5696,8 @@ Stop either one with **Ctrl+C**.
 - *(Step 03)* Press **Start** on the Semantic tab: the meters, spectrogram and waveform move
   with the room sound, and the bar shows the latency (about 94 ms here) and RTF (about 0.06).
   Tick **Listen** only with headphones on.
+- *(Step 08)* In the backend's window, about 10 s after the start: *models ready in … s*. `GET
+  /api/models` shows the same. A session started then is *running* within a second.
 
 ### 22.5 Using the microphone
 
@@ -5403,12 +5721,13 @@ longer warns about noise suppression.
 
 ```powershell
 # backend (in backend/, with the venv active)
-pytest              # 636 tests (after step 07d; 617 after step 07c), about 3 minutes
-                    # (measured while an evaluation ran alongside; 105 s after step 07)
+pytest              # 663 tests (after step 08; 636 after step 07d), about 2 minutes;
+                    # 3 slow ones (> 5 s) left out: pytest -m slow runs them,
+                    # pytest -m "slow or not slow" everything (666)
 ruff check .        # code-quality check
 
 # website (in frontend/)
-npm run test        # 54 tests (after step 07c; 50 after step 07b); run it from PowerShell,
+npm run test        # 62 tests (after step 08; 54 after step 07c); run it from PowerShell,
                     # not Git Bash (Chapter 24.26)
 npm run lint        # code-quality check
 npm run typecheck   # TypeScript type check
@@ -6364,6 +6683,81 @@ vocals (its singer is kept as a voice) and, at +5 / +10 dB, by the speaker's own
 pauses, which are as loud as the quiet music there. **Fix.** None to the measure (it was fixed
 before the held-out session was scored); the report gives the pauses per music and per ratio.
 
+### 24.61 A speaker stream that would not open on the session's thread
+
+**Symptom.** With the warming state (step 08) the session's own thread opened the speakers, and
+on the laptop that failed every time: *"Unanticipated host error … WdmSyncIoctl"*, Listen
+unavailable. **Cause.** A direct test showed it: the same WASAPI output stream opens on the thread
+that initialised PortAudio and fails on any other one (Windows' audio objects belong to the
+thread's COM apartment). **Fix.** Both streams open in `Session.start()`, on the caller's thread,
+before the worker starts (an output that fails there is reported as before); only building and
+warming the models moved to the worker. A test checks that `start()` opens the output.
+
+### 24.62 Threads left behind by a Stop during warming, and stale devices in the new tools
+
+**Symptom 1.** A Stop pressed while the session was still warming left the speaker and detector
+threads running. **Cause.** An early `return` inside the worker's `try` skipped the clean-up that
+followed it. **Fix.** The worker is split into `_warm_up()` and `_loop()`, and the clean-up
+(`_close_after_stop`) runs in `finally` whatever happened; a test stops sessions at every point
+of the warm-up and checks that no thread survives. **Symptom 2.** `soundspy soak` and
+`measure-latency` failed to open the microphone after headphones had been plugged in.
+**Cause.** They opened devices through PortAudio's list from the process start (24.18).
+**Fix.** Both read the device list again first (`refresh_devices()`), like Start.
+
+### 24.63 The page's fallback swallowed unknown API addresses (Windows paths)
+
+**Symptom.** With `soundspy app`, `GET /api/no-such-route` answered 200 with the page instead of
+404. **Cause.** The static-files component hands over the path with Windows separators
+(`api\no-such-route`), so the check for an `api/` prefix never matched. **Fix.** The separator is
+normalised before the check; a test covers it.
+
+### 24.64 Underruns in the first long runs
+
+**Symptom.** The first 30-minute run of the speech route had 4 underruns (2 queue drains), the
+first 10-minute Waveformer run 1, with the real-time factor never above 0.5 and 0.75.
+**Cause.** Not the processing: moments when the audio worker was ready but Windows ran something
+else first (other commands ran on the laptop at the same time). **Fix.** The worker registers
+with Windows' audio scheduler (MMCSS "Pro Audio", `engine.thread_priority`); the re-runs on the
+idle laptop had none (Chapter 10.14). The configuration can still choose `high` or `normal`.
+
+### 24.65 The first real latency measurement found 1 click of 10
+
+**Symptom.** The owner's first `soundspy measure-latency --all` (21 Nov, laptop speakers, volume
+30 %, headphones unplugged): the hardware round trip from 1 of 10 clicks (147.2 ms), the three app
+measurements 0 of 10. The ten clicks scored 7.3 to 8.0 against a threshold of 8, all of them.
+**Cause.** Two mistakes of the first version. (1) The click's score was a correlation normalised
+by the recording's own energy as well as the click's: it measures how alike the *shapes* are, at
+most 1, not how far the click stands above the room's noise. The laptop speaker (no bass, its
+own resonances) and the room change a 3 ms burst so much that its score stays around 5 to 8 at
+*any* volume. A simulation of a speaker and a room reproduced it (old score 5.1 to 7.5 from
+−40 to −20 dB coupling; the tests had used a perfect copy of the click). (2) The app played the
+microphone back at 0 dB, so its copy reached the microphone two speaker-to-microphone losses below
+the click (about 40 to 60 dB), down in the room's noise, and in a shape that matched the click
+even less. **Fix.** A matched filter with a real signal-to-noise threshold (18 dB), the earliest
+strong peak, the app's copy matched against the recorded direct arrival, the app's playback gain
+chosen from the measured coupling (loop −10 dB), clicks 6 dB louder and 1 s apart, recordings
+kept (Chapter 10.10). The simulation now finds 10 of 10 within 0.5 ms from −30 dB coupling up,
+and the app's copy within 1 ms where it stands clear of the noise. The 147 ms that the one click
+gave, and the 145–155 ms of the hardware arrivals inside the app runs, agree; that is three
+times what PortAudio reports (2 × 22 ms) and waits for the owner's re-run.
+
+**The second run** (21 Nov, 15:03) found the hardware round trip cleanly (10 of 10, 151 ms) and
+**howled** in the three app runs: the recordings grew from −60 to about −19 dBFS within three
+seconds. The coupling estimate (−19.8 dB) had set the app's playback to +9.8 dB for a loop of
+−10 dB; the first echo came back only 4 dB below the direct click, and at the frequency that
+built up the loop was above unity. One loud click does not show what the speaker chain does to
+the quieter, longer sound the app plays back (equaliser, loudness levelling), so the estimate
+was about 13 dB optimistic. **Fix.** The loop target is now −25 dB (playback −5 dB on this
+laptop), a feedback guard stops a run that builds up and repeats it 10 dB quieter, and the noise
+floor for both arrivals is the silent lead-in instead of the whole recording, which the howl had
+filled. Analysed afterwards with that floor, the clicks before the build-up gave the app's delay:
+190 ms with nothing selected, 201 ms on the Waveformer route, 232 ms on the speech route
+(Chapter 10.10).
+
+**The third run** (21 Nov, 15:28) was clean: playback −4.8 dB, no feedback, 10 of 10 clicks on
+every row: hardware 149.8 ms, the app 193.2 / 203.4 / 221.6 ms (nothing selected / Waveformer /
+speech; Chapter 10.10), within about 10 ms of what the second run's early clicks gave.
+
 ---
 
 ## 25. Design decisions and why
@@ -6715,6 +7109,49 @@ synthetic Speech recipes, where the centred detector makes the 07c gate almost a
 held-out session, the owner's recordings), and the synthetic loss comes mostly from dataset clips
 labelled speech that DeepFilterNet3 does not treat as speech (limitation 39).
 
+**Why does each Hybrid route keep its own delay?** (step 08) The shared 40 ms delay of step 07c
+cost every non-speech selection 29.4 ms for no benefit except that a route change kept the delay
+constant. The route change already crossfades over 20 ms; sliding the delay by up to 30 ms inside
+that crossfade is inaudible, while 30 ms less delay on the Waveformer route is not
+(134 → 95 ms estimated). The speech route could not be made shorter: DeepFilterNet3's 40 ms are
+part of the model.
+
+**Why keep two chunks of cushion, 20 ms chunks and shared mode?** (step 08) Each was tried on the
+live chain (Chapter 10.11): one chunk of cushion saved 10 ms and caused underruns on both routes;
+10 ms chunks saved 10 more and pushed the Waveformer to RTF 0.92 with underruns; PortAudio's "low
+latency" changed nothing in shared mode; WASAPI exclusive mode saved about 18 ms and produced
+dozens of underruns, besides taking the device away from every other program. Zero glitches over
+a long session matter more than 10–20 ms. Exclusive mode stays as an option, off.
+
+**Why measure the delay with sound?** (step 08) The session's estimate adds up figures that
+PortAudio reports and that the engine knows; it cannot see the converters, the driver's own
+buffers or a wrong figure. A click played and recorded in one full-duplex stream shares one clock,
+so its arrival time is exact; running the app at the same time gives the app's own delay as the
+gap between two arrivals of the same click. Bypass is on during the measurement so the click
+survives the extractor, and Bypass is delayed exactly like the processed sound.
+
+**Why preload at server start and warm on the session's thread?** (step 08) Loading took 5–12 s
+at the first Start, and the first chunks met models that were set up but never run (CUDA, cuDNN
+and PyTorch's traced steps prepare themselves on the first call, per thread). Preloading in the
+background costs nothing the user waits for; warming on the thread that will run the models
+makes the first real chunk as fast as any later one. The session waits (state `warming`) rather
+than playing chunks late.
+
+**Why does the backend serve the page itself?** (step 08) One command and one address for the
+user (`start.ps1`), no Node.js needed to run the app, and the same origin for the page, the API
+and the WebSocket (no proxy, no CORS). The development server (`npm run dev`) stays for working
+on the page.
+
+**Why `data/user_settings.json` for the output device?** (step 08) It is the user's choice, not
+the project's configuration (rule 10's files are versioned and shared); a small file under the
+git-ignored `data/` keeps it per machine and survives restarts. It is applied on top of the
+configuration at start, only for keys the page may change (`output_device`). The microphone stays
+the device profile's (rule 2).
+
+**Why MMCSS?** (step 08) Windows' own mechanism for audio threads, used by audio programs; it
+needs no administrator rights and falls back to a high thread priority. The worker sleeps between
+chunks (RTF 0.3–0.6), so it never starves the system.
+
 ---
 
 ## 26. Known limitations
@@ -6892,6 +7329,24 @@ These are understood and accepted for now, not oversights.
 42. **A pause is not always "music only"** (step 07d): the speaker's own quiet sounds (breathing, the
     voice's tail) are kept as voice; with quiet music (5–10 dB below the voice) they are as loud as
     the music, and the pause measure reports them as leak (Chapter 24.60).
+43. **The speech route's delay stays above 100 ms** (step 08): about 134 ms estimated (input 22 +
+    chunk 20 + DeepFilterNet3 40 + cushion ~30 + output 22), and **222 ms measured** through
+    the laptop speakers (Chapter 10.10): the sound devices add about 100 ms that
+    PortAudio does not report. What could be lowered in the app was tried (Chapter 10.11) and cost
+    underruns. Exclusive mode and smaller chunks are options for a faster machine; the device
+    part depends on the output (speakers or headphones) and its sound processing.
+44. **A route change moves the delay** (step 08): selecting Speech alone after another selection
+    adds about 30 ms (and the other way round removes it), once, inside a 20 ms crossfade.
+    `live.fixed_latency` restores one shared delay.
+45. **Output device only** (step 08): the page chooses the output device; the microphone is the
+    device profile's (switching profiles comes with module 3).
+46. **The measured delay depends on the run** (step 08): the hardware round trip in shared mode
+    varies by a few milliseconds between streams; the measurement reports the median of ten clicks
+    and its spread, taken with the laptop's speakers (with headphones the acoustic path is
+    different, the electrical one the same).
+47. **The soak was run on an idle laptop** (step 08): zero underruns in 30 + 10 minutes with the
+    audio thread on MMCSS; heavy programs running at the same time (a training run, a video call)
+    can still cause glitches.
 ---
 
 ## 27. Third-party code
@@ -6933,8 +7388,21 @@ and licences are recorded in each dataset's `SOURCE.json` and described in Chapt
 ### Start
 
 ```powershell
+.\start.ps1                                              # step 08: everything, http://127.0.0.1:8765/
+cd frontend; npm install; npm run build                  # once, and after changing the page
+# development:
 cd backend;  .venv\Scripts\activate;  soundspy serve     # http://127.0.0.1:8765/docs
 cd frontend; npm run dev                                 # http://localhost:5173
+```
+
+### Real time and the report (step 08)
+
+```powershell
+soundspy measure-latency --all                   # laptop speakers, headphones OFF, low volume
+soundspy soak --minutes 30 --labels speech       # glitches / RTF / memory every minute
+soundspy soak --minutes 3 --set output.prebuffer_chunks=1   # try a setting
+soundspy report                                  # docs\evaluation.md + docs\figures\
+Get-Content data\logs\soundspy.log -Wait          # follow the log
 ```
 
 ### Check
@@ -7000,6 +7468,11 @@ soundspy db rebuild                                 # rebuild the index from the
 GET  /api/health                        is the backend alive, which version
 GET  /api/config                        classes, which tabs are available, device profile
 GET  /api/devices                       devices + what the profile resolves to (503 = no PortAudio)
+POST /api/devices/rescan                read the device list again (409 while a session runs)
+GET  /api/settings                      the user's settings (data/user_settings.json)
+PUT  /api/settings/output-device        {device: index | name | null} (400 unknown, 409 running)
+GET  /api/models                        model preloading: state, steps, RAM / VRAM
+GET  /api/latency                       the latest measured delay (404 if none)
 GET  /api/recordings                    recordings, newest first (re-indexes data/raw)
 GET  /api/recordings/{id}[/audio]       one recording / its WAV (audio/wav)
 GET  /api/session                       current session status
@@ -7026,7 +7499,7 @@ WS   /ws/session                        status 1/s, levels 20/s (input and outpu
 | | |
 |---|---|
 | Backend address | `127.0.0.1:8765` |
-| Website (development) | `localhost:5173` |
+| Website (development) | `localhost:5173`; *since step 08* the built page also at `127.0.0.1:8765/` (`start.ps1`) |
 | Database | `data/soundspy.db` |
 | Sound classes | 7 |
 | Default suppression of unchosen sounds | 15 dB live since step 07 (to about 18 % of its size); 30 dB in the evaluation (about 3 %) |
@@ -7040,13 +7513,16 @@ WS   /ws/session                        status 1/s, levels 20/s (input and outpu
 | Neural training | 20,000 mixtures (25.4 GB cache on D:, half reverberant), 3 s crops, batch 4 × 4, ~12 min per round of 10,000 crops; second run 26 rounds, 5.4 h, best round 16: validation +3.72 dB. *Step 07b:* new random mixtures every round (4 workers, ~12.3 min per round), from v1, LR 1e-4; v2 15 rounds 3.3 h (+2.32 dB), v2b 30 rounds 6.2 h, best round 20: validation +3.17 dB, leak −17.8 dB |
 | Offline processing | 62 s recording in 6.5 s (step 07: 6.8 s with either method, 12 s the first time; step 07b: 6.1 s with v2b + gate, 6.8 s baseline); at most 5 minutes per recording on the page; one job at a time |
 | Speaker cushion / max queue / limiter | 2 chunks / 8 chunks / −1 dBFS ceiling, 50 ms release |
+| Delay, step 08 | estimated: Hybrid speech route 124–134 ms (22 in + 20 chunk + 40 DeepFilterNet3 + 20–30 queue + 22 out), Waveformer route 94.6 ms, nothing selected ~94 ms; **measured through the laptop speakers: 221.6 / 203.4 / 193.2 ms**, the sound devices' round trip 149.8 ms (PortAudio: 44) |
+| Start-up, step 08 | server answers 4.1 s after launch, models ready 11.3 s (1.28 GB RAM, 58 MB graphics card); first session 0.9 s from Start to sound, 0 underruns |
+| Soak, step 08 (MMCSS) | speech route 30 min / Waveformer route 10 min: 0 underruns, 0 dropped, RTF p95 worst 0.37 / 0.61, RAM 1.25 → 1.19 GB, VRAM 58 MB flat |
 | Heartbeat / health check | every 2 s / every 5 s |
 | Python / Node | 3.11 / 24 |
 | Laptop microphone | WASAPI index 9, 48 kHz, 2 real mics (≥ ~4.3 cm apart), 16-bit + 7.44 dB gain |
 | Honest noise floor (enhancements off) | about −65 dBFS |
 | WASAPI start-up silence (discarded) | 500 ms with enhancements on, none with them off |
 | Mic stall timeout / live chunk queue | 2 s / 32 chunks, oldest dropped first |
-| Backend tests / website tests | 264 / 18 (after step 03); 344 / 18 (after step 04); 387 / 23 (after step 05); 482 / 36 (after step 06); 540 / 46 (after step 07); 572 / 50 (after step 07b); 617 / 54 (after step 07c); 636 / 54 (after step 07d) |
+| Backend tests / website tests | 264 / 18 (after step 03); 344 / 18 (after step 04); 387 / 23 (after step 05); 482 / 36 (after step 06); 540 / 46 (after step 07); 572 / 50 (after step 07b); 617 / 54 (after step 07c); 636 / 54 (after step 07d); 666 (663 by default, 3 slow) / 62 (after step 08) |
 | Detector | EfficientAT mn10_as, 4.88 M parameters, 32 kHz, 1 s window padded to 10 s, a result every 0.25 s |
 | Training data | `D:/SoundSpyData/` (external, processed, mixtures, models) |
 | Mixtures | 6 s, 20,000 / 2,000 / 2,000 recipes (train / val / test), seeds 1 / 2 / 3 |
@@ -7091,5 +7567,11 @@ WS   /ws/session                        status 1/s, levels 20/s (input and outpu
 | `backend/src/soundspy/data/cache.py`, `data/reverb.py` | the pre-rendered training examples and the simulated rooms |
 | `backend/src/soundspy/training/train_extraction.py`, `extraction_data.py` | the fine-tuning loop, the crops and the loss |
 | `backend/src/soundspy/training/evaluate_extraction.py` | the comparison of all extraction systems |
+| `start.ps1`, `backend/src/soundspy/cli/app_cmd.py`, `api/static.py` | step 08: one-command start, the built page served by the backend |
+| `backend/src/soundspy/engine/preload.py`, `engine/session.py` | step 08: models preloaded at server start; the session's warming state |
+| `backend/src/soundspy/io/loopback.py`, `cli/measure_latency_cmd.py` | step 08: the delay measured with sound |
+| `backend/src/soundspy/cli/soak_cmd.py`, `engine/live.py` | step 08: the long live run |
+| `backend/src/soundspy/report.py` | step 08: `docs/evaluation.md` from the stored results |
+| `docs/evaluation.md`, `docs/demo.md` | step 08: the evaluation for the report; the 5-minute demo |
 | `docs/architecture.md` | the exact technical rules and message formats |
 | `docs/decisions.md` | every important decision, dated, with its reason |

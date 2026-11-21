@@ -10,6 +10,7 @@ import type {
   ConfigResponse,
   DetectionFrame,
   EngineStatus,
+  MeasuredLatency,
   Mode,
   Recording,
   Run,
@@ -41,6 +42,9 @@ export interface AppState {
   attenuationTouched: boolean
   /** Processing runs by recording id, newest first. */
   runs: Record<number, Run[]>
+  /** Step 08: the latest `soundspy measure-latency` result (null: never measured). */
+  measuredLatency: MeasuredLatency | null
+  setMeasuredLatency: (latency: MeasuredLatency | null) => void
   setBackend: (state: BackendState, version?: string | null) => void
   setWsState: (state: SocketState) => void
   setActiveTab: (tab: Mode) => void
@@ -71,6 +75,7 @@ export const initialAppState = {
   attenuation: DEFAULT_ATTENUATION_DB,
   attenuationTouched: false,
   runs: {} as Record<number, Run[]>,
+  measuredLatency: null as MeasuredLatency | null,
 }
 
 const MAX_TOASTS = 4
@@ -103,6 +108,7 @@ export const useAppStore = create<AppState>()((set) => ({
   setSelected: (selected) => set({ selected }),
   setAttenuation: (attenuation) => set({ attenuation, attenuationTouched: true }),
   setRuns: (recordingId, runs) => set((state) => ({ runs: { ...state.runs, [recordingId]: runs } })),
+  setMeasuredLatency: (measuredLatency) => set({ measuredLatency }),
   upsertRun: (run) =>
     set((state) => {
       if (run.recording_id === null) return state

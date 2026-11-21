@@ -117,6 +117,10 @@ speech_gate:                     # SpeechRouteGate (extraction/speech_gate.py, s
 
 live:
   ramp_ms: 20                    # crossfade between routes and pass-through
+  fixed_latency: false           # step 08: each route has its own delay (Waveformer 10.6 ms,
+                                 # speech enhancer 40.0 ms, nothing selected 0); a route change
+                                 # crossfades between the two delays over ramp_ms. true = the 07c
+                                 # behaviour: every route delayed to the slowest (40.0 ms)
   performance_cores: true        # keep the audio thread on the CPU's performance cores (Intel
                                  # 12th gen and later have slower efficiency cores; measured on
                                  # the laptop: DeepFilterNet step p95 11.5 -> 5.5 ms)

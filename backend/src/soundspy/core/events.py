@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 from soundspy.core.target import Direction
 
-EngineState = Literal["idle", "running", "error"]
+EngineState = Literal["idle", "warming", "running", "error"]  # warming: step 08
 
 
 @dataclass(frozen=True)
@@ -151,3 +151,6 @@ class EngineStatus(Event):
     # running session really uses, which differs after a fallback (step 07)
     extraction_method: str | None = None
     extraction_gate: bool | None = None  # the neural output gate chosen for sessions (07b)
+    # step 08: seconds from Start to the first processed chunk (models loaded and warm); while
+    # warming, `message` says what is being prepared
+    warmup_s: float | None = None

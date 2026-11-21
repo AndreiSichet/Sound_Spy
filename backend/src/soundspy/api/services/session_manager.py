@@ -9,6 +9,9 @@
   for a network send.
 - Remembers the target, the monitor settings, bypass and the chosen extraction method between
   sessions, and stops the session on app shutdown.
+- **Warming (step 08).** ``start`` opens the microphone (a device problem is an HTTP error at
+  once) and returns while the session is ``"warming"``: its worker waits for the models the
+  server preloads (``preloader``), builds the chain, warms it and only then lets audio flow.
 
 Routes call these methods from FastAPI's thread pool, so a lock serialises start/stop.
 """
@@ -33,7 +36,7 @@ from soundspy.config import AppConfig
 from soundspy.core.events import EngineStatus, Event
 from soundspy.core.labels import LabelSet
 from soundspy.core.target import TargetSpec
-from soundspy.engine.factory import ModeUnavailableError, build_chain
+from soundspy.engine.factory import ModeUnavailableError, build_chain, check_mode
 from soundspy.engine.session import Session, SessionError
 from soundspy.io.base import AudioSink, AudioSource
 from soundspy.io.devices import (
@@ -78,6 +81,7 @@ class SessionManager:
         self.bypass = False
         self.method: str | None = None  # None = extraction.method from the configuration
         self.gate: bool | None = None  # None = the chosen method's own default (step 07c)
+        self.preloader = None  # engine.preload.ModelPreloader, set by the app (step 08)
         self._lock = threading.RLock()
 
     @property
@@ -86,8 +90,10 @@ class SessionManager:
 
     @property
     def running(self) -> bool:
+        """A session is warming up or running (step 08: both block a second start, a method
+        change and a device rescan)."""
         session = self.session
-        return session is not None and session.running
+        return session is not None and session.active
 
     @property
     def selected_method(self) -> str:
@@ -110,7 +116,7 @@ class SessionManager:
         """The running session's status, or, when idle, the stored Listen/volume settings that
         the next session will start with (so the page shows what the user chose)."""
         session = self.session
-        if session is not None and session.running:
+        if session is not None and session.active:
             return self._chosen(session.status)
         enabled, gain_db, muted = self.monitor
         if session is not None:  # a stopped/failed session: keep its figures, show the settings
@@ -133,7 +139,9 @@ class SessionManager:
             try:
                 resolved = resolve_input(self.config.device_profile)
             except DeviceResolutionError as exc:
-                raise BadRequestError(f"microphone: {exc}") from exc
+                raise BadRequestError(
+                    f"the microphone of profile '{self.config.device_profile.name}' was not "
+                    f"found ({exc}). Plug it in, press Rescan devices, then Start again.") from exc
             return MicSource(resolved, self.config.capture)
         if not request.path:
             raise BadRequestError("a file source needs 'path' (relative to the project root)")
@@ -158,22 +166,36 @@ class SessionManager:
 
     # --- session control -----------------------------------------------------------------------
 
+    def _prepare(self, progress, stopping) -> None:
+        """A session's first warm-up step: wait for the preloaded models (step 08)."""
+        preloader = self.preloader
+        if preloader is not None and not preloader.done:
+            preloader.wait(progress, stopping)
+
     def _open_session(self, request: SessionStartRequest) -> Session:
-        """Build source, chain and output and start a session (one attempt)."""
+        """Build the source and output, start a session (one attempt). The chain is built on
+        the session's worker while it warms up (step 08)."""
         try:
-            chain = build_chain(request.mode, self.config, self.labels,
-                                method=request.method or self.selected_method,
-                                gate=self.selected_gate if request.gate is None else request.gate)
+            mode = check_mode(request.mode)
         except ModeUnavailableError as exc:
             raise BadRequestError(str(exc)) from exc
+        method = request.method or self.selected_method
+        gate = self.selected_gate if request.gate is None else request.gate
+        config, labels = self.config, self.labels
+
+        def chain_factory():
+            return build_chain(mode, config, labels, method=method, gate=gate)
+
         source = self._build_source(request.source)
         session = Session(
             source,
-            chain,
+            None,
+            chain_factory=chain_factory,
+            prepare=self._prepare,
             output=self._build_output(),
             on_event=self._on_event,
             config=self.config,
-            mode=str(request.mode).lower(),
+            mode=mode.value,
         )
         if self.target is not None:
             session.set_target(self.target)
@@ -235,7 +257,7 @@ class SessionManager:
     def set_target(self, target: TargetSpec) -> None:
         self.target = target
         session = self.session
-        if session is not None and session.running:
+        if session is not None and session.active:
             session.set_target(target)
 
     def set_method(self, method: str) -> EngineStatus:
@@ -263,13 +285,13 @@ class SessionManager:
         """A/B listening: play the unprocessed (delay-matched) signal instead of the output."""
         self.bypass = bool(enabled)
         session = self.session
-        if session is not None and session.running:
+        if session is not None and session.active:
             session.set_bypass(self.bypass)
         return self.status()
 
     def set_monitor(self, enabled: bool, gain_db: float, muted: bool) -> EngineStatus:
         session = self.session
-        if session is not None and session.running:
+        if session is not None and session.active:
             try:
                 session.set_monitor(enabled, gain_db, muted)
             except SessionError as exc:
@@ -279,7 +301,7 @@ class SessionManager:
 
     def record_start(self, label: str | None, notes: str) -> EngineStatus:
         session = self.session
-        if session is None or not session.running:
+        if session is None or not session.active:
             raise ConflictError("start a session before recording")
         try:
             session.start_recording(self.config.paths["raw"], label=label, notes=notes)

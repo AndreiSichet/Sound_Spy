@@ -26,6 +26,12 @@ peak limiter with instant attack and a ``limiter_release_ms`` release keeps ever
 
 Input with more channels than the output is an error: the chain must reduce channels first
 (``ChannelReducer``); only upmixing 1 -> N happens here.
+
+**Device lost (step 08).** Once the device has called back, a gap of ``stall_timeout_s`` without
+callbacks means it is gone (headphones or a USB device unplugged mid-session): the next
+``write`` raises ``OutputLostError`` with a message for the user, and the session ends in its
+error state instead of queueing into nothing. **Stream options (step 08):** ``output.latency``
+(PortAudio's suggested latency) and ``output.exclusive`` (WASAPI exclusive mode).
 """
 
 from __future__ import annotations
@@ -43,6 +49,10 @@ from soundspy.config import OutputConfig
 from soundspy.core.audio import AudioBuffer
 from soundspy.io.base import AudioSink, valid_frames
 from soundspy.io.devices import OutputDevice, _sd
+
+
+class OutputLostError(RuntimeError):
+    """The output device stopped calling back while the session ran (unplugged?)."""
 
 
 def db_to_gain(db: float) -> float:
@@ -99,6 +109,7 @@ class SpeakerSink(AudioSink):
         self._playing = False
         self._stream: Any = None
         self._limiter: PeakLimiter | None = None
+        self._last_callback: float | None = None  # clock() of the device's last callback
 
     # --- lifecycle -----------------------------------------------------------------------------
 
@@ -114,7 +125,11 @@ class SpeakerSink(AudioSink):
         sd = _sd()
         extra = None
         if self.device.hostapi == "Windows WASAPI" and hasattr(sd, "WasapiSettings"):
-            extra = sd.WasapiSettings(auto_convert=True)
+            extra = (sd.WasapiSettings(exclusive=True) if self.config.exclusive
+                     else sd.WasapiSettings(auto_convert=True))
+        kwargs: dict[str, Any] = {}
+        if self.config.latency is not None:
+            kwargs["latency"] = self.config.latency
         self.sample_rate, self.in_channels, self.out_channels = (
             sample_rate,
             num_channels,
@@ -131,8 +146,10 @@ class SpeakerSink(AudioSink):
             blocksize=self.blocksize,
             callback=self._callback,
             extra_settings=extra,
+            **kwargs,
         )
         self._stream = stream
+        self._last_callback = None
         stream.start()
 
     def close(self) -> None:
@@ -164,6 +181,12 @@ class SpeakerSink(AudioSink):
                 f"chunk has {chunk.num_channels} channel(s), the sink was opened for "
                 f"{self.in_channels}"
             )
+        last = self._last_callback
+        if last is not None and self._clock() - last > self.config.stall_timeout_s:
+            raise OutputLostError(
+                f"the output device {self.device.name!r} stopped playing (unplugged, or switched "
+                "off in Windows?) - plug it back in or choose another output, then press "
+                "Restart")
         n = valid_frames(chunk)
         if n == 0:
             return
@@ -216,6 +239,7 @@ class SpeakerSink(AudioSink):
     # --- consumer side (PortAudio callback) ----------------------------------------------------
 
     def _callback(self, outdata: np.ndarray, frames: int, time_info: Any, status: Any) -> None:
+        self._last_callback = self._clock()
         outdata.fill(0.0)
         with self._lock:
             if not self._playing:
